@@ -8,5 +8,11 @@ but that also adds new features to the language.
 List of features.
 -----------------
 
-    - Foo bar
-    - Bar bar
+All of C99 plus:
+
+- Namespaces and a module system
+- Structs with optimal layout
+- Native SIMD types a la Intel ISPC
+- New preprocessor
+- Reflection
+- Operator overloading
