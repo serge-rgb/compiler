@@ -15,4 +15,7 @@ All of C99 plus:
 - Native SIMD types a la Intel ISPC
 - New preprocessor
 - Reflection
+- Type dispatching
 - Operator overloading
+- Runtime automatic optional NULL dereference check.
+- Array bounds checking whenever possible.
