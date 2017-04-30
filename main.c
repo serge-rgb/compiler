@@ -18,7 +18,7 @@ main(void) {
     u8* eight = allocate(&a, 8);
     if (eight) {
         // See if application verifier catches an overflow.
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 9; ++i) {
             eight[i] = i;  // Overflow on i=8,9
         }
     }
