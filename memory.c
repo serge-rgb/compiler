@@ -1,19 +1,21 @@
-#define ARENA_DEFAULT_BLOCK_SIZE MEGABYTES(1)
+//#define ARENA_DEFAULT_BLOCK_SIZE MEGABYTES(1)
+#define ARENA_DEFAULT_BLOCK_SIZE 8
 
-struct Arena {
+typedef struct Arena_s Arena;
+struct Arena_s {
     u8*     block;
     size_t  used;
     size_t  size;
 
-    struct Arena* next;
+    Arena* next;
 };
 
-struct ArenaHeader {
+typedef struct ArenaHeader_s {
     u8* previous;  // Pointer to the memory block of the previous arena.
-};
+} ArenaHeader;
 
 void*
-allocate(struct Arena* a, size_t num_bytes) {
+allocate(Arena* a, size_t num_bytes) {
     u8* ptr = NULL;
     if (a->block != NULL && num_bytes < (a->size - a->used)) {
         ptr = a->block + a->used;
@@ -21,16 +23,16 @@ allocate(struct Arena* a, size_t num_bytes) {
     }
     else {
         size_t next_size = MAX(ARENA_DEFAULT_BLOCK_SIZE, num_bytes);
-        u8* next = calloc(1, next_size);
+        u8* next = calloc(1, next_size + sizeof(ArenaHeader));
         if (next) {
-            struct ArenaHeader* h = (struct ArenaHeader*)next;
-            next += sizeof(struct ArenaHeader);
+            ArenaHeader* h = (ArenaHeader*)next;
             h->previous = a->block;
 
+            next += sizeof(ArenaHeader);
             a->block = next;
-            a->used = num_bytes;
             a->size = next_size;
-            ptr = a->block;
+            a->used = num_bytes;
+            ptr = a->block;  // Returning the start of the block.
         }
         else {
             // TODO: Fail gracefully.
@@ -40,13 +42,13 @@ allocate(struct Arena* a, size_t num_bytes) {
 }
 
 void
-deallocate(struct Arena* a) {
+deallocate(Arena* a) {
     u8* block = a->block;
     while (block) {
-        struct ArenaHeader* h = (struct ArenaHeader*)block-1;
+        ArenaHeader* h = (ArenaHeader*)block-1;
         u8* p = h->previous;
         free(h);
         block = p;
     }
-    *a = (struct Arena){0};
+    *a = (Arena){0};
 }
