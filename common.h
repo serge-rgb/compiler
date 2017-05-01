@@ -13,3 +13,10 @@ typedef uint64_t u64;
 #define KILOBYTES(n) (1024*n)
 #define MEGABYTES(n) KILOBYTES(1024)
 #define GIGABYTES(n) MEGABYTES(1024)
+
+
+typedef enum ErrorCode_s {
+    SUCCESS = 0,
+
+    ERROR_PARSE_INT = 1,
+} ErrorCode;

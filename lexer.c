@@ -13,7 +13,7 @@ struct Token_s {
         char  character;
         char* string;
     } value;
-    
+
     Token*    next;
 };
 
@@ -72,12 +72,32 @@ isDigit(char c) {
         c == '7' ||
         c == '8' ||
         c == '9';
-    return is_digit;        
+    return is_digit;
 }
 
 b32 isKeyword(Buffer* b) {
     b32 is_keyword = false;
-    return is_keyword;        
+    return is_keyword;
+}
+
+ErrorCode
+parseInt(char* str, int* out_int) {
+    ErrorCode result = SUCCESS;
+    if (!out_int) {
+        return ERROR_PARSE_INT;
+    }
+    int val = 0;
+    while (*str != '\0') {
+        char c = *str;
+        if (c-'0' < 0 || c-'0' > 9) {
+            result = ERROR_PARSE_INT;
+            break;
+        }
+        val = (val * 10) + c-'0';
+        str++;
+    }
+    *out_int = val;
+    return result;
 }
 
 TokenType
@@ -116,7 +136,7 @@ getToken(Arena* a, Buffer* buffer) {
         while (*buffer->current++ != '\"') {
             if (buffer->current > buffer->end) {
                 // TODO: File parsing information.
-                lexerError("Expected \" while parsing string literal."); 
+                lexerError("Expected \" while parsing string literal.");
             }
         }
         t.value.character = 'S';
@@ -130,7 +150,7 @@ getToken(Arena* a, Buffer* buffer) {
         //char* start = buffer;
         while (!(isWhitespace(*buffer->current) || isPunctuator(*buffer->current))) {
             ++buffer->current;
-        
+
             if (buffer->current >= buffer->end) {
                 // TODO: File parsing information.
                 break;
@@ -138,26 +158,33 @@ getToken(Arena* a, Buffer* buffer) {
         }
         token_buffer.end = buffer->current;
         t.type = identifyToken(&token_buffer);
+
         t.value.character = *token_buffer.current;
         char* str = getStringFromBuffer(a, &token_buffer);
+        if (t.type == TokenType_NUMBER) {
+            int val = 0;
+            ErrorCode err = parseInt(str, &val);
+            if (err == SUCCESS)
+                printf("parsed int with value %d\n", val);
+            else
+                printf("Int parsing failed.\n");
+
+        }
         t.value.string = str;
     }
     return t;
-} 
+}
 
 Token*
 tokenize(Arena* a, char* buffer, size_t buffer_len) {
     // Munch until whitespace
     // Check if it's a keyword
     // Else, it's an identifier
-    for (size_t i = 0; i < buffer_len; ++i) {
-        char c = buffer[i];
-        printf("%c", c);
-    }
+
     Buffer b = {0};
     b.current = buffer;
     b.end = buffer + buffer_len;
-    
+
     Token* t = AllocType(a, Token);
     Token* tokens = t;
     while (b.current < b.end) {
@@ -173,8 +200,9 @@ tokenize(Arena* a, char* buffer, size_t buffer_len) {
             else
                 printf("Token of type %d is %c\n", t->type, t->value.character);
             t = t->next;
-        }        
-    }   
+        }
+    }
+
     printf("\n");
     return tokens;
 }

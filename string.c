@@ -2,14 +2,14 @@
 #define STRING_CACHE_MAX_SIZE 512
 
 typedef struct Buffer_s {
-    char* current; 
+    char* current;
     char* end;  // Points to the end of the buffer.
 } Buffer;
 
 typedef struct StringList_s StringList;
 struct StringList_s {
     char*         string;
-    StringList*   next; 
+    StringList*   next;
 };
 
 static StringList* g_string_map[STRING_HASH_BUCKET_SIZE];
@@ -29,7 +29,8 @@ hash_str(char* str, size_t size) {
     return hash;
 }
 
-b32 stringsAreEqual(char* a, char* b) {
+b32
+stringsAreEqual(char* a, char* b) {
     b32 equal = true;
     while (*a && *b) {
         if (*a++ != *b++) {
