@@ -19,3 +19,5 @@ All of C99 plus:
 - Operator overloading
 - Runtime automatic optional NULL dereference check.
 - Array bounds checking whenever possible.
+- C++ decltype
+- C++ auto

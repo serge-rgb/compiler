@@ -1,3 +1,4 @@
+
 int
 main(void) {
     Arena a = {0};
@@ -10,7 +11,7 @@ main(void) {
 #undef NUM_BYTES
         
         size_t read = fread(buffer, 1, num_bytes, fd);
-        printf("Read %li bytes\n", read);
+        printf("Read %" PRI_size " bytes\n", read);
         tokenize(&a, buffer, read);
     }
         

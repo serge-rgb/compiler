@@ -9,14 +9,13 @@ typedef enum TokenType_n {
 typedef struct Token_s Token;
 struct Token_s {
     TokenType type;
-    char      value;
+    union {
+        char  character;
+        char* string;
+    } value;
+    
     Token*    next;
 };
-
-typedef struct {
-    char* current; 
-    char* end;  // Points to the end of the buffer.
-} Buffer;
 
 void
 lexerError(char* msg) {
@@ -78,8 +77,7 @@ isDigit(char c) {
 
 b32 isKeyword(Buffer* b) {
     b32 is_keyword = false;
-    return is_keyword;
-        
+    return is_keyword;        
 }
 
 TokenType
@@ -100,7 +98,7 @@ identifyToken(Buffer* b) {
 }
 
 Token
-getToken(Buffer* buffer) {
+getToken(Arena* a, Buffer* buffer) {
     Token t = {0};
     skipWhitespace(buffer);
     if (buffer->current >= buffer->end) {
@@ -108,7 +106,7 @@ getToken(Buffer* buffer) {
     }
     else if (isPunctuator(*buffer->current)) {
         t.type = TokenType_PUNCTUATOR;
-        t.value = *buffer->current++;
+        t.value.character = *buffer->current++;
     }
     else if (*buffer->current == '\"') {
         // We are inside a string. Parse until we get the end of the string.
@@ -117,11 +115,11 @@ getToken(Buffer* buffer) {
         ++buffer->current;
         while (*buffer->current++ != '\"') {
             if (buffer->current > buffer->end) {
-                 // TODO: File parsing information.
+                // TODO: File parsing information.
                 lexerError("Expected \" while parsing string literal."); 
             }
         }
-        t.value = 'S';
+        t.value.character = 'S';
     }
     // TODO: Operators
     // TODO: Constants
@@ -140,12 +138,14 @@ getToken(Buffer* buffer) {
         }
         token_buffer.end = buffer->current;
         t.type = identifyToken(&token_buffer);
-        t.value = *token_buffer.current;
+        t.value.character = *token_buffer.current;
+        char* str = getStringFromBuffer(a, &token_buffer);
+        t.value.string = str;
     }
     return t;
 } 
 
-void
+Token*
 tokenize(Arena* a, char* buffer, size_t buffer_len) {
     // Munch until whitespace
     // Check if it's a keyword
@@ -157,12 +157,24 @@ tokenize(Arena* a, char* buffer, size_t buffer_len) {
     Buffer b = {0};
     b.current = buffer;
     b.end = buffer + buffer_len;
+    
+    Token* t = AllocType(a, Token);
+    Token* tokens = t;
     while (b.current < b.end) {
-        Token t = getToken(&b);
-        if (t.type != TokenType_NONE) {
-            printf("Token of type %d is %c\n", t.type, t.value);    
+        *t = getToken(a, &b);
+        if (t->type != TokenType_NONE) {
+            t->next = AllocType(a, Token);
+            if (t->type == TokenType_PUNCTUATOR)
+                printf("Token of type %d is %c\n", t->type, t->value.character);
+            else if (t->type == TokenType_ID)
+                printf("Token of type %d is %s\n", t->type, t->value.string);
+            else if (t->type == TokenType_STRING_LITERAL)
+                printf("Token of type %d is STRING\n", t->type);
+            else
+                printf("Token of type %d is %c\n", t->type, t->value.character);
+            t = t->next;
         }        
     }   
-    
     printf("\n");
+    return tokens;
 }

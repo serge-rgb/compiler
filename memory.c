@@ -1,6 +1,8 @@
 //#define ARENA_DEFAULT_BLOCK_SIZE MEGABYTES(1)
 #define ARENA_DEFAULT_BLOCK_SIZE 8
 
+#define AllocType(arena, type) allocate(arena, sizeof(type))
+
 typedef struct Arena_s Arena;
 struct Arena_s {
     u8*     block;
