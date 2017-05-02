@@ -23,6 +23,7 @@ extern size_t strlen(const char* str);
 extern void*  memcpy( void *dest, const void *src, size_t count );
 extern FILE*  fopen( const char* filename, const char* mode );
 extern size_t fread( void          *buffer, size_t size, size_t count, FILE          *stream );
+extern size_t fwrite( void          *buffer, size_t size, size_t count, FILE          *stream );
 extern int    printf( const char *format, ... );
 extern int    sprintf_s(char * buffer, rsize_t bufsz, const char * format, ...);
 extern int    snprintf( char * buffer, int bufsz, const char * format, ... );

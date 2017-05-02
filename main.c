@@ -4,7 +4,7 @@
 int
 main(void) {
     Arena a = {0};
-
+    codegenInit();
     FILE* fd = fopen("test.c", "r");
     if (fd) {
         size_t num_bytes = NUM_BYTES;
@@ -19,6 +19,7 @@ main(void) {
         g_parse_token = tokens;
         parseTranslationUnit();
     }
+    codegenFinish();
 
     return 0;
 }
