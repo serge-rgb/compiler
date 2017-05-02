@@ -60,8 +60,8 @@ getStringFromBuffer(Arena* a, Buffer* buffer) {
             l = l->next;
         }
         if (!str) {  // Not found. Allocate new one.
-            char* new_str = allocate(a, size);
-            memcpy(new_str, temp_str, size);
+            char* new_str = allocate(a, size+1); // Allocate one more byte for the string terminator.
+            memcpy(new_str, temp_str, size+1);
             StringList* e = AllocType(a, StringList);
             e->string = new_str;
             e->next = g_string_map[hash];

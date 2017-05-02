@@ -1,5 +1,4 @@
-//#define ARENA_DEFAULT_BLOCK_SIZE MEGABYTES(1)
-#define ARENA_DEFAULT_BLOCK_SIZE 8
+#define ARENA_DEFAULT_BLOCK_SIZE Megabytes(1)
 
 #define AllocType(arena, type) allocate(arena, sizeof(type))
 
@@ -24,7 +23,7 @@ allocate(Arena* a, size_t num_bytes) {
         a->used += num_bytes;
     }
     else {
-        size_t next_size = MAX(ARENA_DEFAULT_BLOCK_SIZE, num_bytes);
+        size_t next_size = Max(ARENA_DEFAULT_BLOCK_SIZE, num_bytes);
         u8* next = calloc(1, next_size + sizeof(ArenaHeader));
         if (next) {
             ArenaHeader* h = (ArenaHeader*)next;

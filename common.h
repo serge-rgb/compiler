@@ -7,13 +7,20 @@ typedef uint64_t u64;
 #define true 1
 #define false 0
 
-#define MAX(a, b) ((a) < (b) ? (b) : (a))
-#define MIN(a, b) ((a) > (b) ? (b) : (a))
+#define ASCII_MAX 128
 
-#define KILOBYTES(n) (1024*n)
-#define MEGABYTES(n) KILOBYTES(1024)
-#define GIGABYTES(n) MEGABYTES(1024)
+#define Max(a, b) ((a) < (b) ? (b) : (a))
+#define Min(a, b) ((a) > (b) ? (b) : (a))
 
+#define Kilobytes(n) (1024*n)
+#define Megabytes(n) Kilobytes(1024)
+#define Gigabytes(n) Megabytes(1024)
+
+#define Assert(expr) do { if (!(expr)) { __debugbreak(); } }  while(0)
+
+#define INVALID_CODE_PATH Assert(!"Invalid code path.")
+
+#define ArrayCount(arr) (sizeof((arr)) / sizeof(*(arr)))
 
 typedef enum ErrorCode_s {
     SUCCESS = 0,

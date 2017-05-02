@@ -1,4 +1,1 @@
-int main() {
-    "hello"
-    return 42;
-}
+1 + 2 * 3
