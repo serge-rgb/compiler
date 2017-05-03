@@ -14,7 +14,6 @@ typedef enum TokenType_n {
     TokenType_KEYWORD,
 } TokenType;
 
-
 typedef enum Punctuator_n {
     Punctuator_BEGIN = /*...*/  128,  // ASCII codes are reserved for single-char tokens.
     #define X(op, name) name,

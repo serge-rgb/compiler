@@ -16,8 +16,7 @@ main(void) {
         for (Token* t = tokens; t != NULL; t = t->next) {
             tokenPrint(t);
         }
-        g_parse_token = tokens;
-        parseTranslationUnit();
+        parseExpression(tokens);
     }
     codegenFinish();
 

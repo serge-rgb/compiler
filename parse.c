@@ -1,4 +1,6 @@
-Token* g_parse_token;
+typedef struct Parser_s {
+    Token* token;  // The next token to parse.
+} Parser;
 
 void
 parseError(char* msg) {
@@ -6,46 +8,125 @@ parseError(char* msg) {
     exit(1);
 }
 
+static Token sentinel;
 Token*
-nextToken(void) {
-    Token* result = g_parse_token;
-    if (g_parse_token) {
-        g_parse_token = g_parse_token->next;
+nextToken(Parser* p) {
+    Token* result = NULL;
+    if (p->token) {
+        result = p->token;
+        p->token = p->token->next;
     }
     return result;
 }
 
 void
-parseExpression(void) {
-    Token* t = nextToken();
-    // TODO: Literals, Constants, Identifiers, other expressions.
-    if (t->type == TokenType_NUMBER) {
-        int vala = t->value.integer;
-        t = nextToken();
-        if (t->type == TokenType_PUNCTUATOR) {
-            t = nextToken();
-            if (t->type == TokenType_NUMBER) {
-                int valb = t->value.integer;
-                char buffer[128] = {0};
-                sprintf_s(buffer, 128, "mov rax, %d\n", vala);
-                codegenEmit(buffer);
-                sprintf_s(buffer, 128, "add rax, %d\n", valb);
-                codegenEmit(buffer);
-            }
-            else {
-                parseError("Expected another integer in sum.");
-            }
-
-        } else {
-            parseError("Expected operator in expression.");
-        }
-    } else {
-        parseError("Expected number.");
-    }
+backtrack(Parser* p, Token* t) {
+    p->token = t;
 }
 
+b32
+primaryExpr(Parser* p) {
+    Token* t = nextToken(p);
+    if (!t) { return false; }
+    if (t->type == TokenType_NUMBER) {
+        return true;
+    }
+    // TODO: There are more primary expression terminals.
+    else {
+
+    }
+    return false;
+}
+
+b32
+postfixExpr(Parser* p) {
+    if (primaryExpr(p)) {
+        Token* t = nextToken(p);
+        if (t && t->value.character == '[') {
+            parseError ("I don't know how to continue");
+        }
+        else if (t) {
+            backtrack(p, t);
+            return true;
+        }
+    }
+    return false;
+}
+
+b32
+unaryExpr(Parser* p) {
+    if (postfixExpr(p)) {
+        return true;
+    }
+    return false;
+}
+
+b32
+castExpr(Parser* p) {
+    if (unaryExpr(p)) {
+        return true;
+    }
+    return false;
+}
+
+
+b32
+multiplicativeExprPrime(Parser* p) {
+    Token* t = p->token;
+    if (!t) { return false; }
+    if (nextToken(p)->value.character = '*'
+        && castExpr(p)
+        && multiplicativeExprPrime(p)) {
+        return true;
+    }
+    backtrack(p, t);
+    return true;
+}
+
+b32
+multiplicativeExpr(Parser* p) {
+    Token* t = p->token;
+    if (castExpr(p) && multiplicativeExprPrime(p)) {
+        return true;
+    }
+    return false;
+}
+
+b32
+additiveExprPrime(Parser* p) {
+    Token* t = p->token;
+    if (t && nextToken(p)->value.character == '+'
+        && multiplicativeExpr(p)
+        && additiveExprPrime(p)) {
+        return true;
+    }
+    backtrack(p, t);
+    return true;
+}
+
+b32
+additiveExpr(Parser* p) {
+    Token *t = p->token;
+    if (multiplicativeExpr(p)
+        && additiveExprPrime(p)) {
+        return true;
+    }
+    return false;
+}
+
+void
+parseExpression(Token* token) {
+    Parser p = {0};
+    p.token = token;
+    b32 res = additiveExpr(&p);
+    if (res && p.token->type == TokenType_NONE) {
+        printf("Expression accepted\n");
+    }
+}
+/*
 void
 parseTranslationUnit(void) {
     // Let's start by parsing an expression.
     parseExpression();
 }
+*/
