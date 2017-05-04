@@ -74,7 +74,7 @@ b32
 multiplicativeExprPrime(Parser* p) {
     Token* t = p->token;
     if (!t) { return false; }
-    if (nextToken(p)->value.character = '*'
+    if (nextToken(p)->value.character == '*'
         && castExpr(p)
         && multiplicativeExprPrime(p)) {
         return true;
