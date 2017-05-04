@@ -6,6 +6,7 @@ main(void) {
     Arena a = {0};
     codegenInit();
     FILE* fd = fopen("test.c", "r");
+
     if (fd) {
         size_t num_bytes = NUM_BYTES;
         char buffer[NUM_BYTES] = {0};

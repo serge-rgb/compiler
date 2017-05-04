@@ -1,6 +1,16 @@
 typedef struct Parser_s {
     Token* token;  // The next token to parse.
+
+    Arena* arena;
+    AstNode* tree;
 } Parser;
+
+AstNode*
+newNode(Arena* a) {
+    AstNode* r = AllocType(a, AstNode);
+    return r;
+}
+
 
 void
 parseError(char* msg) {
@@ -29,6 +39,7 @@ primaryExpr(Parser* p) {
     Token* t = nextToken(p);
     if (!t) { return false; }
     if (t->type == TokenType_NUMBER) {
+        p->tree = newNode(p->arena);
         return true;
     }
     // TODO: There are more primary expression terminals.
@@ -117,6 +128,8 @@ additiveExpr(Parser* p) {
 void
 parseExpression(Token* token) {
     Parser p = {0};
+    Arena tmp_parser_arena = {0};
+    p.arena = &tmp_parser_arena;
     p.token = token;
     b32 res = additiveExpr(&p);
     if (res && p.token->type == TokenType_NONE) {
