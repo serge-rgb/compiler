@@ -16,7 +16,10 @@ typedef uint64_t u64;
 #define Megabytes(n) Kilobytes(1024)
 #define Gigabytes(n) Megabytes(1024)
 
-#define Assert(expr) do { if (!(expr)) { __debugbreak(); } }  while(0)
+#define Assert(expr) PlatformAssert(expr)
+
+#define PrintString(...) PlatformPrintString(__VA_ARGS__)
+// do { if (!(expr)) { __debugbreak(); } }  while(0)
 
 #define INVALID_CODE_PATH Assert(!"Invalid code path.")
 

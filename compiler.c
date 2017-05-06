@@ -12,6 +12,8 @@ clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler
 #include "std.h"
 #include "common.h"
 
+#include "platform_unix.h"
+
 #include "memory.c"
 #include "string.c"
 #include "lexer.c"

@@ -25,9 +25,12 @@ extern FILE*  fopen( const char* filename, const char* mode );
 extern size_t fread( void          *buffer, size_t size, size_t count, FILE          *stream );
 extern size_t fwrite( void          *buffer, size_t size, size_t count, FILE          *stream );
 extern int    printf( const char *format, ... );
-extern int    sprintf_s(char * buffer, rsize_t bufsz, const char * format, ...);
-extern int    snprintf( char * buffer, int bufsz, const char * format, ... );
 extern int    fprintf( FILE* stream, const char *format, ... );
 extern void*  calloc( size_t num, size_t size );
 extern void   free( void* p );
 extern void   exit( int error_code );
+
+// Windows only STD libraries.
+#if defined(_WIN32)
+extern int    sprintf_s(char * buffer, rsize_t bufsz, const char * format, ...);
+#endif

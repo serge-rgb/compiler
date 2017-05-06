@@ -252,7 +252,7 @@ getToken(Arena* a, Buffer* buffer) {
             ErrorCode err = parseInt(str, &val);
             if (err != SUCCESS) {
                 char msg[1024] = {0};
-                sprintf_s(msg, 1024, "Error while parsing integer. Token string %s", str);
+                PrintString(msg, 1024, "Error while parsing integer. Token string %s", str);
                 lexerError(msg);
             }
             t.value.integer = val;

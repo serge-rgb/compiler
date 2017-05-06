@@ -1,6 +1,5 @@
 typedef struct Parser_s {
     Token* token;  // The next token to parse.
-
     Arena* arena;
     AstNode* tree;
 } Parser;
@@ -34,13 +33,14 @@ backtrack(Parser* p, Token* t) {
     p->token = t;
 }
 
-Tree*
+AstNode*
 primaryExpr(Parser* p) {
-    Tree* t = NULL;
+    AstNode* t = NULL;
     Token* tok = nextToken(p);
     if (!tok) { return false; }
     if (tok->type == TokenType_NUMBER) {
         t = newNode(p->arena);
+        t->val = Ast_NUMBER;
     }
     // TODO: There are more primary expression terminals.
     else {
@@ -49,9 +49,9 @@ primaryExpr(Parser* p) {
     return t;
 }
 
-Tree*
+AstNode*
 postfixExpr(Parser* p) {
-    Tree* t = NULL;
+    AstNode* t = NULL;
     if ((t = primaryExpr(p), t)) {
         Token* tok = nextToken(p);
         if (tok && tok->value.character == '[') {
@@ -65,79 +65,68 @@ postfixExpr(Parser* p) {
     return t;
 }
 
-Tree*
+AstNode*
 unaryExpr(Parser* p) {
-    Tree* t = NULL;
-    t = postfixExpr(p);
+    AstNode* t = postfixExpr(p);
     return t;
 }
 
-Tree*
+AstNode*
 castExpr(Parser* p) {
-    Tree* t = NULL;
+    AstNode* t = NULL;
     t = unaryExpr(p);
     return t;
 }
 
-
-Tree*
-multiplicativeExprPrime(Parser* p) {
-    Tree* t0 = NULL;
-    Tree* t1 = NULL;
-    Token* tok = p->token;
-    if (!tok) { return NULL; }
-    if (nextToken(p)->value.character == '*'
-        && (t0 = castExpr(p), t0)
-        && (t1 = multiplicativeExprPrime(p)), t1) {
-        return ast3(AstNode_MUL, t0, t1);
-    }
-    backtrack(p, tok);
-    return AstNode_EPSILON;
-}
-
-b32
+AstNode*
 multiplicativeExpr(Parser* p) {
-    Token* tok = p->token;
-    AstNode* t0 = castExpr(p);
-    AstNode* t1 = multiplicativeExprPrime(p);
-    if (t0 /*&& multiplicativeExprPrime(p)*/) {
-        if (t == AstNode_EPSILON) {
-            return t0;
+    // Token* tok = p->token;
+    AstNode* left = castExpr(p);
+    //AstNode* t1 = multiplicativeExprPrime(p);
+    if (left /*&& multiplicativeExprPrime(p)*/) {
+        while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == '*') {
+            // Pop the *
+            nextToken(p);
+            // Another cast expression
+            AstNode* right = castExpr(p);
+            if (right) {
+                return makeAstNode(p->arena, Ast_MUL, left, right);
+            } else {
+                parseError("Expected expression after '*'");
+            }
         }
 
-        return true;
+        return left; // TODO: Build up the tree
     }
-    return false;
+    return NULL;
 }
 
+static
 b32
-additiveExprPrime(Parser* p) {
-    Token* tok = p->token;
-    if (tok && nextToken(p)->value.character == '+'
-        && multiplicativeExpr(p)
-        && additiveExprPrime(p)) {
-        return true;
-    }
-    backtrack(p, tok);
-    return true;
+peekAddToken(Parser* p) {
+    b32 r = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == '+';
+    return r;
 }
 
-b32
+AstNode*
 additiveExpr(Parser* p) {
-    Token *tok = p->token;
+    // Token *tok = p->token;
     AstNode* left = NULL;
     if ((left = multiplicativeExpr(p), left)) {
-        while (p->token->TokenType_PUNCTUATOR && p->token.value.character == '+') {
+        if (!peekAddToken(p)) {
+            return left;
+        }
+        while (peekAddToken(p)) {
             // Pop the +
             nextToken(p);
             // Pop another multiplicative expression.
-            multiplicativeExpr(p);
-            // Look ahead, if there's another plus in the horizon, make a new tree. Otherwise finish this one.
-
+            AstNode* right = multiplicativeExpr(p);
+            if (right) {
+                return makeAstNode(p->arena, Ast_ADD, left, right);
+            } else {
+                parseError("Expected expression after '+'");
+            }
         }
-
-        && additiveExprPrime(p)) {
-        return true;
     }
     return false;
 }
@@ -148,10 +137,14 @@ parseExpression(Token* token) {
     Arena tmp_parser_arena = {0};
     p.arena = &tmp_parser_arena;
     p.token = token;
-    b32 res = additiveExpr(&p);
-    if (res && p.token->type == TokenType_NONE) {
+    AstNode* t = additiveExpr(&p);
+    if (t && p.token->type == TokenType_NONE) {
         printf("Expression accepted\n");
+    } else {
+        printf("Could not accept expression. Ended at stroke: ");
+        tokenPrint(p.token);
     }
+
 }
 /*
 void
