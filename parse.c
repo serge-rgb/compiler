@@ -34,70 +34,77 @@ backtrack(Parser* p, Token* t) {
     p->token = t;
 }
 
-b32
+Tree*
 primaryExpr(Parser* p) {
-    Token* t = nextToken(p);
-    if (!t) { return false; }
-    if (t->type == TokenType_NUMBER) {
-        p->tree = newNode(p->arena);
-        return true;
+    Tree* t = NULL;
+    Token* tok = nextToken(p);
+    if (!tok) { return false; }
+    if (tok->type == TokenType_NUMBER) {
+        t = newNode(p->arena);
     }
     // TODO: There are more primary expression terminals.
     else {
 
     }
-    return false;
+    return t;
 }
 
-b32
+Tree*
 postfixExpr(Parser* p) {
-    if (primaryExpr(p)) {
-        Token* t = nextToken(p);
-        if (t && t->value.character == '[') {
+    Tree* t = NULL;
+    if ((t = primaryExpr(p), t)) {
+        Token* tok = nextToken(p);
+        if (tok && tok->value.character == '[') {
             parseError ("I don't know how to continue");
         }
-        else if (t) {
-            backtrack(p, t);
-            return true;
+        else if (tok) {
+            backtrack(p, tok);
+            return t;
         }
     }
-    return false;
+    return t;
 }
 
-b32
+Tree*
 unaryExpr(Parser* p) {
-    if (postfixExpr(p)) {
-        return true;
-    }
-    return false;
+    Tree* t = NULL;
+    t = postfixExpr(p);
+    return t;
 }
 
-b32
+Tree*
 castExpr(Parser* p) {
-    if (unaryExpr(p)) {
-        return true;
-    }
-    return false;
+    Tree* t = NULL;
+    t = unaryExpr(p);
+    return t;
 }
 
 
-b32
+Tree*
 multiplicativeExprPrime(Parser* p) {
-    Token* t = p->token;
-    if (!t) { return false; }
+    Tree* t0 = NULL;
+    Tree* t1 = NULL;
+    Token* tok = p->token;
+    if (!tok) { return NULL; }
     if (nextToken(p)->value.character == '*'
-        && castExpr(p)
-        && multiplicativeExprPrime(p)) {
-        return true;
+        && (t0 = castExpr(p), t0)
+        && (t1 = multiplicativeExprPrime(p)), t1) {
+        return ast3(AstNode_MUL, t0, t1);
     }
-    backtrack(p, t);
-    return true;
+    backtrack(p, tok);
+    return AstNode_EPSILON;
 }
 
 b32
 multiplicativeExpr(Parser* p) {
-    Token* t = p->token;
-    if (castExpr(p) && multiplicativeExprPrime(p)) {
+    Token* tok = p->token;
+    AstNode* t0 = castExpr(p);
+    AstNode* t1 = multiplicativeExprPrime(p);
+    if (t0 /*&& multiplicativeExprPrime(p)*/) {
+        if (t == AstNode_EPSILON) {
+            return t0;
+        }
+
         return true;
     }
     return false;
@@ -105,20 +112,30 @@ multiplicativeExpr(Parser* p) {
 
 b32
 additiveExprPrime(Parser* p) {
-    Token* t = p->token;
-    if (t && nextToken(p)->value.character == '+'
+    Token* tok = p->token;
+    if (tok && nextToken(p)->value.character == '+'
         && multiplicativeExpr(p)
         && additiveExprPrime(p)) {
         return true;
     }
-    backtrack(p, t);
+    backtrack(p, tok);
     return true;
 }
 
 b32
 additiveExpr(Parser* p) {
-    Token *t = p->token;
-    if (multiplicativeExpr(p)
+    Token *tok = p->token;
+    AstNode* left = NULL;
+    if ((left = multiplicativeExpr(p), left)) {
+        while (p->token->TokenType_PUNCTUATOR && p->token.value.character == '+') {
+            // Pop the +
+            nextToken(p);
+            // Pop another multiplicative expression.
+            multiplicativeExpr(p);
+            // Look ahead, if there's another plus in the horizon, make a new tree. Otherwise finish this one.
+
+        }
+
         && additiveExprPrime(p)) {
         return true;
     }

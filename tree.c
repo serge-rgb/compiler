@@ -17,3 +17,6 @@ typedef struct AstMul_s {
     AstNode* left;
     AstNode* right;
 } AstMul;
+
+static AstNode* AstNode_EPSILON;  // For episilon productions in the grammar.
+static AstNode* AstNode_MUL;
