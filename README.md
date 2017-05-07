@@ -23,3 +23,20 @@ All of C99 plus:
 - C++ decltype
 - C++ auto
 - else after while
+
+
+High Level Action Plan
+----------------------
+
+- Generate x86 code from C expressions (just add & multiply)
+- One by one, add the rest of the C int expressions.
+- Add conditional expressions.
+
+
+Some questions
+--------------
+
+- When is it time to add a register allocator? How do I keep track of
+  which results are in which registers?
+
+  So it turns out that we need a register allocator pretty fucking soon.

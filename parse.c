@@ -41,6 +41,7 @@ primaryExpr(Parser* p) {
     if (tok->type == TokenType_NUMBER) {
         t = newNode(p->arena);
         t->val = Ast_NUMBER;
+        t->tok = tok;
     }
     // TODO: There are more primary expression terminals.
     else {
@@ -83,55 +84,44 @@ multiplicativeExpr(Parser* p) {
     // Token* tok = p->token;
     AstNode* left = castExpr(p);
     //AstNode* t1 = multiplicativeExprPrime(p);
-    if (left /*&& multiplicativeExprPrime(p)*/) {
+    if (left) {
         while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == '*') {
             // Pop the *
             nextToken(p);
             // Another cast expression
             AstNode* right = castExpr(p);
             if (right) {
-                return makeAstNode(p->arena, Ast_MUL, left, right);
+                left = makeAstNode(p->arena, Ast_MUL, left, right);
             } else {
                 parseError("Expected expression after '*'");
             }
         }
 
-        return left; // TODO: Build up the tree
     }
-    return NULL;
-}
-
-static
-b32
-peekAddToken(Parser* p) {
-    b32 r = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == '+';
-    return r;
+    return left;
 }
 
 AstNode*
 additiveExpr(Parser* p) {
     // Token *tok = p->token;
-    AstNode* left = NULL;
-    if ((left = multiplicativeExpr(p), left)) {
-        if (!peekAddToken(p)) {
-            return left;
-        }
-        while (peekAddToken(p)) {
+    AstNode* left = multiplicativeExpr(p);
+    if (left) {
+        while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == '+') {
             // Pop the +
             nextToken(p);
             // Pop another multiplicative expression.
             AstNode* right = multiplicativeExpr(p);
             if (right) {
-                return makeAstNode(p->arena, Ast_ADD, left, right);
+                left = makeAstNode(p->arena, Ast_ADD, left, right);
             } else {
                 parseError("Expected expression after '+'");
             }
         }
     }
-    return false;
+    return left;
 }
 
-void
+AstNode*
 parseExpression(Token* token) {
     Parser p = {0};
     Arena tmp_parser_arena = {0};
@@ -144,8 +134,9 @@ parseExpression(Token* token) {
         printf("Could not accept expression. Ended at stroke: ");
         tokenPrint(p.token);
     }
-
+    return t;
 }
+
 /*
 void
 parseTranslationUnit(void) {

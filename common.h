@@ -8,6 +8,7 @@ typedef uint64_t u64;
 #define false 0
 
 #define ASCII_MAX 128
+#define LINE_MAX  256
 
 #define Max(a, b) ((a) < (b) ? (b) : (a))
 #define Min(a, b) ((a) > (b) ? (b) : (a))

@@ -6,12 +6,19 @@ typedef enum AstLeaf_n {
 } AstLeaf;
 
 
-typedef struct AstNode_s AstNode;
-struct AstNode_s {
-    AstLeaf val;
+typedef union AstNode_s AstNode;
+union AstNode_s {
+    struct {
+        AstLeaf val;
 
-    AstNode* child;
-    AstNode* sibling;
+        AstNode* child;
+        AstNode* sibling;
+    };
+    struct {
+        AstLeaf val_;  // Accessed as val
+
+        Token* tok;
+    };
 };
 
 typedef struct AstMul_s {

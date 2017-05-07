@@ -29,6 +29,7 @@ extern int    fprintf( FILE* stream, const char *format, ... );
 extern void*  calloc( size_t num, size_t size );
 extern void   free( void* p );
 extern void   exit( int error_code );
+extern void   fclose ( FILE* fd );
 
 // Windows only STD libraries.
 #if defined(_WIN32)

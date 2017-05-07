@@ -17,8 +17,10 @@ main(void) {
         for (Token* t = tokens; t != NULL; t = t->next) {
             tokenPrint(t);
         }
-        parseExpression(tokens);
+        AstNode* tree = parseExpression(tokens);
+        codegenEmit(tree);
     }
+
     codegenFinish();
 
     return 0;
