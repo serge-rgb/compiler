@@ -28,15 +28,6 @@ All of C99 plus:
 High Level Action Plan
 ----------------------
 
-- Generate x86 code from C expressions (just add & multiply)
 - One by one, add the rest of the C int expressions.
+- Emit HTML for ASM. Every line a hyperlink to the codegen source.
 - Add conditional expressions.
-
-
-Some questions
---------------
-
-- When is it time to add a register allocator? How do I keep track of
-  which results are in which registers?
-
-  So it turns out that we need a register allocator pretty fucking soon.
