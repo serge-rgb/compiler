@@ -10,7 +10,6 @@ newNode(Arena* a) {
     return r;
 }
 
-
 void
 parseError(char* msg) {
     fprintf(stderr, "Parse error: %s\n", msg);
