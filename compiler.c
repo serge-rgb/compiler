@@ -12,7 +12,11 @@ clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler
 #include "std.h"
 #include "common.h"
 
+#if defined(_WIN32)
+#include "platform_windows.h"
+#else
 #include "platform_unix.h"
+#endif
 
 #include "memory.c"
 #include "string.c"
