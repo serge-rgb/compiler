@@ -24,6 +24,7 @@ All of C99 plus:
 - C++ decltype
 - C++ auto
 - else after while
+- Variable-sized array
 
 
 High Level Action Plan

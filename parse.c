@@ -1,3 +1,4 @@
+
 typedef struct Parser_s {
     Token* token;  // The next token to parse.
     Arena* arena;
