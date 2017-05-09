@@ -78,19 +78,28 @@ castExpr(Parser* p) {
     return t;
 }
 
+static
+b32
+peekCharPunctuator(Parser* p, char c) {
+    b32 result = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == c;
+    return result;
+}
+
+
 AstNode*
 multiplicativeExpr(Parser* p) {
     // Token* tok = p->token;
     AstNode* left = castExpr(p);
     //AstNode* t1 = multiplicativeExprPrime(p);
     if (left) {
-        while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == '*') {
+        while (peekCharPunctuator(p, '*') || peekCharPunctuator(p, '/')) {
             // Pop the *
-            nextToken(p);
+            Token* optok = nextToken(p);
             // Another cast expression
             AstNode* right = castExpr(p);
             if (right) {
-                left = makeAstNode(p->arena, Ast_MUL, left, right);
+                int node_type = optok->value.character == '*' ? Ast_MUL : Ast_DIV;
+                left = makeAstNode(p->arena, node_type, left, right);
             } else {
                 parseError("Expected expression after '*'");
             }
@@ -105,13 +114,14 @@ additiveExpr(Parser* p) {
     // Token *tok = p->token;
     AstNode* left = multiplicativeExpr(p);
     if (left) {
-        while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == '+') {
-            // Pop the +
-            nextToken(p);
+        while (peekCharPunctuator(p, '+') || peekCharPunctuator(p, '-')) {
+            // Pop the + or the -
+            Token* optok = nextToken(p);
             // Pop another multiplicative expression.
             AstNode* right = multiplicativeExpr(p);
             if (right) {
-                left = makeAstNode(p->arena, Ast_ADD, left, right);
+                int node_type = optok->value.character == '+' ? Ast_ADD : Ast_SUB;
+                left = makeAstNode(p->arena, node_type, left, right);
             } else {
                 parseError("Expected expression after '+'");
             }

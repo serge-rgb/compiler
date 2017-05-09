@@ -2,7 +2,9 @@ typedef enum AstLeaf_n {
     Ast_NONE,
     Ast_NUMBER,
     Ast_ADD,
+    Ast_SUB,
     Ast_MUL,
+    Ast_DIV,
 } AstLeaf;
 
 

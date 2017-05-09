@@ -25,7 +25,6 @@ RegisterValue g_registers[] = {
     {.reg = "rcx"},
     {.reg = "rdx"},
     {.reg = "rbx"},
-    //{.reg = "rdx"},
     {.reg = "rsi"},
     {.reg = "rdi"},
     {0},
@@ -76,15 +75,15 @@ emitInstruction(char* asm_line, ...) {
     // vprintf(asm_line, args);
     char out_asm[LINE_MAX] = {0};
     vsnprintf(out_asm, LINE_MAX, asm_line, args);
-    fwrite(out_asm, 1, strlen(out_asm), g_asm);
+    // fwrite(out_asm, 1, strlen(out_asm), g_asm);
+    printf("%s", out_asm);
     va_end(args);
 }
 
 RegisterValue*
 codegenEmit(AstNode* expr) {
     RegisterValue* result = NULL;
-    if (expr->val == Ast_MUL || expr->val == Ast_ADD) {
-        // MUL has two children.
+    if (expr->val == Ast_MUL || expr->val == Ast_DIV || expr->val == Ast_ADD || expr->val == Ast_SUB) {
         AstNode* child0 = expr->child;
         AstNode* child1 = child0->sibling;
         RegisterValue* r0 = codegenEmit(child0);
@@ -95,12 +94,18 @@ codegenEmit(AstNode* expr) {
             result = r0;
             freeRegister(r1);
         }
-        else if (expr->val == Ast_MUL) {
+        else if (expr->val == Ast_SUB) {
+            emitInstruction("sub %s, %s\n", r0->reg, r1->reg);
+            result = r0;
+            freeRegister(r1);
+        }
+        else if (expr->val == Ast_MUL || expr->val == Ast_DIV) {
+            char* op = expr->val == Ast_MUL ? "mul" : "div";
             if (r0 != &g_registers[Reg_RAX]) {
                 emitInstruction("mov rax, %s\n", r0->reg);
             }
 
-            emitInstruction("mul %s\n", r1->reg);
+            emitInstruction("%s %s\n", op, r1->reg);
             result = allocateRegister(expr);
             emitInstruction("mov %s, rax\n", result->reg);
             freeRegister(r0);
