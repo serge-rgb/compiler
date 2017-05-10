@@ -30,10 +30,11 @@ High Level Action Plan
 ----------------------
 
 - One by one, add the rest of the C int expressions.
-- Declarations.
 - Blocks
+- Declarations.
 - Emit HTML for ASM. Every line a hyperlink to the codegen source.
 - Add conditional expressions.
+
 
 Notes
 -----
