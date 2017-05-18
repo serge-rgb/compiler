@@ -30,7 +30,6 @@ extern size_t fwrite( void          *buffer, size_t size, size_t count, FILE    
 extern int    printf( const char *format, ... );
 extern int    fprintf( FILE* stream, const char *format, ... );
 extern int vprintf( const char *format, va_list vlist );
-extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format, va_list vlist );
 extern void*  calloc( size_t num, size_t size );
 extern void   free( void* p );
 extern void   exit( int error_code );

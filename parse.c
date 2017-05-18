@@ -86,7 +86,6 @@ peekCharPunctuator(Parser* p, char c) {
     return result;
 }
 
-
 AstNode*
 multiplicativeExpr(Parser* p) {
     // Token* tok = p->token;
@@ -132,25 +131,50 @@ additiveExpr(Parser* p) {
 }
 
 AstNode*
-parseExpression(Token* token) {
-    Parser p = {0};
-    Arena tmp_parser_arena = {0};
-    p.arena = &tmp_parser_arena;
-    p.token = token;
-    AstNode* t = additiveExpr(&p);
-    if (t && p.token->type == TokenType_NONE) {
+parseExpression(Parser* p) {
+    AstNode* t = additiveExpr(p);
+    if (t && p->token->type == TokenType_NONE) {
         printf("Expression accepted\n");
     } else {
-        printf("Could not accept expression. Ended at stroke: ");
-        tokenPrint(p.token);
+        printf("Could not accept expression. Ended at token: ");
+        tokenPrint(p->token);
     }
     return t;
 }
 
-/*
-void
-parseTranslationUnit(void) {
-    // Let's start by parsing an expression.
-    parseExpression();
+
+AstNode*
+parseDeclarationSpecifiers(Parser* p) {
+    // One or more of:
+    //   storage-class-specifier
+    //   type-specifier
+    //   function specifier
+    Token* t = p->token;
+    if (t->type == TokenType_KEYWORD ) {
+
+    }
+    return NULL;
 }
-*/
+
+AstNode*
+parseDeclarator(Parser* p) {
+    return NULL;
+}
+
+AstNode*
+parseTranslationUnit(Parser* p) {
+    // How to parse a function declaration
+    // 1. declaration specifier
+    // 2. declarator
+    // 3. declaration list (one or more declarations)
+    // 4. compound statement
+    AstNode* declaration_specifier = NULL;
+    AstNode* declarator = NULL;
+    if ((declaration_specifier = parseDeclarationSpecifiers(p), declaration_specifier) &&
+        (declarator = parseDeclarator(p), declarator)
+        ) {
+
+    }
+    return NULL;
+
+}

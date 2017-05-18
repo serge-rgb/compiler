@@ -17,7 +17,12 @@ main(void) {
         for (Token* t = tokens; t != NULL; t = t->next) {
             tokenPrint(t);
         }
-        AstNode* tree = parseExpression(tokens);
+        Parser p = {0};
+        Arena tmp_parser_arena = {0};
+        p.arena = &tmp_parser_arena;
+        p.token = tokens;
+
+        AstNode* tree = parseExpression(&p);
         codegenEmit(tree);
     }
 
