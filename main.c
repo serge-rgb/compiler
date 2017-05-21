@@ -23,7 +23,14 @@ main(void) {
         p.token = tokens;
 
         AstNode* tree = parseExpression(&p);
-        codegenEmit(tree);
+        p.token = tokens;
+        AstNode* tree1 = parseTranslationUnit(&p);
+        if (tree) {
+            codegenEmit(tree);
+        }
+        if (tree1) {
+            printf("hullo tree\n");
+        }
     }
 
     codegenFinish();

@@ -1,3 +1,5 @@
+#define PRI_size "zi"
+
 extern int    sprintf_s(char * buffer, rsize_t bufsz, const char * format, ...);
 extern int    vsnprintf( char * buffer, size_t bufsz, const char * format, va_list vlist );
 

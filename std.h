@@ -2,6 +2,7 @@
 
 #include <stdarg.h>  // varargs
 
+#if 0
 
 typedef void FILE;
 #if defined(_WIN32)
@@ -15,13 +16,6 @@ extern FILE* __acrt_iob_func(int idx);
     extern FILE* stdout;
 #endif
 
-#if defined(_WIN32)
-#    define PRI_size "zi"
-#else
-    #define PRI_size "li"
-#endif
-
-
 extern size_t strlen(const char* str);
 extern void*  memcpy( void *dest, const void *src, size_t count );
 extern FILE*  fopen( const char* filename, const char* mode );
@@ -34,3 +28,11 @@ extern void*  calloc( size_t num, size_t size );
 extern void   free( void* p );
 extern void   exit( int error_code );
 extern void   fclose ( FILE* fd );
+
+#else
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#endif

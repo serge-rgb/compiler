@@ -4,6 +4,12 @@ char* g_keywords[] = {
 #undef X
 };
 
+typedef enum Keyword_n {
+#define X(keyword) Keyword_ ## keyword,
+    #include "keywords.inl"
+#undef X
+} Keyword;
+
 typedef enum TokenType_n {
     TokenType_NONE,
     TokenType_PUNCTUATOR,
@@ -11,7 +17,7 @@ typedef enum TokenType_n {
     TokenType_STRING_LITERAL,
     TokenType_NUMBER,
     TokenType_ID,
-    TokenType_KEYWORD,
+    TokenType_KEYWORD = 0xF000,
 } TokenType;
 
 typedef enum Punctuator_n {
@@ -121,27 +127,26 @@ isDigit(char c) {
     return is_digit;
 }
 
-b32
-isKeyword(Buffer* b) {
-    b32 is_keyword = false;
-
+i32
+identifyKeyword(Buffer* b) {
     size_t num_keywords = ArrayCount(g_keywords);
 
     // Add a NULL terminator so that the buffer can be used as a string.
 
     char end_char = *b->end;
     *b->end = '\0';
+    i32 keyword = -1;
 
     for (size_t i = 0; i < num_keywords; ++i) {
         if (stringsAreEqual(g_keywords[i], b->current)) {
-            is_keyword = true;
+            keyword = i;  // 1 points to the first keyword.
             break;
         }
     }
 
     *b->end = end_char;
 
-    return is_keyword;
+    return keyword;
 }
 
 ErrorCode
@@ -164,27 +169,26 @@ parseInt(char* str, int* out_int) {
     return result;
 }
 
-TokenType
-identifyToken(Buffer* b) {
-    TokenType type = TokenType_NONE;
+void
+identifyToken(Buffer* b, Token* out) {
+    i32 kw = -1;
 
-    // TODO - There is a specified ordering to parsing.. Keywords come
+    // TODO: - There is a specified ordering to parsing.. Keywords come
     // first, then identifiers... Set the correct order, or prove that
     // this is equivalent.
 
     // If it starts with a digit, it's numerical.
     if (isDigit(*b->current)) {
-        type = TokenType_NUMBER;
-        // TODO. Different kinds of numbers..
+        out->type = TokenType_NUMBER;
+        // TODO: Different kinds of numbers..
     }
-    else if (isKeyword(b)) {
-        // TODO: Keywords
-        type = TokenType_KEYWORD;
+    else if ((kw = identifyKeyword(b), kw != -1)) {
+        out->type = TokenType_KEYWORD | kw;
+        out->value.integer = kw;
     }
     else {
-        type = TokenType_ID;
+        out->type = TokenType_ID;
     }
-    return type;
 }
 
 Token
@@ -243,9 +247,8 @@ getToken(Arena* a, Buffer* buffer) {
             }
         }
         token_buffer.end = buffer->current;
-        t.type = identifyToken(&token_buffer);
+        identifyToken(&token_buffer, &t);
 
-        t.value.character = *token_buffer.current;
         char* str = getStringFromBuffer(a, &token_buffer);
         if (t.type == TokenType_NUMBER) {
             int val = 0;
@@ -256,7 +259,11 @@ getToken(Arena* a, Buffer* buffer) {
                 lexerError(msg);
             }
             t.value.integer = val;
-        } else {
+        }
+        else if (t.type & TokenType_KEYWORD) {
+            t.type = TokenType_KEYWORD;
+        }
+        else if (t.type == TokenType_ID)  {
             t.value.string = str;
         }
     }
@@ -273,6 +280,9 @@ tokenPrint(Token* token) {
         case TokenType_PUNCTUATOR_MULTICHAR: {
             printf("PUNCTUATOR: %s", g_punctuator_strings[indexOfPunctuator(token->value.character)]);
         } break;
+        case TokenType_KEYWORD: {
+            printf("KEYWORD %s", g_keywords[token->value.integer]);
+        } break;
         case TokenType_NUMBER: {
             // TODO: Support floating point..
             printf("NUMBER: %i", token->value.integer);
@@ -283,11 +293,7 @@ tokenPrint(Token* token) {
         case TokenType_STRING_LITERAL: {
             printf("STRING: \"%s\"", token->value.string);
         } break;
-            /*case TokenType_KEYWORD: {
-            printf("KEYWORD: %s", token->value.string);
-            } break;*/
         default: {
-
             printf("This token type is not printable yet. Type %d ", token->type);
         } break;
     }

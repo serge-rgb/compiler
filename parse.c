@@ -17,7 +17,6 @@ parseError(char* msg) {
     exit(1);
 }
 
-static Token sentinel;
 Token*
 nextToken(Parser* p) {
     Token* result = NULL;
@@ -32,6 +31,9 @@ void
 backtrack(Parser* p, Token* t) {
     p->token = t;
 }
+
+
+// ==== Expressions ====
 
 AstNode*
 primaryExpr(Parser* p) {
@@ -86,6 +88,17 @@ peekCharPunctuator(Parser* p, char c) {
     return result;
 }
 
+static
+Token*
+nextCharPunctuator(Parser* p, char c) {
+    if (peekCharPunctuator(p, c)) {
+        return nextToken(p);
+    }
+    else {
+        return NULL;
+    }
+}
+
 AstNode*
 multiplicativeExpr(Parser* p) {
     // Token* tok = p->token;
@@ -133,15 +146,10 @@ additiveExpr(Parser* p) {
 AstNode*
 parseExpression(Parser* p) {
     AstNode* t = additiveExpr(p);
-    if (t && p->token->type == TokenType_NONE) {
-        printf("Expression accepted\n");
-    } else {
-        printf("Could not accept expression. Ended at token: ");
-        tokenPrint(p->token);
-    }
     return t;
 }
 
+// ==== Declarations ====
 
 AstNode*
 parseDeclarationSpecifiers(Parser* p) {
@@ -149,15 +157,89 @@ parseDeclarationSpecifiers(Parser* p) {
     //   storage-class-specifier
     //   type-specifier
     //   function specifier
-    Token* t = p->token;
-    if (t->type == TokenType_KEYWORD ) {
+    Token* bt = p->token;
+    Token* t = nextToken(p);
+    AstNode* result = NULL;
 
+    if (t->type == TokenType_KEYWORD) {
+
+        result = makeAstNode(p->arena, Ast_KEYWORD, NULL, NULL);
+        int v = t->value.integer;
+        // Storage class specifiers
+        if (   v == Keyword_typedef
+            || v == Keyword_extern
+            || v == Keyword_static
+            || v == Keyword_auto
+            || v == Keyword_register) {
+
+        }
+        // Type specifiers
+        else if (t->value.integer == Keyword_int) {
+
+        }
+        else {
+            result = NULL;
+            backtrack(p, bt);
+        }
     }
-    return NULL;
+
+    return result;
 }
 
 AstNode*
 parseDeclarator(Parser* p) {
+    AstNode* r = NULL;
+    Token* t = nextToken(p);
+    if (t->type == TokenType_ID) {
+        r = makeAstNode(p->arena, Ast_ID, NULL, NULL);
+        r->tok = t;
+    }
+    return r;
+}
+
+AstNode*
+parseDeclarationList(Parser* p) {
+    return NULL;
+}
+
+AstNode*
+parseDeclaration(Parser* p) {
+    return NULL;
+}
+
+// ==== Statements and blocks ====
+
+AstNode*
+parseStatement(Parser* p) {
+    AstNode* result = NULL;
+    result = parseExpression(p);
+    nextCharPunctuator(p, ';');
+    return result;
+}
+
+AstNode*
+parseCompoundStatement(Parser* p) {
+    if (nextCharPunctuator(p, '{')) {
+        AstNode* block_elem = NULL;
+        do {
+            Token* bt = p->token;
+            block_elem = parseDeclaration(p);
+            if (!block_elem) {
+                backtrack(p, bt);
+                block_elem = parseStatement(p);
+                if (!block_elem) {
+                    backtrack(p, bt);
+                }
+            }
+        } while (block_elem);
+        if (nextCharPunctuator(p, '}')) {
+
+        } else {
+            parseError("Expected '}' at the end of compound statement.");
+        }
+    } else {
+        parseError("Expected '{'");
+    }
     return NULL;
 }
 
@@ -168,13 +250,28 @@ parseTranslationUnit(Parser* p) {
     // 2. declarator
     // 3. declaration list (one or more declarations)
     // 4. compound statement
+    AstNode* result = NULL;
+
     AstNode* declaration_specifier = NULL;
     AstNode* declarator = NULL;
-    if ((declaration_specifier = parseDeclarationSpecifiers(p), declaration_specifier) &&
-        (declarator = parseDeclarator(p), declarator)
-        ) {
 
+    if ((declaration_specifier = parseDeclarationSpecifiers(p), declaration_specifier)
+        && (declarator = parseDeclarator(p), declarator)) {
+        AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);
+
+        // TODO: Support something other than no-params
+        nextCharPunctuator(p, '(');
+        nextCharPunctuator(p, ')');
+
+        Token* bt = p->token;
+
+        AstNode* declaration_list = parseDeclarationList(p);
+        if (!declaration_list) {
+            backtrack(p, bt);
+        }
+        parseCompoundStatement(p);
+        result = funcdef;
     }
-    return NULL;
+    return result;
 
 }
