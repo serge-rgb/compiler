@@ -27,7 +27,6 @@ RegisterValue g_registers[] = {
     {.reg = "rbx"},
     {.reg = "rsi"},
     {.reg = "rdi"},
-    {0},
 };
 
 RegisterValue*

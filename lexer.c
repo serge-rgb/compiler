@@ -66,7 +66,8 @@ isWhitespace(char c) {
     return false;
 }
 
-// Returns 0 if it is not a punctuator. Otherwise, it returns the token code of the mult-char punctuator.
+// Returns 0 if it is not a punctuator. Otherwise, it returns the
+// token code of the mult-char punctuator.
 int
 isPunctuator(Buffer* b) {
     int result = 0;

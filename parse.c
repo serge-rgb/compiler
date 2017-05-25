@@ -17,6 +17,12 @@ parseError(char* msg) {
     exit(1);
 }
 
+b32
+peekCharPunctuator(Parser* p, char c) {
+    b32 result = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == c;
+    return result;
+}
+
 Token*
 nextToken(Parser* p) {
     Token* result = NULL;
@@ -25,6 +31,16 @@ nextToken(Parser* p) {
         p->token = p->token->next;
     }
     return result;
+}
+
+Token*
+nextCharPunctuator(Parser* p, char c) {
+    if (peekCharPunctuator(p, c)) {
+        return nextToken(p);
+    }
+    else {
+        return NULL;
+    }
 }
 
 void
@@ -79,24 +95,6 @@ castExpr(Parser* p) {
     AstNode* t = NULL;
     t = unaryExpr(p);
     return t;
-}
-
-static
-b32
-peekCharPunctuator(Parser* p, char c) {
-    b32 result = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == c;
-    return result;
-}
-
-static
-Token*
-nextCharPunctuator(Parser* p, char c) {
-    if (peekCharPunctuator(p, c)) {
-        return nextToken(p);
-    }
-    else {
-        return NULL;
-    }
 }
 
 AstNode*
