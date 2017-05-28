@@ -3,6 +3,8 @@
 // Note: Order maters. If one punctuator is a prefix of another, the longer punctuator must appear first.
 
 X(!=, NOT_EQUALS)
+X(||, LOGICAL_OR)
+X(&&, LOGICAL_AND)
 X(%=, ASSIGN_MODULUS)
 X(&=, ASSIGN_BIT_ADD)
 X(*=, ASSIGN_MULTIPLY)

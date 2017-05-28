@@ -54,8 +54,10 @@ backtrack(Parser* p, Token* t) {
    p->token = t;
 }
 
-
 // ==== Expressions ====
+
+// Forward declaration of parseExpression.
+AstNode* parseExpression(Parser* p);
 
 AstNode*
 primaryExpr(Parser* p) {
@@ -147,6 +149,80 @@ additiveExpr(Parser* p) {
    return left;
 }
 
+
+AstNode*
+inclusiveOrExpr(Parser* p) {
+   // TODO: Implement bit or.
+   return additiveExpr(p);
+}
+
+AstNode*
+logicalAndExpr(Parser* p) {
+   AstNode* left = inclusiveOrExpr(p);
+   if (left) {
+      while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == LOGICAL_AND) {
+         nextToken(p);  // Pop the logical and.
+         AstNode* right = inclusiveOrExpr(p);
+         if (!right) { parseError("Expected expression after `&&`."); }
+         left = makeAstNode(p->arena, Ast_LOGICAL_AND, left, right);
+      }
+   }
+   return left;
+}
+
+AstNode*
+logicalOrExpr(Parser* p) {
+   AstNode* left = logicalAndExpr(p);
+   if (left) {
+      while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == LOGICAL_OR) {
+         nextToken(p); // Pop the logical or
+         AstNode* right = logicalAndExpr(p);
+         if (!right) { parseError("Expected expression after `||`"); }
+         int node_type = Ast_LOGICAL_OR;
+         left = makeAstNode(p->arena, node_type, left, right);
+      }
+   }
+   return left;
+}
+
+AstNode*
+conditionalExpr(Parser* p) {
+   AstNode* t = logicalOrExpr(p);
+   Token* bt = marktrack(p);
+   if (nextCharPunctuator(p, '?')) {
+      AstNode* then_expr = parseExpression(p);
+      if (!then_expr) {
+         parseError("Expected expression after ? token.");
+      }
+      else {
+         bt = marktrack(p);
+         if (!nextCharPunctuator(p, ':')) {
+            backtrack(p, bt);
+         }
+         else {
+            AstNode* else_expr = parseExpression(p);
+            if (!else_expr) {
+               parseError("Expected expression after `:`");
+            }
+            else {
+               // Yay.
+            }
+         }
+      }
+   }
+   else {
+      backtrack(p, bt);
+   }
+   return t;
+}
+
+AstNode*
+assignmentExpr(Parser* p) {
+   AstNode* t = conditionalExpr(p);
+   // TODO: unaryExpr assignmentOperator assignmentExpr
+   return t;
+}
+
 AstNode*
 parseExpression(Parser* p) {
    AstNode* t = additiveExpr(p);
@@ -207,6 +283,12 @@ parseDeclarationList(Parser* p) {
 }
 
 AstNode*
+parseInitializer(Parser* p) {
+   AstNode* node = assignmentExpr(p);
+   return node;
+}
+
+AstNode*
 parseDeclaration(Parser* p) {
    AstNode* result = NULL;
    AstNode* specifiers = parseDeclarationSpecifiers(p);
@@ -216,10 +298,14 @@ parseDeclaration(Parser* p) {
 
       Token* bt = marktrack(p);
       if (nextCharPunctuator(p, '=')) {
-
+         AstNode* initializer = parseInitializer(p);
+         result = initializer;
       }
       else {
          backtrack(p, bt);
+      }
+      if (!nextCharPunctuator(p, ';')) {
+         parseError("Expected semicolon at the end of declaration.");
       }
    }
    return result;
@@ -234,6 +320,8 @@ parseStatement(Parser* p) {
    nextCharPunctuator(p, ';');
    return result;
 }
+
+#define THIS_IS_MY_DEFINE "Hello there!"
 
 AstNode*
 parseCompoundStatement(Parser* p) {

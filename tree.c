@@ -11,6 +11,8 @@ typedef enum AstLeaf_n {
    Ast_SUB,
    Ast_MUL,
    Ast_DIV,
+   Ast_LOGICAL_AND,
+   Ast_LOGICAL_OR,
 
 } AstLeaf;
 
