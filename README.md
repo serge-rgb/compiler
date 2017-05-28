@@ -40,6 +40,24 @@ High Level Action Plan
 Notes
 -----
 
+-- 2017-05-24
+
+Right now we have very simple blocks. I need to determine what the
+next step is. How can I implement declarations? For now, let's assume
+that all declared values live on the stack. How do we determine how
+much stack are we going to use for a given function? Do we count the
+number of declarations? Maybe when parsing a top-level compound
+statement we keep track of the subtrees in the parse tree that require
+stack space. We add them up recursively and when we reach the top
+level compound statement we know exactly how much stack we need.
+
+But first, I need to implement declarations. Right now we have simple
+functions that return ints. I feel like keeping with the same
+philosophy and implementing very simple declarations. Maybe just ints
+on the stack.
+
+-- Before
+
 What happens if we run out of registers?
 What is register spilling?
 
