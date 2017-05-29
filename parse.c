@@ -3,7 +3,24 @@ typedef struct Parser_s {
    Token* token;  // The next token to parse.
    Arena* arena;
    AstNode* tree;
+   i64 stack_req;  // How many bytes need to be allocated on the stack for our current block.
 } Parser;
+
+
+// A function that takes a Parser and returns an AstNode*
+typedef AstNode* ParseFunction(Parser*);
+
+inline
+void
+resetStack(Parser* p) {
+   p->stack_req = 0;
+}
+
+inline
+void
+needStack(Parser* p, i64 need) {
+   p->stack_req += need;
+}
 
 AstNode*
 newNode(Arena* a) {
@@ -43,6 +60,14 @@ nextCharPunctuator(Parser* p, char c) {
    }
 }
 
+void
+expectSemicolon(Parser* p) {
+   if (!nextCharPunctuator(p, ';')) {
+      parseError("Expected semicolon!");  // TODO: Need to pass some context around to support good syntax error handling.
+   }
+}
+
+
 Token*
 marktrack(Parser* p) {
    Token* result = p->token;
@@ -52,6 +77,17 @@ marktrack(Parser* p) {
 void
 backtrack(Parser* p, Token* t) {
    p->token = t;
+}
+
+// Execute tha parse function, but backtrack in case it fails.
+AstNode*
+parseOrBacktrack(ParseFunction func, Parser* p) {
+   Token* bt = p->token;
+   AstNode* result = func(p);
+   if (!result) {
+      backtrack(p, bt);
+   }
+   return result;
 }
 
 // ==== Expressions ====
@@ -69,7 +105,12 @@ primaryExpr(Parser* p) {
       t->val = Ast_NUMBER;
       t->tok = tok;
    }
-   // TODO: There are more primary expression terminals.
+   else if (tok->type == TokenType_ID) {
+      t = newNode(p->arena);
+      t->val = Ast_ID;
+      t->tok = tok;
+   }
+   // TODO: other constants, string literals
    else {
 
    }
@@ -81,7 +122,7 @@ postfixExpr(Parser* p) {
    AstNode* t = NULL;
    if ((t = primaryExpr(p), t)) {
       Token* tok = nextToken(p);
-      if (tok && tok->value.character == '[') {
+      if (tok->type == TokenType_PUNCTUATOR && tok->value.character == '[') {
          parseError ("I don't know how to continue");
       }
       else if (tok) {
@@ -246,11 +287,11 @@ parseDeclarationSpecifiers(Parser* p) {
       result = makeAstNode(p->arena, Ast_KEYWORD, NULL, NULL);
       int v = t->value.integer;
       // Storage class specifiers
-      if (   v == Keyword_typedef
-             || v == Keyword_extern
-             || v == Keyword_static
-             || v == Keyword_auto
-             || v == Keyword_register) {
+      if (v == Keyword_typedef ||
+          v == Keyword_extern ||
+          v == Keyword_static ||
+          v == Keyword_auto ||
+          v == Keyword_register) {
 
       }
       // Type specifiers
@@ -284,6 +325,7 @@ parseDeclarationList(Parser* p) {
 
 AstNode*
 parseInitializer(Parser* p) {
+   // TODO: Initializers.
    AstNode* node = assignmentExpr(p);
    return node;
 }
@@ -294,12 +336,11 @@ parseDeclaration(Parser* p) {
    AstNode* specifiers = parseDeclarationSpecifiers(p);
    if (specifiers) {
       AstNode* identifier = parseDeclarator(p);
-      result = identifier;
+      AstNode* initializer = NULL;
 
       Token* bt = marktrack(p);
       if (nextCharPunctuator(p, '=')) {
-         AstNode* initializer = parseInitializer(p);
-         result = initializer;
+         initializer = parseInitializer(p);
       }
       else {
          backtrack(p, bt);
@@ -307,6 +348,11 @@ parseDeclaration(Parser* p) {
       if (!nextCharPunctuator(p, ';')) {
          parseError("Expected semicolon at the end of declaration.");
       }
+      result = makeAstNode(p->arena, Ast_DECLARATION, identifier, initializer);
+
+      i64 size = 4; // TODO: Support stack variables that are of size different than 4 bytes.
+      // Declaration exists. Tell the parser we need some stack memory.
+      needStack(p, size);
    }
    return result;
 }
@@ -314,30 +360,45 @@ parseDeclaration(Parser* p) {
 // ==== Statements and blocks ====
 
 AstNode*
-parseStatement(Parser* p) {
-   AstNode* result = NULL;
-   result = parseExpression(p);
-   nextCharPunctuator(p, ';');
-   return result;
+parseJumpStatement(Parser* p) {
+   AstNode* stmt = NULL;
+   Token* t = nextToken(p);
+   if (t->type == TokenType_KEYWORD && t->value.integer == Keyword_return) {
+      AstNode* expr = parseOrBacktrack(parseExpression, p);
+      stmt = makeAstNode(p->arena, Ast_RETURN, expr, NULL);
+      expectSemicolon(p);
+   }
+   return stmt;
 }
 
-#define THIS_IS_MY_DEFINE "Hello there!"
+AstNode*
+parseStatement(Parser* p) {
+   AstNode* stmt = NULL;
+
+   if (((stmt = parseOrBacktrack(parseExpression, p)) && nextCharPunctuator(p, ';')) ||
+       (stmt = parseOrBacktrack(parseJumpStatement, p)) ) {
+   }
+   // TODO:
+   //   selection-statement
+   //   iteration-statement
+   return stmt;
+}
 
 AstNode*
 parseCompoundStatement(Parser* p) {
+   resetStack(p);
+   AstNode* first_stmt = NULL;
    if (nextCharPunctuator(p, '{')) {
-      AstNode* block_elem = NULL;
+      AstNode** cur = &first_stmt;
       do {
-         Token* bt = marktrack(p);
-         block_elem = parseDeclaration(p);
-         if (!block_elem) {
-            backtrack(p, bt);
-            block_elem = parseStatement(p);
-            if (!block_elem) {
-               backtrack(p, bt);
-            }
+         if (*cur) {
+            cur = &(*cur)->sibling;
          }
-      } while (block_elem);
+         *cur = parseOrBacktrack(parseDeclaration, p);
+         if (!*cur) {
+            *cur = parseOrBacktrack(parseStatement, p);
+         }
+      } while (*cur);
       if (nextCharPunctuator(p, '}')) {
 
       } else {
@@ -346,7 +407,9 @@ parseCompoundStatement(Parser* p) {
    } else {
       parseError("Expected '{'");
    }
-   return NULL;
+
+   printf("After compound statement. We have determined that we need %lld bytes of memory.\n", p->stack_req);
+   return first_stmt;
 }
 
 AstNode*
@@ -361,21 +424,18 @@ parseTranslationUnit(Parser* p) {
    AstNode* declaration_specifier = NULL;
    AstNode* declarator = NULL;
 
-   if ((declaration_specifier = parseDeclarationSpecifiers(p), declaration_specifier) &&
-       (declarator = parseDeclarator(p), declarator)) {
+   if ((declaration_specifier = parseDeclarationSpecifiers(p)) &&
+       (declarator = parseDeclarator(p))) {
+
       AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);
 
       // TODO: Support something other than no-params
       nextCharPunctuator(p, '(');
       nextCharPunctuator(p, ')');
 
-      Token* bt = marktrack(p);
-
-      AstNode* declaration_list = parseDeclarationList(p);
-      if (!declaration_list) {
-         backtrack(p, bt);
-      }
-      parseCompoundStatement(p);
+      parseOrBacktrack(parseDeclarationList, p);
+      AstNode* stmts = parseCompoundStatement(p);
+      declarator->sibling = stmts;
 
       result = funcdef;
    }

@@ -5,6 +5,7 @@ int
 main(void) {
    Arena a = {0};
    codegenInit();
+   stringInit(&a);
    FILE* fd = fopen("test.c", "r");
 
    if (fd) {
@@ -22,14 +23,9 @@ main(void) {
       p.arena = &tmp_parser_arena;
       p.token = tokens;
 
-      AstNode* tree = parseExpression(&p);
-      p.token = tokens;
-      AstNode* tree1 = parseTranslationUnit(&p);
+      AstNode* tree = parseTranslationUnit(&p);
       if (tree) {
          codegenEmit(tree);
-      }
-      if (tree1) {
-         printf("hullo tree\n");
       }
    }
 

@@ -229,7 +229,7 @@ getToken(Arena* a, Buffer* buffer) {
          }
       }
       token_buffer.end = buffer->current - 1;
-      char* str = getStringFromBuffer(a, &token_buffer);
+      char* str = getStringFromBuffer(&token_buffer);
       t.value.string = str;
    }
    // TODO: Operators
@@ -250,7 +250,7 @@ getToken(Arena* a, Buffer* buffer) {
       token_buffer.end = buffer->current;
       identifyToken(&token_buffer, &t);
 
-      char* str = getStringFromBuffer(a, &token_buffer);
+      char* str = getStringFromBuffer(&token_buffer);
       if (t.type == TokenType_NUMBER) {
          int val = 0;
          ErrorCode err = parseInt(str, &val);

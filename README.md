@@ -30,9 +30,8 @@ All of C99 plus:
 High Level Action Plan
 ----------------------
 
+- Add block-scope declarations to the code generator.
 - One by one, add the rest of the C int expressions.
-- Blocks
-- Declarations.
 - Emit HTML for ASM. Every line a hyperlink to the codegen source.
 - Add conditional expressions.
 

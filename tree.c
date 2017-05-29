@@ -6,6 +6,9 @@ typedef enum AstLeaf_n {
    Ast_ID,
 
    Ast_FUNCDEF,
+   Ast_DECLARATION,
+
+   Ast_RETURN,
 
    Ast_ADD,
    Ast_SUB,
@@ -16,19 +19,12 @@ typedef enum AstLeaf_n {
 
 } AstLeaf;
 
-typedef union AstNode_s AstNode;
-union AstNode_s {
-   struct {
-      AstLeaf val;
-
-      AstNode* child;
-      AstNode* sibling;
-   };
-   struct {
-      AstLeaf val_;  // Accessed as val
-
-      Token* tok;
-   };
+typedef struct AstNode_s AstNode;
+struct AstNode_s {
+   AstLeaf val;
+   Token* tok;
+   AstNode* child;
+   AstNode* sibling;
 };
 
 typedef struct AstMul_s {
@@ -44,9 +40,8 @@ makeAstNode(Arena* a, AstLeaf val, AstNode* left, AstNode* right) {
    n->val = val;
    n->child = left;
    if (left) {
-      Assert(right);
       left->sibling = right;
-      right->sibling = NULL;
+      if (right) { right->sibling = NULL; }
    }
 
    return n;

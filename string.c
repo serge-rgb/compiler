@@ -12,7 +12,13 @@ struct StringList_s {
    StringList*   next;
 };
 
+static Arena* g_string_arena;
 static StringList* g_string_map[STRING_HASH_BUCKET_SIZE];
+
+void
+stringInit(Arena* a) {
+   g_string_arena = a;
+}
 
 u64
 hash_str(char* str, size_t size) {
@@ -45,7 +51,7 @@ stringsAreEqual(char* a, char* b) {
 }
 
 char*
-getStringFromBuffer(Arena* a, Buffer* buffer) {
+getStringFromBuffer(Buffer* buffer) {
    char* str = NULL;
    size_t size = buffer->end - buffer->current;
    if (size < STRING_CACHE_MAX_SIZE) {
@@ -60,9 +66,9 @@ getStringFromBuffer(Arena* a, Buffer* buffer) {
          l = l->next;
       }
       if (!str) {  // Not found. Allocate new one.
-         char* new_str = allocate(a, size+1); // Allocate one more byte for the string terminator.
+         char* new_str = allocate(g_string_arena, size+1); // Allocate one more byte for the string terminator.
          memcpy(new_str, temp_str, size+1);
-         StringList* e = AllocType(a, StringList);
+         StringList* e = AllocType(g_string_arena, StringList);
          e->string = new_str;
          e->next = g_string_map[hash];
          g_string_map[hash] = e;
@@ -72,4 +78,12 @@ getStringFromBuffer(Arena* a, Buffer* buffer) {
       // TODO: Just allocate and return.
    }
    return str;
+}
+
+char*
+getString(char* orig) {
+   Buffer b = {0};
+   b.current = orig;
+   b.end = orig + strlen(orig);
+   return getStringFromBuffer(&b);
 }
