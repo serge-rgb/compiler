@@ -5,9 +5,7 @@ typedef struct RegisterValue_s {
    AstNode* bound;  // Non-NULL when an intermediate value is bound to this register.
 } RegisterValue;
 
-// NOTE: All registers are 64 bit at the moment. We will
-
-// Must be the same as g_register.
+// Must be the same as g_registers.
 enum RegisterEnum {
    Reg_RAX,
    Reg_RCX,
@@ -18,6 +16,21 @@ enum RegisterEnum {
 
    Reg_Count,
 };
+
+#define SCOPE_HASH_SIZE 1024
+
+typedef struct Scope_s Scope;
+struct Scope_s {
+   // Hash map from string variable to offset in the stack.
+   int offsets[SCOPE_HASH_SIZE];
+
+   Scope* prev;
+};
+
+typedef struct Codegen_s {
+   Arena* arena;
+   Scope* scope;
+} Codegen;
 
 static
 RegisterValue g_registers[] = {
@@ -30,8 +43,26 @@ RegisterValue g_registers[] = {
 };
 
 // Forward declaration for recursive calls.
-RegisterValue* codegenEmit(AstNode* node);
+RegisterValue* codegenEmit(Codegen* c, AstNode* node);
 
+void
+codegenError(char* msg) {
+   fprintf(stderr, "Codegen error: %s\n", msg);
+   exit(1);
+}
+
+
+int
+offsetForName(Codegen* c, char* name) {
+   u64 hash = hash_str(name, strlen(name));
+   int offset = c->scope->offsets[hash % SCOPE_HASH_SIZE];
+   if (!offset) {
+      char buf[1024] = {0};
+      snprintf(buf, 1024, "Tying to use variable name that is not bounded. %s\n", name);
+      codegenError(buf);
+   }
+   return offset;
+}
 
 // Keep track of register values per identifier.
 
@@ -72,7 +103,18 @@ codegenInit(void) {
    fwrite(prelude, 1, strlen(prelude), g_asm);
 }
 
-static
+void
+pushScope(Codegen* c) {
+   Scope* prev_scope = c->scope;
+   c->scope = allocate(c->arena, sizeof(*c->scope));
+   c->scope->prev = prev_scope;
+}
+
+void
+popScope(Codegen* c) {
+   c->scope = c->scope->prev;
+}
+
 void
 emitInstruction(char* asm_line, ...) {
    va_list args;
@@ -86,13 +128,13 @@ emitInstruction(char* asm_line, ...) {
 }
 
 RegisterValue*
-emitExpression(AstNode* node) {
+emitExpression(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
    if (node->val == Ast_MUL || node->val == Ast_DIV || node->val == Ast_ADD || node->val == Ast_SUB) {
       AstNode* child0 = node->child;
       AstNode* child1 = child0->sibling;
-      RegisterValue* r0 = codegenEmit(child0);
-      RegisterValue* r1 = codegenEmit(child1);
+      RegisterValue* r0 = codegenEmit(c, child0);
+      RegisterValue* r1 = codegenEmit(c, child1);
 
       if (node->val == Ast_ADD) {
          emitInstruction("add %s, %s\n", r0->reg, r1->reg);
@@ -125,24 +167,34 @@ emitExpression(AstNode* node) {
       result = r;
    }
    else if (node->val == Ast_ID) {
+      int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
-      PrintString(asm_line, LINE_MAX, "mov eax, %d\n", 10);
+      PrintString(asm_line, LINE_MAX, "mov eax, QWORD PTR[rbp - %x]\n", offset);
       emitInstruction(asm_line);
    }
    return result;
 }
 
 void
-emitStatement(AstNode* stmt) {
+emitStatement(Codegen* c, AstNode* stmt) {
    switch (stmt->val) {
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
          if (stmt->child) {
-            emitExpression(stmt->child);
+            emitExpression(c, stmt->child);
          }
       } break;
       case Ast_DECLARATION: {
-         printf("id: %s\n", stmt->child->tok->value.string);
+         char* id_str = stmt->child->tok->value.string;
+         u64 hash = hash_str(id_str, strlen(id_str));
+         if (c->scope->offsets[hash % SCOPE_HASH_SIZE]) {
+            Assert(!"Hash map collision handling not implemented.");
+         }
+         int value = stmt->child->sibling->tok->value.integer;
+         c->scope->offsets[hash % SCOPE_HASH_SIZE] = 4;
+         char asm_line[LINE_MAX] = {0};
+         PrintString(asm_line, LINE_MAX, "mov QWORD PTR[rbp-%x], %x\n", 4, value);
+         emitInstruction(asm_line);
       } break;
       default: {
          // Not handled
@@ -151,26 +203,37 @@ emitStatement(AstNode* stmt) {
 }
 
 void
-emitFunctionDefinition(AstNode* node) {
+emitFunctionDefinition(Codegen* c, AstNode* node) {
    // Type
    AstNode* type = node->child;
    AstNode* id = type->sibling;
-   AstNode* stmts = id->sibling;
-   if (type && id && stmts) {
+   AstNode* compound = id->sibling;
+   if (type && id && compound) {
       emitInstruction("%s:\n", id->tok->value.string);
+
+      Assert(compound->child->val == Ast_STACK_REQ);
+      AstNode* stack_req = compound->child;
+      // Emit first pass of stack req.
+      AstNode* stmt = stack_req->sibling;
+
+      // Push
+      pushScope(c);
+
       // Emit function call prelude. Push stack
-      while (stmts) {
-         emitStatement(stmts);
-         stmts = stmts->sibling;
+      while (stmt) {
+         emitStatement(c, stmt);
+         stmt = stmt->sibling;
       }
+
+      popScope(c);
    }
 }
 
 RegisterValue*
-codegenEmit(AstNode* node) {
+codegenEmit(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
    if (node->val == Ast_FUNCDEF) {
-      emitFunctionDefinition(node);
+      emitFunctionDefinition(c, node);
    }
    return result;
 }

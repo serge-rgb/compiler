@@ -16,15 +16,23 @@ typedef enum AstLeaf_n {
    Ast_DIV,
    Ast_LOGICAL_AND,
    Ast_LOGICAL_OR,
-
+   Ast_COMPOUND_STMT,
+   Ast_STACK_REQ,
 } AstLeaf;
 
 typedef struct AstNode_s AstNode;
 struct AstNode_s {
    AstLeaf val;
    Token* tok;
-   AstNode* child;
-   AstNode* sibling;
+   union {
+      struct {
+         AstNode* child;
+         AstNode* sibling;
+      };
+      struct {
+         int stack_req;
+      };
+   };
 };
 
 typedef struct AstMul_s {
@@ -40,8 +48,8 @@ makeAstNode(Arena* a, AstLeaf val, AstNode* left, AstNode* right) {
    n->val = val;
    n->child = left;
    if (left) {
+      Assert(left->sibling == NULL);
       left->sibling = right;
-      if (right) { right->sibling = NULL; }
    }
 
    return n;

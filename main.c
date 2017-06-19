@@ -23,10 +23,14 @@ main(void) {
       p.arena = &tmp_parser_arena;
       p.token = tokens;
 
+      Codegen codegen;
+      codegen.arena = &tmp_parser_arena;
+
       AstNode* tree = parseTranslationUnit(&p);
       if (tree) {
-         codegenEmit(tree);
+         codegenEmit(&codegen, tree);
       }
+      deallocate(&tmp_parser_arena);
    }
 
    codegenFinish();

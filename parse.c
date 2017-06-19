@@ -1,4 +1,5 @@
 
+
 typedef struct Parser_s {
    Token* token;  // The next token to parse.
    Arena* arena;
@@ -10,13 +11,11 @@ typedef struct Parser_s {
 // A function that takes a Parser and returns an AstNode*
 typedef AstNode* ParseFunction(Parser*);
 
-inline
 void
 resetStack(Parser* p) {
    p->stack_req = 0;
 }
 
-inline
 void
 needStack(Parser* p, i64 need) {
    p->stack_req += need;
@@ -60,13 +59,13 @@ nextCharPunctuator(Parser* p, char c) {
    }
 }
 
+
 void
 expectSemicolon(Parser* p) {
    if (!nextCharPunctuator(p, ';')) {
       parseError("Expected semicolon!");  // TODO: Need to pass some context around to support good syntax error handling.
    }
 }
-
 
 Token*
 marktrack(Parser* p) {
@@ -87,10 +86,13 @@ parseOrBacktrack(ParseFunction func, Parser* p) {
    if (!result) {
       backtrack(p, bt);
    }
+
    return result;
 }
 
-// ==== Expressions ====
+/**
+  Expressions
+**/
 
 // Forward declaration of parseExpression.
 AstNode* parseExpression(Parser* p);
@@ -408,8 +410,14 @@ parseCompoundStatement(Parser* p) {
       parseError("Expected '{'");
    }
 
-   printf("After compound statement. We have determined that we need %lld bytes of memory.\n", p->stack_req);
-   return first_stmt;
+   printf("After compound statement. We have determined that we need %ld bytes of memory.\n", p->stack_req);
+
+   AstNode* stack_req = makeAstNode(p->arena, Ast_STACK_REQ, NULL, NULL);
+   stack_req->stack_req = p->stack_req;
+
+   AstNode* compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, stack_req, first_stmt);
+
+   return compound_stmt;
 }
 
 AstNode*
