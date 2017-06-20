@@ -1,4 +1,4 @@
-typedef enum AstLeaf_n {
+typedef enum AstType_n {
    Ast_NONE,
 
    Ast_NUMBER,
@@ -18,11 +18,11 @@ typedef enum AstLeaf_n {
    Ast_LOGICAL_OR,
    Ast_COMPOUND_STMT,
    Ast_STACK_REQ,
-} AstLeaf;
+} AstType;
 
 typedef struct AstNode_s AstNode;
 struct AstNode_s {
-   AstLeaf val;
+   AstType type;
    Token* tok;
    union {
       struct {
@@ -43,9 +43,9 @@ typedef struct AstMul_s {
 static AstNode* AstNode_MUL;
 
 AstNode*
-makeAstNode(Arena* a, AstLeaf val, AstNode* left, AstNode* right) {
+makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
    AstNode* n = AllocType(a, AstNode);
-   n->val = val;
+   n->type = type;
    n->child = left;
    if (left) {
       Assert(left->sibling == NULL);

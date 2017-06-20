@@ -1,7 +1,8 @@
 static FILE* g_asm;
 
 typedef struct RegisterValue_s {
-   char* reg;
+   char*    reg;
+   char*    reg_32;
    AstNode* bound;  // Non-NULL when an intermediate value is bound to this register.
 } RegisterValue;
 
@@ -13,6 +14,7 @@ enum RegisterEnum {
    Reg_RBX,
    Reg_RSI,
    Reg_RDI,
+   // TODO: Add the rest of the x86-64 general purpose registers.
 
    Reg_Count,
 };
@@ -23,6 +25,7 @@ typedef struct Scope_s Scope;
 struct Scope_s {
    // Hash map from string variable to offset in the stack.
    int offsets[SCOPE_HASH_SIZE];
+   int stack_size;
 
    Scope* prev;
 };
@@ -34,12 +37,30 @@ typedef struct Codegen_s {
 
 static
 RegisterValue g_registers[] = {
-   {.reg = "rax"},
-   {.reg = "rcx"},
-   {.reg = "rdx"},
-   {.reg = "rbx"},
-   {.reg = "rsi"},
-   {.reg = "rdi"},
+   {
+      .reg    = "rax",
+      .reg_32 = "eax"
+   },
+   {
+      .reg    = "rcx",
+      .reg_32 = "ecx"
+   },
+   {
+      .reg    = "rdx",
+      .reg_32 = "rdx"
+   },
+   {
+      .reg    = "rbx",
+      .reg_32 = "ebx"
+   },
+   {
+      .reg    = "rsi",
+      .reg_32 = "esi"
+   },
+   {
+      .reg    = "rdi",
+      .reg_32 = "edi"
+   },
 };
 
 // Forward declaration for recursive calls.
@@ -112,6 +133,10 @@ pushScope(Codegen* c) {
 
 void
 popScope(Codegen* c) {
+   // TODO: Scope lifespan arena.
+
+   // NOTE: We are currently leaking this scope but it won't be a
+   // problem if we allocate it within a scope-based arena.
    c->scope = c->scope->prev;
 }
 
@@ -122,7 +147,7 @@ emitInstruction(char* asm_line, ...) {
    // vprintf(asm_line, args);
    char out_asm[LINE_MAX] = {0};
    vsnprintf(out_asm, LINE_MAX, asm_line, args);
-   // fwrite(out_asm, 1, strlen(out_asm), g_asm);
+   fwrite(out_asm, 1, strlen(out_asm), g_asm);
    printf("%s", out_asm);
    va_end(args);
 }
@@ -130,24 +155,24 @@ emitInstruction(char* asm_line, ...) {
 RegisterValue*
 emitExpression(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
-   if (node->val == Ast_MUL || node->val == Ast_DIV || node->val == Ast_ADD || node->val == Ast_SUB) {
+   if (node->type == Ast_MUL || node->type == Ast_DIV || node->type == Ast_ADD || node->type == Ast_SUB) {
       AstNode* child0 = node->child;
       AstNode* child1 = child0->sibling;
       RegisterValue* r0 = codegenEmit(c, child0);
       RegisterValue* r1 = codegenEmit(c, child1);
 
-      if (node->val == Ast_ADD) {
+      if (node->type == Ast_ADD) {
          emitInstruction("add %s, %s\n", r0->reg, r1->reg);
          result = r0;
          freeRegister(r1);
       }
-      else if (node->val == Ast_SUB) {
+      else if (node->type == Ast_SUB) {
          emitInstruction("sub %s, %s\n", r0->reg, r1->reg);
          result = r0;
          freeRegister(r1);
       }
-      else if (node->val == Ast_MUL || node->val == Ast_DIV) {
-         char* op = node->val == Ast_MUL ? "mul" : "div";
+      else if (node->type == Ast_MUL || node->type == Ast_DIV) {
+         char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
             emitInstruction("mov rax, %s\n", r0->reg);
          }
@@ -159,17 +184,22 @@ emitExpression(Codegen* c, AstNode* node) {
          freeRegister(r1);
       }
    }
-   else if (node->val == Ast_NUMBER) {
+   else if (node->type == Ast_NUMBER) {
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister(node);
       PrintString(asm_line, LINE_MAX, "mov %s, %d\n", r->reg, node->tok->value.integer);
       emitInstruction(asm_line);
       result = r;
    }
-   else if (node->val == Ast_ID) {
+   else if (node->type == Ast_ID) {
       int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
-      PrintString(asm_line, LINE_MAX, "mov eax, QWORD PTR[rbp - %x]\n", offset);
+      RegisterValue* r = allocateRegister(node);
+      // TODO: Could there be stale data in the 4 high bytes of the
+      // target register? Feels like writing to 32-bit registers will
+      // be error prone. Do we need an abstraction here?
+      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]\n", r->reg_32, offset);
+      result = r;
       emitInstruction(asm_line);
    }
    return result;
@@ -177,23 +207,30 @@ emitExpression(Codegen* c, AstNode* node) {
 
 void
 emitStatement(Codegen* c, AstNode* stmt) {
-   switch (stmt->val) {
+   switch (stmt->type) {
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
          if (stmt->child) {
-            emitExpression(c, stmt->child);
+            RegisterValue* r = emitExpression(c, stmt->child);
+            if (r != &g_registers[Reg_RAX]) {
+               emitInstruction("mov rax, %s\n", r->reg);
+            }
          }
       } break;
       case Ast_DECLARATION: {
          char* id_str = stmt->child->tok->value.string;
          u64 hash = hash_str(id_str, strlen(id_str));
          if (c->scope->offsets[hash % SCOPE_HASH_SIZE]) {
+            // TODO: Finish implementing hash map...
             Assert(!"Hash map collision handling not implemented.");
          }
          int value = stmt->child->sibling->tok->value.integer;
-         c->scope->offsets[hash % SCOPE_HASH_SIZE] = 4;
+         // TODO: A value different than four for different kinds of types.
+         int offset = c->scope->stack_size + 4;
+         c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
+         c->scope->stack_size += 4;
          char asm_line[LINE_MAX] = {0};
-         PrintString(asm_line, LINE_MAX, "mov QWORD PTR[rbp-%x], %x\n", 4, value);
+         PrintString(asm_line, LINE_MAX, "mov DWORD [rbp-0x%x], 0x%x\n", offset, value);
          emitInstruction(asm_line);
       } break;
       default: {
@@ -211,7 +248,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
    if (type && id && compound) {
       emitInstruction("%s:\n", id->tok->value.string);
 
-      Assert(compound->child->val == Ast_STACK_REQ);
+      Assert(compound->child->type == Ast_STACK_REQ);
       AstNode* stack_req = compound->child;
       // Emit first pass of stack req.
       AstNode* stmt = stack_req->sibling;
@@ -232,7 +269,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
 RegisterValue*
 codegenEmit(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
-   if (node->val == Ast_FUNCDEF) {
+   if (node->type == Ast_FUNCDEF) {
       emitFunctionDefinition(c, node);
    }
    return result;
@@ -242,6 +279,7 @@ void
 codegenFinish(void) {
    //char* end = "call ExitProcess\n";
    char* end =
+      // TODO: What is the linux syscall to end the process?
       //"call exit\n"
       "ret\n";
    fwrite(end, 1, strlen(end), g_asm);

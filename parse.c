@@ -4,22 +4,11 @@ typedef struct Parser_s {
    Token* token;  // The next token to parse.
    Arena* arena;
    AstNode* tree;
-   i64 stack_req;  // How many bytes need to be allocated on the stack for our current block.
 } Parser;
 
 
 // A function that takes a Parser and returns an AstNode*
 typedef AstNode* ParseFunction(Parser*);
-
-void
-resetStack(Parser* p) {
-   p->stack_req = 0;
-}
-
-void
-needStack(Parser* p, i64 need) {
-   p->stack_req += need;
-}
 
 AstNode*
 newNode(Arena* a) {
@@ -104,12 +93,12 @@ primaryExpr(Parser* p) {
    if (!tok) { return false; }
    if (tok->type == TokenType_NUMBER) {
       t = newNode(p->arena);
-      t->val = Ast_NUMBER;
+      t->type = Ast_NUMBER;
       t->tok = tok;
    }
    else if (tok->type == TokenType_ID) {
       t = newNode(p->arena);
-      t->val = Ast_ID;
+      t->type = Ast_ID;
       t->tok = tok;
    }
    // TODO: other constants, string literals
@@ -351,10 +340,6 @@ parseDeclaration(Parser* p) {
          parseError("Expected semicolon at the end of declaration.");
       }
       result = makeAstNode(p->arena, Ast_DECLARATION, identifier, initializer);
-
-      i64 size = 4; // TODO: Support stack variables that are of size different than 4 bytes.
-      // Declaration exists. Tell the parser we need some stack memory.
-      needStack(p, size);
    }
    return result;
 }
@@ -388,7 +373,6 @@ parseStatement(Parser* p) {
 
 AstNode*
 parseCompoundStatement(Parser* p) {
-   resetStack(p);
    AstNode* first_stmt = NULL;
    if (nextCharPunctuator(p, '{')) {
       AstNode** cur = &first_stmt;
@@ -410,10 +394,7 @@ parseCompoundStatement(Parser* p) {
       parseError("Expected '{'");
    }
 
-   printf("After compound statement. We have determined that we need %ld bytes of memory.\n", p->stack_req);
-
    AstNode* stack_req = makeAstNode(p->arena, Ast_STACK_REQ, NULL, NULL);
-   stack_req->stack_req = p->stack_req;
 
    AstNode* compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, stack_req, first_stmt);
 
