@@ -17,7 +17,6 @@ typedef enum AstType_n {
    Ast_LOGICAL_AND,
    Ast_LOGICAL_OR,
    Ast_COMPOUND_STMT,
-   Ast_STACK_REQ,
 } AstType;
 
 typedef struct AstNode_s AstNode;
@@ -48,8 +47,10 @@ makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
    n->type = type;
    n->child = left;
    if (left) {
-      Assert(left->sibling == NULL);
-      left->sibling = right;
+      if (right) {
+         Assert(left->sibling == NULL);
+         left->sibling = right;
+      }
    }
 
    return n;

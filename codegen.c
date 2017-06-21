@@ -279,17 +279,14 @@ emitStatement(Codegen* c, AstNode* stmt) {
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node) {
-   // Type
    AstNode* type = node->child;
    AstNode* id = type->sibling;
    AstNode* compound = id->sibling;
    if (type && id && compound) {
       emitInstruction("%s:\n", id->tok->value.string);
 
-      Assert(compound->child->type == Ast_STACK_REQ);
-      AstNode* stack_req = compound->child;
       // Emit first pass of stack req.
-      AstNode* stmt = stack_req->sibling;
+      AstNode* stmt = compound->child;
 
       // Push
       pushScope(c);

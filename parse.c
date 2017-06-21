@@ -394,9 +394,7 @@ parseCompoundStatement(Parser* p) {
       parseError("Expected '{'");
    }
 
-   AstNode* stack_req = makeAstNode(p->arena, Ast_STACK_REQ, NULL, NULL);
-
-   AstNode* compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, stack_req, first_stmt);
+   AstNode* compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, first_stmt, NULL);
 
    return compound_stmt;
 }
