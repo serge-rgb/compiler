@@ -9,12 +9,19 @@ typedef struct RegisterValue_s {
 // Must be the same as g_registers.
 enum RegisterEnum {
    Reg_RAX,
+   Reg_RBX,
    Reg_RCX,
    Reg_RDX,
-   Reg_RBX,
    Reg_RSI,
    Reg_RDI,
-   // TODO: Add the rest of the x86-64 general purpose registers.
+   Reg_R8,
+   Reg_R9,
+   Reg_R10,
+   Reg_R11,
+   Reg_R12,
+   Reg_R13,
+   Reg_R14,
+   Reg_R15,
 
    Reg_Count,
 };
@@ -39,28 +46,62 @@ static
 RegisterValue g_registers[] = {
    {
       .reg    = "rax",
-      .reg_32 = "eax"
-   },
-   {
-      .reg    = "rcx",
-      .reg_32 = "ecx"
-   },
-   {
-      .reg    = "rdx",
-      .reg_32 = "rdx"
+      .reg_32 = "eax",
    },
    {
       .reg    = "rbx",
-      .reg_32 = "ebx"
+      .reg_32 = "ebx",
    },
    {
+      .reg    = "rcx",
+      .reg_32 = "ecx",
+   },
+   {
+      .reg    = "rdx",
+      .reg_32 = "rdx",
+   },
+
+   {
       .reg    = "rsi",
-      .reg_32 = "esi"
+      .reg_32 = "esi",
    },
    {
       .reg    = "rdi",
-      .reg_32 = "edi"
+      .reg_32 = "edi",
    },
+   {
+      .reg    = "r8",
+      .reg_32 = "r8d",
+   },
+   {
+      .reg    = "r9",
+      .reg_32 = "r9d",
+   },
+   {
+      .reg    = "r10",
+      .reg_32 = "r10d",
+   },
+   {
+      .reg    = "r11",
+      .reg_32 = "r11d",
+   },
+   {
+      .reg    = "r12",
+      .reg_32 = "r12d",
+   },
+   {
+      .reg    = "r13",
+      .reg_32 = "r13d",
+   },
+   {
+      .reg    = "r14",
+      .reg_32 = "r14d",
+   },
+   {
+      .reg    = "r15",
+      .reg_32 = "r15d",
+   },
+
 };
 
 // Forward declaration for recursive calls.
@@ -195,12 +236,9 @@ emitExpression(Codegen* c, AstNode* node) {
       int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister(node);
-      // TODO: Could there be stale data in the 4 high bytes of the
-      // target register? Feels like writing to 32-bit registers will
-      // be error prone. Do we need an abstraction here?
       PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]\n", r->reg_32, offset);
-      result = r;
       emitInstruction(asm_line);
+      result = r;
    }
    return result;
 }
