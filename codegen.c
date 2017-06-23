@@ -113,7 +113,6 @@ codegenError(char* msg) {
    exit(1);
 }
 
-
 int
 offsetForName(Codegen* c, char* name) {
    u64 hash = hash_str(name, strlen(name));
@@ -159,26 +158,16 @@ codegenInit(void) {
       "section .text\n"
       "global _start\n"
       "_start:\n"
-      "push rbp\n"
+      //"int 3\n"
       "mov rbp, rsp\n"
-      ;
+      "push rbp\n"
+      "call main\n"
+      // Linux exit syscall.
+      "mov ebx, eax\n"
+      "mov eax, 0x1\n"
+      "int 0x80\n";
+
    fwrite(prelude, 1, strlen(prelude), g_asm);
-}
-
-void
-pushScope(Codegen* c) {
-   Scope* prev_scope = c->scope;
-   c->scope = allocate(c->arena, sizeof(*c->scope));
-   c->scope->prev = prev_scope;
-}
-
-void
-popScope(Codegen* c) {
-   // TODO: Scope lifespan arena.
-
-   // NOTE: We are currently leaking this scope but it won't be a
-   // problem if we allocate it within a scope-based arena.
-   c->scope = c->scope->prev;
 }
 
 void
@@ -191,6 +180,23 @@ emitInstruction(char* asm_line, ...) {
    fwrite(out_asm, 1, strlen(out_asm), g_asm);
    printf("%s", out_asm);
    va_end(args);
+}
+
+void
+pushScope(Codegen* c) {
+   Scope* prev_scope = c->scope;
+   c->scope = allocate(c->arena, sizeof(*c->scope));
+   c->scope->prev = prev_scope;
+   emitInstruction("mov rdx, QWORD [rbp-4]\n");
+}
+
+void
+popScope(Codegen* c) {
+   // TODO: Scope lifespan arena.
+
+   // NOTE: We are currently leaking this scope but it won't be a
+   // problem if we allocate it within a scope-based arena.
+   c->scope = c->scope->prev;
 }
 
 RegisterValue*
@@ -284,6 +290,9 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
    AstNode* compound = id->sibling;
    if (type && id && compound) {
       emitInstruction("%s:\n", id->tok->value.string);
+      emitInstruction("push rbp\n");
+      emitInstruction("mov rbp, rsp\n");
+      // TODO: Insert dummy instruction, later substitute with rsp subtraction.
 
       // Emit first pass of stack req.
       AstNode* stmt = compound->child;
@@ -298,6 +307,10 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       }
 
       popScope(c);
+      emitInstruction("pop rbp\n");
+      emitInstruction("ret\n");
+   } else {
+      codegenError("Funcdef: Invalide node in the tree.");
    }
 }
 
@@ -312,12 +325,9 @@ codegenEmit(Codegen* c, AstNode* node) {
 
 void
 codegenFinish(void) {
-   //char* end = "call ExitProcess\n";
+   // TODO: Return from main.
    char* end =
-      // Linux exit syscall.
-      "mov eax, 1\n"
-      "mov ebx, 0\n"
-      "int 0x80\n"
+      "int 3\n"
       "ret\n";
    fwrite(end, 1, strlen(end), g_asm);
    fclose(g_asm);
