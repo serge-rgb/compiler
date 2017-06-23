@@ -314,8 +314,10 @@ void
 codegenFinish(void) {
    //char* end = "call ExitProcess\n";
    char* end =
-      // TODO: What is the linux syscall to end the process?
-      //"call exit\n"
+      // Linux exit syscall.
+      "mov eax, 1\n"
+      "mov ebx, 0\n"
+      "int 0x80\n"
       "ret\n";
    fwrite(end, 1, strlen(end), g_asm);
    fclose(g_asm);

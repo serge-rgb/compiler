@@ -21,17 +21,10 @@ typedef enum AstType_n {
 
 typedef struct AstNode_s AstNode;
 struct AstNode_s {
-   AstType type;
-   Token* tok;
-   union {
-      struct {
-         AstNode* child;
-         AstNode* sibling;
-      };
-      struct {
-         int stack_req;
-      };
-   };
+   AstType  type;
+   Token*   tok;
+   AstNode* child;
+   AstNode* sibling;
 };
 
 typedef struct AstMul_s {
