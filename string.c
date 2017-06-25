@@ -76,6 +76,7 @@ getStringFromBuffer(Buffer* buffer) {
       }
    } else {
       // TODO: Just allocate and return.
+      Assert(!"Don't know how to handle strings bigger than STRING_CACHE_MAX_SIZE");
    }
    return str;
 }

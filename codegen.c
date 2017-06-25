@@ -37,9 +37,14 @@ struct Scope_s {
    Scope* prev;
 };
 
+#define CODEGEN_QUEUE_SIZE 1024
+
 typedef struct Codegen_s {
    Arena* arena;
    Scope* scope;
+   char* waiting;
+   char* queue[CODEGEN_QUEUE_SIZE];
+   int n_queue; // Size of the queue.
 } Codegen;
 
 static
@@ -171,23 +176,73 @@ codegenInit(void) {
 }
 
 void
-emitInstruction(char* asm_line, ...) {
+emitInstruction(Codegen* c, char* asm_line, ...) {
    va_list args;
    va_start(args, asm_line);
    // vprintf(asm_line, args);
-   char out_asm[LINE_MAX] = {0};
-   vsnprintf(out_asm, LINE_MAX, asm_line, args);
-   fwrite(out_asm, 1, strlen(out_asm), g_asm);
-   printf("%s", out_asm);
-   va_end(args);
+   char* out_asm = NULL;
+   char stack_asm[LINE_MAX] = {0};
+   if (c->waiting) {
+      out_asm = allocate(c->arena, LINE_MAX);
+   }
+   else {
+      out_asm = stack_asm;
+   }
+
+   int written = vsnprintf(out_asm, LINE_MAX, asm_line, args);
+   if (written >= LINE_MAX - 2) {  // Counting two extra character for the new line and 0 terminator.
+      codegenError("LINE_MAX is not sufficient for instruction length.");
+   }
+   if (out_asm[written-1] != '\n') {
+      *(out_asm + written) = '\n';
+   }
+   // If we are waiting on an instruction being modified, queue up.
+   if (c->waiting) {
+      c->queue[c->n_queue++] = out_asm;
+   }
+   else {
+      fwrite(out_asm, 1, strlen(out_asm), g_asm);
+      printf("%s", out_asm);
+      va_end(args);
+   }
 }
+
+typedef struct {
+
+} QueuedInstruction;
+
+void
+queueInstruction(Codegen* c, char* waiting) {
+   c->waiting = waiting;
+}
+
+void
+finishInstruction(Codegen* c, int val) {
+   // Modify waiting. instruction.
+   // Emit queued instructions.
+
+   char* waiting = c->waiting;
+
+   char newasm[LINE_MAX] = {0};
+
+   snprintf(newasm, LINE_MAX, "%s %d", waiting, val);
+
+   c->waiting = NULL;
+
+   emitInstruction(c, newasm);
+   for (int i = 0; i < c->n_queue; ++i) {
+      emitInstruction(c, c->queue[i]);
+   }
+   c->n_queue = 0;
+}
+
 
 void
 pushScope(Codegen* c) {
    Scope* prev_scope = c->scope;
    c->scope = allocate(c->arena, sizeof(*c->scope));
    c->scope->prev = prev_scope;
-   emitInstruction("mov rdx, QWORD [rbp-4]\n");
+   emitInstruction(c, "mov rdx, QWORD [rbp-4]");
 }
 
 void
@@ -209,24 +264,24 @@ emitExpression(Codegen* c, AstNode* node) {
       RegisterValue* r1 = codegenEmit(c, child1);
 
       if (node->type == Ast_ADD) {
-         emitInstruction("add %s, %s\n", r0->reg, r1->reg);
+         emitInstruction(c, "add %s, %s", r0->reg, r1->reg);
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_SUB) {
-         emitInstruction("sub %s, %s\n", r0->reg, r1->reg);
+         emitInstruction(c, "sub %s, %s", r0->reg, r1->reg);
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_MUL || node->type == Ast_DIV) {
          char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
-            emitInstruction("mov rax, %s\n", r0->reg);
+            emitInstruction(c, "mov rax, %s", r0->reg);
          }
 
-         emitInstruction("%s %s\n", op, r1->reg);
+         emitInstruction(c, "%s %s", op, r1->reg);
          result = allocateRegister(node);
-         emitInstruction("mov %s, rax\n", result->reg);
+         emitInstruction(c, "mov %s, rax", result->reg);
          freeRegister(r0);
          freeRegister(r1);
       }
@@ -234,16 +289,16 @@ emitExpression(Codegen* c, AstNode* node) {
    else if (node->type == Ast_NUMBER) {
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister(node);
-      PrintString(asm_line, LINE_MAX, "mov %s, %d\n", r->reg, node->tok->value.integer);
-      emitInstruction(asm_line);
+      PrintString(asm_line, LINE_MAX, "mov %s, %d", r->reg, node->tok->value.integer);
+      emitInstruction(c, asm_line);
       result = r;
    }
    else if (node->type == Ast_ID) {
       int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister(node);
-      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]\n", r->reg_32, offset);
-      emitInstruction(asm_line);
+      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", r->reg_32, offset);
+      emitInstruction(c, asm_line);
       result = r;
    }
    return result;
@@ -257,7 +312,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
          if (stmt->child) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
-               emitInstruction("mov rax, %s\n", r->reg);
+               emitInstruction(c, "mov rax, %s", r->reg);
             }
          }
       } break;
@@ -274,8 +329,8 @@ emitStatement(Codegen* c, AstNode* stmt) {
          c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
          c->scope->stack_size += 4;
          char asm_line[LINE_MAX] = {0};
-         PrintString(asm_line, LINE_MAX, "mov DWORD [rbp-0x%x], 0x%x\n", offset, value);
-         emitInstruction(asm_line);
+         PrintString(asm_line, LINE_MAX, "mov DWORD [rbp-0x%x], 0x%x", offset, value);
+         emitInstruction(c, asm_line);
       } break;
       default: {
          // Not handled
@@ -288,11 +343,12 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
    AstNode* type = node->child;
    AstNode* id = type->sibling;
    AstNode* compound = id->sibling;
+
    if (type && id && compound) {
-      emitInstruction("%s:\n", id->tok->value.string);
-      emitInstruction("push rbp\n");
-      emitInstruction("mov rbp, rsp\n");
-      // TODO: Insert dummy instruction, later substitute with rsp subtraction.
+      emitInstruction(c, "%s:", id->tok->value.string);
+      emitInstruction(c, "push rbp");
+      emitInstruction(c, "mov rbp, rsp");
+      queueInstruction(c, "sub rsp, ");
 
       // Emit first pass of stack req.
       AstNode* stmt = compound->child;
@@ -306,9 +362,15 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
          stmt = stmt->sibling;
       }
 
+      int stack = c->scope->stack_size;
       popScope(c);
-      emitInstruction("pop rbp\n");
-      emitInstruction("ret\n");
+
+      finishInstruction(c, stack);
+
+
+      emitInstruction(c, "add rsp, %d", stack);
+      emitInstruction(c, "pop rbp");
+      emitInstruction(c, "ret");
    } else {
       codegenError("Funcdef: Invalide node in the tree.");
    }
@@ -325,7 +387,6 @@ codegenEmit(Codegen* c, AstNode* node) {
 
 void
 codegenFinish(void) {
-   // TODO: Return from main.
    char* end =
       "int 3\n"
       "ret\n";

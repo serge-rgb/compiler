@@ -139,9 +139,7 @@ castExpr(Parser* p) {
 
 AstNode*
 multiplicativeExpr(Parser* p) {
-   // Token* tok = p->token;
    AstNode* left = castExpr(p);
-   //AstNode* t1 = multiplicativeExprPrime(p);
    if (left) {
       while (peekCharPunctuator(p, '*') || peekCharPunctuator(p, '/')) {
          // Pop the *
@@ -155,14 +153,12 @@ multiplicativeExpr(Parser* p) {
             parseError("Expected expression after '*'");
          }
       }
-
    }
    return left;
 }
 
 AstNode*
 additiveExpr(Parser* p) {
-   // Token *tok = p->token;
    AstNode* left = multiplicativeExpr(p);
    if (left) {
       while (peekCharPunctuator(p, '+') || peekCharPunctuator(p, '-')) {
