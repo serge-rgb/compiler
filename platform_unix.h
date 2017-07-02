@@ -3,7 +3,9 @@
 
 int raise(int sig);
 
+#if defined(__linux__)
 #define SIGINT 5
+#endif
 
 extern int    snprintf( char * buffer, unsigned long bufsz, const char * format, ... );
 extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format, va_list vlist );

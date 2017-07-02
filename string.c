@@ -21,7 +21,7 @@ stringInit(Arena* a) {
 }
 
 u64
-hash_str(char* str, size_t size) {
+hashStr(char* str, size_t size) {
    u64 hash = 0;
    u64 g = 0;
    for (size_t i = 0; i < size; ++i) {
@@ -57,7 +57,7 @@ getStringFromBuffer(Buffer* buffer) {
    if (size < STRING_CACHE_MAX_SIZE) {
       char temp_str[STRING_CACHE_MAX_SIZE] = {0};
       memcpy(temp_str, buffer->current, size);
-      u64 hash = hash_str(temp_str, size) % STRING_HASH_BUCKET_SIZE;
+      u64 hash = hashStr(temp_str, size) % STRING_HASH_BUCKET_SIZE;
       StringList* l = g_string_map[hash];
       while (l) {
          if (stringsAreEqual(l->string, temp_str)) {

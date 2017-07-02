@@ -65,7 +65,6 @@ RegisterValue g_registers[] = {
       .reg    = "rdx",
       .reg_32 = "rdx",
    },
-
    {
       .reg    = "rsi",
       .reg_32 = "esi",
@@ -120,7 +119,7 @@ codegenError(char* msg) {
 
 int
 offsetForName(Codegen* c, char* name) {
-   u64 hash = hash_str(name, strlen(name));
+   u64 hash = hashStr(name, strlen(name));
    int offset = c->scope->offsets[hash % SCOPE_HASH_SIZE];
    if (!offset) {
       char buf[1024] = {0};
@@ -161,8 +160,11 @@ codegenInit(void) {
       //"extern ExitProcess\n"
       "extern exit\n"
       "section .text\n"
-      "global _start\n"
-      "_start:\n"
+      // NOTE: Linux expects _start
+      // "global _start\n"
+      // "_start:\n"
+      "global start\n"
+      "start:\n"
       //"int 3\n"
       "mov rbp, rsp\n"
       "push rbp\n"
@@ -206,10 +208,6 @@ emitInstruction(Codegen* c, char* asm_line, ...) {
       va_end(args);
    }
 }
-
-typedef struct {
-
-} QueuedInstruction;
 
 void
 queueInstruction(Codegen* c, char* waiting) {
@@ -318,7 +316,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
       } break;
       case Ast_DECLARATION: {
          char* id_str = stmt->child->tok->value.string;
-         u64 hash = hash_str(id_str, strlen(id_str));
+         u64 hash = hashStr(id_str, strlen(id_str));
          if (c->scope->offsets[hash % SCOPE_HASH_SIZE]) {
             // TODO: Finish implementing hash map...
             Assert(!"Hash map collision handling not implemented.");
@@ -371,7 +369,8 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       emitInstruction(c, "add rsp, %d", stack);
       emitInstruction(c, "pop rbp");
       emitInstruction(c, "ret");
-   } else {
+   }
+   else {
       codegenError("Funcdef: Invalide node in the tree.");
    }
 }
