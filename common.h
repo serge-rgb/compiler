@@ -28,6 +28,8 @@ typedef int64_t i64;
 
 #define ArrayCount(arr) (sizeof((arr)) / sizeof(*(arr)))
 
+#define BreakHere PlatformBreakHere
+
 typedef enum ErrorCode_s {
     SUCCESS = 0,
 

@@ -158,21 +158,24 @@ codegenInit(void) {
    g_asm = fopen("out.asm", "w");
    char* prelude =
       //"extern ExitProcess\n"
-      "extern exit\n"
+      "extern _exit\n"
       "section .text\n"
-      // NOTE: Linux expects _start
-      // "global _start\n"
-      // "_start:\n"
-      "global start\n"
-      "start:\n"
-      //"int 3\n"
+      "global _start\n"
+      "_start:\n"
       "mov rbp, rsp\n"
       "push rbp\n"
       "call main\n"
       // Linux exit syscall.
+#if defined(__linux__)
       "mov ebx, eax\n"
       "mov eax, 0x1\n"
-      "int 0x80\n";
+      "int 0x80\n"
+#else
+      // libc cleanup
+      "mov edi, eax\n"
+      "call _exit\n"
+#endif
+      ;
 
    fwrite(prelude, 1, strlen(prelude), g_asm);
 }
@@ -196,6 +199,7 @@ emitInstruction(Codegen* c, char* asm_line, ...) {
       codegenError("LINE_MAX is not sufficient for instruction length.");
    }
    if (out_asm[written-1] != '\n') {
+      //out_asm[written] = '\n';
       *(out_asm + written) = '\n';
    }
    // If we are waiting on an instruction being modified, queue up.
@@ -262,6 +266,9 @@ emitExpression(Codegen* c, AstNode* node) {
       RegisterValue* r1 = codegenEmit(c, child1);
 
       if (node->type == Ast_ADD) {
+         if (!r0 || !r1) {
+            BreakHere;
+         }
          emitInstruction(c, "add %s, %s", r0->reg, r1->reg);
          result = r0;
          freeRegister(r1);
@@ -343,6 +350,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
    AstNode* compound = id->sibling;
 
    if (type && id && compound) {
+      emitInstruction(c, "global %s", id->tok->value.string);
       emitInstruction(c, "%s:", id->tok->value.string);
       emitInstruction(c, "push rbp");
       emitInstruction(c, "mov rbp, rsp");
@@ -380,6 +388,16 @@ codegenEmit(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
    if (node->type == Ast_FUNCDEF) {
       emitFunctionDefinition(c, node);
+   }
+   else if (node->type == Ast_NUMBER) {
+      // TODO: Support immediate values.
+      // Allocate a register with this number.
+      result = allocateRegister(node);
+
+      emitInstruction(c, "mov %s, %d", result->reg_32, node->tok->value.integer);
+   }
+   else {
+      Assert(!"Codegen emit for this kind of node is not implemented.");
    }
    return result;
 }

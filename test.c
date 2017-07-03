@@ -4,5 +4,5 @@ main() {
    int another_var = 1;
    int yup = 2;
 
-   return my_pretty_variable;
+   return 2 + 2;
 }
