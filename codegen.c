@@ -1,9 +1,30 @@
 static FILE* g_asm;
 
+typedef enum RegisterValueType_n {
+   RegisterValueType_REGISTER,
+   RegisterValueType_IMMEDIATE,
+   RegisterValueType_STACK,
+} RegisterValueType;
+
 typedef struct RegisterValue_s {
-   char*    reg;
-   char*    reg_32;
-   AstNode* bound;  // Non-NULL when an intermediate value is bound to this register.
+   RegisterValueType type;
+   union {
+      // REGISTER
+      struct {
+         char* reg;
+         char* reg_32;
+         b8    bound;
+      };
+      // IMMEDIATE
+      struct {
+         u64 immediate_value;  // Cast to appropriate value based on token type.
+      };
+      // STACK
+      struct {
+         u64 offset;
+      };
+   };
+
 } RegisterValue;
 
 // Must be the same as g_registers.
@@ -42,9 +63,9 @@ struct Scope_s {
 typedef struct Codegen_s {
    Arena* arena;
    Scope* scope;
-   char* waiting;
-   char* queue[CODEGEN_QUEUE_SIZE];
-   int n_queue; // Size of the queue.
+   char*  waiting;
+   char*  queue[CODEGEN_QUEUE_SIZE];
+   int    n_queue;              // Size of the queue.
 } Codegen;
 
 static
@@ -111,6 +132,40 @@ RegisterValue g_registers[] = {
 // Forward declaration for recursive calls.
 RegisterValue* codegenEmit(Codegen* c, AstNode* node);
 
+char*
+registerStringWithBitness(RegisterValue* r, int bitness) {
+   char *res = NULL;
+   switch(r->type) {
+      case RegisterValueType_REGISTER: {
+         if (bitness == 64) {
+            res = r->reg;
+         }
+         else if (bitness == 32) {
+            res = r->reg_32;
+         }
+      } break;
+      case RegisterValueType_IMMEDIATE: {
+         // TODO: Allocate to current scope.
+         res = calloc(1, 128);
+         snprintf(res, 128, "%d", (int)r->immediate_value);
+      } break;
+      case RegisterValueType_STACK: {
+         Assert(!"Not implemented yet.");
+      } break;
+   }
+   return res;
+}
+
+char *
+registerString(RegisterValue* r) {
+   return registerStringWithBitness(r, 64);
+}
+
+char *
+registerString32(RegisterValue* r) {
+   return registerStringWithBitness(r, 32);
+}
+
 void
 codegenError(char* msg) {
    fprintf(stderr, "Codegen error: %s\n", msg);
@@ -132,13 +187,13 @@ offsetForName(Codegen* c, char* name) {
 // Keep track of register values per identifier.
 
 RegisterValue*
-allocateRegister(AstNode* n) {
+allocateRegister(void) {
    RegisterValue* result = NULL;
 
    for (size_t i = Reg_RCX; i < Reg_Count; ++i) {
       RegisterValue* r = &g_registers[i];
       if (!r->bound) {
-         r->bound = n;
+         r->bound = true;
          result = r;
          break;
       }
@@ -150,7 +205,7 @@ allocateRegister(AstNode* n) {
 
 void
 freeRegister(RegisterValue* reg) {
-   reg->bound = NULL;
+   reg->bound = false;
 }
 
 void
@@ -214,6 +269,15 @@ emitInstruction(Codegen* c, char* asm_line, ...) {
 }
 
 void
+needsRegister(Codegen* c, RegisterValue** r) {
+   RegisterValue* old_r = *r;
+   if (old_r->type != RegisterValueType_REGISTER) {
+      *r = allocateRegister();
+      emitInstruction(c, "mov %s, %s", registerString(*r), registerString(old_r));
+   }
+}
+
+void
 queueInstruction(Codegen* c, char* waiting) {
    c->waiting = waiting;
 }
@@ -266,43 +330,42 @@ emitExpression(Codegen* c, AstNode* node) {
       RegisterValue* r1 = codegenEmit(c, child1);
 
       if (node->type == Ast_ADD) {
-         if (!r0 || !r1) {
-            BreakHere;
-         }
-         emitInstruction(c, "add %s, %s", r0->reg, r1->reg);
+         needsRegister(c, &r0);
+         emitInstruction(c, "add %s, %s", registerString(r0), registerString(r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_SUB) {
-         emitInstruction(c, "sub %s, %s", r0->reg, r1->reg);
+         needsRegister(c, &r0);
+         emitInstruction(c, "sub %s, %s", registerString(r0), registerString(r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_MUL || node->type == Ast_DIV) {
          char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
-            emitInstruction(c, "mov rax, %s", r0->reg);
+            emitInstruction(c, "mov rax, %s", registerString(r0));
          }
 
-         emitInstruction(c, "%s %s", op, r1->reg);
-         result = allocateRegister(node);
-         emitInstruction(c, "mov %s, rax", result->reg);
+         emitInstruction(c, "%s %s", op, registerString(r1));
+         result = allocateRegister();
+         emitInstruction(c, "mov %s, rax", registerString(result));
          freeRegister(r0);
          freeRegister(r1);
       }
    }
    else if (node->type == Ast_NUMBER) {
       char asm_line[LINE_MAX] = {0};
-      RegisterValue* r = allocateRegister(node);
-      PrintString(asm_line, LINE_MAX, "mov %s, %d", r->reg, node->tok->value.integer);
+      RegisterValue* r = allocateRegister();
+      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString(r), node->tok->value.integer);
       emitInstruction(c, asm_line);
       result = r;
    }
    else if (node->type == Ast_ID) {
       int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
-      RegisterValue* r = allocateRegister(node);
-      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", r->reg_32, offset);
+      RegisterValue* r = allocateRegister();
+      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(r), offset);
       emitInstruction(c, asm_line);
       result = r;
    }
@@ -317,7 +380,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
          if (stmt->child) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
-               emitInstruction(c, "mov rax, %s", r->reg);
+               emitInstruction(c, "mov rax, %s", registerString(r));
             }
          }
       } break;
@@ -390,11 +453,14 @@ codegenEmit(Codegen* c, AstNode* node) {
       emitFunctionDefinition(c, node);
    }
    else if (node->type == Ast_NUMBER) {
-      // TODO: Support immediate values.
-      // Allocate a register with this number.
-      result = allocateRegister(node);
 
-      emitInstruction(c, "mov %s, %d", result->reg_32, node->tok->value.integer);
+      // Allocate a register with this number.
+      // result = allocateRegister();
+      // emitInstruction(c, "mov %s, %d", registerString32(result), node->tok->value.integer);
+      // TODO: Scope allocation.
+      result = allocate(c->arena, sizeof(RegisterValue));
+      result->type = RegisterValueType_IMMEDIATE;
+      result->immediate_value = node->tok->value.integer;
    }
    else {
       Assert(!"Codegen emit for this kind of node is not implemented.");
