@@ -205,7 +205,9 @@ allocateRegister(void) {
 
 void
 freeRegister(RegisterValue* reg) {
-   reg->bound = false;
+   if (reg->type == RegisterValueType_REGISTER){
+      reg->bound = false;
+   }
 }
 
 void
@@ -435,7 +437,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       popScope(c);
 
       finishInstruction(c, stack);
-
 
       emitInstruction(c, "add rsp, %d", stack);
       emitInstruction(c, "pop rbp");
