@@ -150,7 +150,12 @@ registerStringWithBitness(RegisterValue* r, int bitness) {
          snprintf(res, 128, "%d", (int)r->immediate_value);
       } break;
       case RegisterValueType_STACK: {
-         Assert(!"Not implemented yet.");
+         // TODO: Allocate to current scope.
+         res = calloc(1, 128);
+         if (bitness == 32)
+            snprintf(res, 128, "DWORD [ rbp - 0x%x ]", (int)r->offset);
+         else if (bitness == 64)
+            snprintf(res, 128, "QWORD [ rbp - 0x%x ]", (int)r->offset);
       } break;
    }
    return res;
@@ -184,6 +189,19 @@ offsetForName(Codegen* c, char* name) {
    return offset;
 }
 
+b32
+fitsInRegister(AstNode* node) {
+   b32 result = false;
+   if (node->type == Ast_NUMBER ||
+       node->type == Ast_ID) {
+      result = true;
+   }
+   else {
+      codegenError("I don't know whether this node fits inside a register.");
+   }
+   return result;
+}
+
 // Keep track of register values per identifier.
 
 RegisterValue*
@@ -205,7 +223,7 @@ allocateRegister(void) {
 
 void
 freeRegister(RegisterValue* reg) {
-   if (reg->type == RegisterValueType_REGISTER){
+   if (reg->type == RegisterValueType_REGISTER) {
       reg->bound = false;
    }
 }
@@ -275,7 +293,7 @@ needsRegister(Codegen* c, RegisterValue** r) {
    RegisterValue* old_r = *r;
    if (old_r->type != RegisterValueType_REGISTER) {
       *r = allocateRegister();
-      emitInstruction(c, "mov %s, %s", registerString(*r), registerString(old_r));
+      emitInstruction(c, "mov %s, %s", registerString32(*r), registerString32(old_r));
    }
 }
 
@@ -333,33 +351,35 @@ emitExpression(Codegen* c, AstNode* node) {
 
       if (node->type == Ast_ADD) {
          needsRegister(c, &r0);
-         emitInstruction(c, "add %s, %s", registerString(r0), registerString(r1));
+         emitInstruction(c, "add %s, %s", registerString32(r0), registerString32(r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_SUB) {
          needsRegister(c, &r0);
-         emitInstruction(c, "sub %s, %s", registerString(r0), registerString(r1));
+         emitInstruction(c, "sub %s, %s", registerString32(r0), registerString32(r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_MUL || node->type == Ast_DIV) {
          char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
-            emitInstruction(c, "mov rax, %s", registerString(r0));
+            emitInstruction(c, "mov rax, %s", registerString32(r0));
          }
 
-         emitInstruction(c, "%s %s", op, registerString(r1));
+         emitInstruction(c, "%s %s", op, registerString32(r1));
          result = allocateRegister();
-         emitInstruction(c, "mov %s, rax", registerString(result));
+         emitInstruction(c, "mov %s, rax", registerString32(result));
          freeRegister(r0);
          freeRegister(r1);
       }
    }
-   else if (node->type == Ast_NUMBER) {
+   else if (node->type == Ast_NUMBER ||
+            node->type == Ast_ID) {
+      codegenEmit(c, node);
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister();
-      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString(r), node->tok->value.integer);
+      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(r), node->tok->value.integer);
       emitInstruction(c, asm_line);
       result = r;
    }
@@ -462,6 +482,18 @@ codegenEmit(Codegen* c, AstNode* node) {
       result = allocate(c->arena, sizeof(RegisterValue));
       result->type = RegisterValueType_IMMEDIATE;
       result->immediate_value = node->tok->value.integer;
+   }
+   else if (node->type == Ast_ID) {
+      if (fitsInRegister(node)) {
+         result = allocate(c->arena, sizeof(RegisterValue));
+
+         result->type = RegisterValueType_STACK;
+         result->offset = offsetForName(c, node->tok->value.string);
+      }
+      else {
+         result = allocateRegister();
+         Assert(!"ID codegen not implemented.");
+      }
    }
    else {
       Assert(!"Codegen emit for this kind of node is not implemented.");
