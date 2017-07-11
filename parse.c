@@ -357,12 +357,29 @@ parseJumpStatement(Parser* p) {
 AstNode*
 parseStatement(Parser* p) {
    AstNode* stmt = NULL;
-
+   // TODO: Parse the different kinds of statements in the correct order.
+   // jump-statement
    if (((stmt = parseOrBacktrack(parseExpression, p)) && nextCharPunctuator(p, ';')) ||
        (stmt = parseOrBacktrack(parseJumpStatement, p)) ) {
    }
+   else {
+      Token* tok = nextToken(p);
+      //   selection-statement
+      if (tok->type == TokenType_KEYWORD) {
+         int v = tok->value.integer;
+         if (v == Keyword_if) {
+            if (nextCharPunctuator(p, '(')) {
+               // TODO: There should be checking of `if` conditions.
+               // For instance, emit a warning when using = instead of ==.
+               parseExpression(p);
+               if (!nextCharPunctuator(p, ')')) {
+                  parseError("Malformed if statement");
+               }
+            }
+         }
+      }
+   }
    // TODO:
-   //   selection-statement
    //   iteration-statement
    return stmt;
 }
