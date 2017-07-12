@@ -62,6 +62,7 @@ getStringFromBuffer(Buffer* buffer) {
       while (l) {
          if (stringsAreEqual(l->string, temp_str)) {
             str = l->string;
+            break;
          }
          l = l->next;
       }

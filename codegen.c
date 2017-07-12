@@ -425,7 +425,22 @@ emitStatement(Codegen* c, AstNode* stmt) {
       } break;
       default: {
          // Not handled
+         Assert(!"This type of statement is not handled.");
       } break;
+   }
+}
+
+void
+emitCompoundStatement(Codegen* c, AstNode* compound) {
+   if (compound->type != Ast_COMPOUND_STMT) {
+      codegenError("Expected a compound statement.");
+   }
+   AstNode* stmt = compound->child;
+
+   // Emit function call prelude. Push stack
+   while (stmt) {
+      emitStatement(c, stmt);
+      stmt = stmt->sibling;
    }
 }
 
@@ -442,17 +457,10 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       emitInstruction(c, "mov rbp, rsp");
       queueInstruction(c, "sub rsp, ");
 
-      // Emit first pass of stack req.
-      AstNode* stmt = compound->child;
-
       // Push
       pushScope(c);
 
-      // Emit function call prelude. Push stack
-      while (stmt) {
-         emitStatement(c, stmt);
-         stmt = stmt->sibling;
-      }
+      emitCompoundStatement(c, compound);
 
       int stack = c->scope->stack_size;
       popScope(c);
@@ -464,7 +472,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       emitInstruction(c, "ret");
    }
    else {
-      codegenError("Funcdef: Invalide node in the tree.");
+      codegenError("Funcdef: Invalid node in the tree.");
    }
 }
 

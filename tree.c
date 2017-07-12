@@ -3,6 +3,9 @@ typedef enum AstType_n {
 
    Ast_NUMBER,
    Ast_KEYWORD,
+
+   Ast_IF,
+
    Ast_ID,
 
    Ast_FUNCDEF,
@@ -15,6 +18,7 @@ typedef enum AstType_n {
    Ast_MUL,
    Ast_DIV,
    Ast_LOGICAL_AND,
+   Ast_EQUALS,
    Ast_LOGICAL_OR,
    Ast_COMPOUND_STMT,
 } AstType;
