@@ -449,13 +449,13 @@ parseStatement(Parser* p) {
       if (nextCharPunctuator(p, '(')) {
          // TODO: There should be checking of `if` conditions.
          // For instance, emit a warning when using = instead of ==.
-         parseExpression(p);
+         AstNode* cond = parseExpression(p);
          if (!nextCharPunctuator(p, ')')) {
             parseError("Malformed if statement");
          }
          AstNode* then = parseStatement(p);
          if (then) {
-            stmt = makeAstNode(p->arena, Ast_IF, then, NULL);
+            stmt = makeAstNode(p->arena, Ast_IF, cond, then);
          } else {
             parseError("Expected else clause after if.");
          }

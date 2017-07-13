@@ -85,7 +85,7 @@ RegisterValue g_registers[] = {
    },
    {
       .reg    = "rdx",
-      .reg_32 = "rdx",
+      .reg_32 = "edx",
    },
    {
       .reg    = "rsi",
@@ -148,7 +148,7 @@ registerStringWithBitness(RegisterValue* r, int bitness) {
       case RegisterValueType_IMMEDIATE: {
          // TODO: Allocate to current scope.
          res = calloc(1, 128);
-         snprintf(res, 128, "%d", (int)r->immediate_value);
+         snprintf(res, 128, "0x%x", (int)r->immediate_value);
       } break;
       case RegisterValueType_STACK: {
          // TODO: Allocate to current scope.
@@ -404,6 +404,8 @@ emitStatement(Codegen* c, AstNode* stmt) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
                emitInstruction(c, "mov rax, %s", registerString(r));
+               // TODO: Use local labels?
+               emitInstruction(c, "jmp func_end");
             }
          }
       } break;
@@ -422,6 +424,14 @@ emitStatement(Codegen* c, AstNode* stmt) {
          char asm_line[LINE_MAX] = {0};
          PrintString(asm_line, LINE_MAX, "mov DWORD [rbp-0x%x], 0x%x", offset, value);
          emitInstruction(c, asm_line);
+      } break;
+      case Ast_IF: {
+         AstNode* cond = stmt->child;
+         AstNode* then = cond->sibling;
+         codegenEmit(c, cond);
+         emitInstruction(c, "jne else");
+         codegenEmit(c, then);
+         emitInstruction(c, "else:");
       } break;
       default: {
          // Not handled
@@ -467,6 +477,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
 
       finishInstruction(c, stack);
 
+      emitInstruction(c, "func_end:");
       emitInstruction(c, "add rsp, %d", stack);
       emitInstruction(c, "pop rbp");
       emitInstruction(c, "ret");
@@ -503,6 +514,15 @@ codegenEmit(Codegen* c, AstNode* node) {
          result = allocateRegister();
          Assert(!"ID codegen not implemented.");
       }
+   }
+   else if (node->type == Ast_EQUALS) {
+      // TODO: dispatch expressions to emitExpression
+      RegisterValue* left = codegenEmit(c, node->child);
+      RegisterValue* right = codegenEmit(c, node->child->sibling);
+      emitInstruction(c, "cmp %s, %s", registerString32(left), registerString(right));
+   }
+   else if (node->type == Ast_COMPOUND_STMT) {
+      emitCompoundStatement(c, node);
    }
    else {
       Assert(!"Codegen emit for this kind of node is not implemented.");
