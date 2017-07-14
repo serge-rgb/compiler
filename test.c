@@ -4,7 +4,7 @@ main() {
    int another_var = 1;
    int yup = 2;
 
-   if (my_pretty_variable == 42) {
+   if (my_pretty_variable == 41) {
       return 1;
    }
 

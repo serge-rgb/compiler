@@ -55,6 +55,7 @@ struct Scope_s {
    // Hash map from string variable to offset in the stack.
    int offsets[SCOPE_HASH_SIZE];
    int stack_size;
+   Arena* arena;
 
    Scope* prev;
 };
@@ -134,7 +135,7 @@ RegisterValue g_registers[] = {
 RegisterValue* codegenEmit(Codegen* c, AstNode* node);
 
 char*
-registerStringWithBitness(RegisterValue* r, int bitness) {
+registerStringWithBitness(Codegen* c, RegisterValue* r, int bitness) {
    char *res = NULL;
    switch(r->type) {
       case RegisterValueType_REGISTER: {
@@ -146,13 +147,11 @@ registerStringWithBitness(RegisterValue* r, int bitness) {
          }
       } break;
       case RegisterValueType_IMMEDIATE: {
-         // TODO: Allocate to current scope.
-         res = calloc(1, 128);
+         res = allocate(c->scope->arena, 128);
          snprintf(res, 128, "0x%x", (int)r->immediate_value);
       } break;
       case RegisterValueType_STACK: {
-         // TODO: Allocate to current scope.
-         res = calloc(1, 128);
+         res = allocate(c->scope->arena, 128);
          if (bitness == 32)
             snprintf(res, 128, "DWORD [ rbp - 0x%x ]", (int)r->offset);
          else if (bitness == 64)
@@ -163,18 +162,23 @@ registerStringWithBitness(RegisterValue* r, int bitness) {
 }
 
 char *
-registerString(RegisterValue* r) {
-   return registerStringWithBitness(r, 64);
+registerString(Codegen* c, RegisterValue* r) {
+   return registerStringWithBitness(c, r, 64);
 }
 
 char *
-registerString32(RegisterValue* r) {
-   return registerStringWithBitness(r, 32);
+registerString32(Codegen* c, RegisterValue* r) {
+   return registerStringWithBitness(c, r, 32);
 }
 
 void
-codegenError(char* msg) {
-   fprintf(stderr, "Codegen error: %s\n", msg);
+codegenError(char* msg, ...) {
+   va_list args;
+   va_start(args, msg);
+   char buffer[LINE_MAX] = {0};
+   vsnprintf(buffer, LINE_MAX, msg, args);
+   fprintf(stderr, "Codegen error: %s\n", buffer);
+   va_end(args);
    exit(1);
 }
 
@@ -183,9 +187,7 @@ offsetForName(Codegen* c, char* name) {
    u64 hash = hashStr(name, strlen(name));
    int offset = c->scope->offsets[hash % SCOPE_HASH_SIZE];
    if (!offset) {
-      char buf[1024] = {0};
-      snprintf(buf, 1024, "Tying to use variable name that is not bounded. %s\n", name);
-      codegenError(buf);
+      codegenError("Tying to use variable name that is not bounded. %s\n", name);
    }
    return offset;
 }
@@ -294,7 +296,7 @@ needsRegister(Codegen* c, RegisterValue** r) {
    RegisterValue* old_r = *r;
    if (old_r->type != RegisterValueType_REGISTER) {
       *r = allocateRegister();
-      emitInstruction(c, "mov %s, %s", registerString32(*r), registerString32(old_r));
+      emitInstruction(c, "mov %s, %s", registerString32(c,*r), registerString32(c,old_r));
    }
 }
 
@@ -328,23 +330,32 @@ void
 pushScope(Codegen* c) {
    Scope* prev_scope = c->scope;
    c->scope = allocate(c->arena, sizeof(*c->scope));
+   ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
    emitInstruction(c, "mov rdx, QWORD [rbp-4]");
 }
 
 void
 popScope(Codegen* c) {
-   // TODO: Scope lifespan arena.
-
-   // NOTE: We are currently leaking this scope but it won't be a
-   // problem if we allocate it within a scope-based arena.
+   deallocate(c->scope->arena);
    c->scope = c->scope->prev;
+}
+
+b32
+nodeIsExpression(AstNode* node) {
+   b32 result = false;
+   if (node->type == Ast_MUL || node->type == Ast_DIV ||
+       node->type == Ast_ADD || node->type == Ast_SUB ||
+       node->type == Ast_EQUALS) {
+      result = true;
+   }
+   return result;
 }
 
 RegisterValue*
 emitExpression(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
-   if (node->type == Ast_MUL || node->type == Ast_DIV || node->type == Ast_ADD || node->type == Ast_SUB) {
+   if (nodeIsExpression(node)) {
       AstNode* child0 = node->child;
       AstNode* child1 = child0->sibling;
       RegisterValue* r0 = codegenEmit(c, child0);
@@ -352,27 +363,32 @@ emitExpression(Codegen* c, AstNode* node) {
 
       if (node->type == Ast_ADD) {
          needsRegister(c, &r0);
-         emitInstruction(c, "add %s, %s", registerString32(r0), registerString32(r1));
+         emitInstruction(c, "add %s, %s", registerString32(c,r0), registerString32(c,r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_SUB) {
          needsRegister(c, &r0);
-         emitInstruction(c, "sub %s, %s", registerString32(r0), registerString32(r1));
+         emitInstruction(c, "sub %s, %s", registerString32(c,r0), registerString32(c,r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_MUL || node->type == Ast_DIV) {
          char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
-            emitInstruction(c, "mov rax, %s", registerString32(r0));
+            emitInstruction(c, "mov rax, %s", registerString32(c,r0));
          }
 
-         emitInstruction(c, "%s %s", op, registerString32(r1));
+         emitInstruction(c, "%s %s", op, registerString32(c,r1));
          result = allocateRegister();
-         emitInstruction(c, "mov %s, rax", registerString32(result));
+         emitInstruction(c, "mov %s, rax", registerString32(c,result));
          freeRegister(r0);
          freeRegister(r1);
+      }
+      else if (node->type == Ast_EQUALS) {
+         RegisterValue* left = codegenEmit(c, node->child);
+         RegisterValue* right = codegenEmit(c, node->child->sibling);
+         emitInstruction(c, "cmp %s, %s", registerString32(c,left), registerString(c,right));
       }
    }
    else if (node->type == Ast_NUMBER ||
@@ -380,7 +396,7 @@ emitExpression(Codegen* c, AstNode* node) {
       codegenEmit(c, node);
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister();
-      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(r), node->tok->value.integer);
+      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(c,r), node->tok->value.integer);
       emitInstruction(c, asm_line);
       result = r;
    }
@@ -388,7 +404,7 @@ emitExpression(Codegen* c, AstNode* node) {
       int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister();
-      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(r), offset);
+      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(c,r), offset);
       emitInstruction(c, asm_line);
       result = r;
    }
@@ -403,7 +419,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
          if (stmt->child) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
-               emitInstruction(c, "mov rax, %s", registerString(r));
+               emitInstruction(c, "mov rax, %s", registerString(c,r));
                // TODO: Use local labels?
                emitInstruction(c, "jmp func_end");
             }
@@ -421,9 +437,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
          int offset = c->scope->stack_size + 4;
          c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
          c->scope->stack_size += 4;
-         char asm_line[LINE_MAX] = {0};
-         PrintString(asm_line, LINE_MAX, "mov DWORD [rbp-0x%x], 0x%x", offset, value);
-         emitInstruction(c, asm_line);
+         emitInstruction(c, "mov DWORD [rbp-0x%x], 0x%x", offset, value);
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
@@ -494,18 +508,14 @@ codegenEmit(Codegen* c, AstNode* node) {
       emitFunctionDefinition(c, node);
    }
    else if (node->type == Ast_NUMBER) {
-
-      // Allocate a register with this number.
-      // result = allocateRegister();
-      // emitInstruction(c, "mov %s, %d", registerString32(result), node->tok->value.integer);
-      // TODO: Scope allocation.
-      result = allocate(c->arena, sizeof(RegisterValue));
+      // Allocate an immediate value with this number.
+      result = allocate(c->scope->arena, sizeof(RegisterValue));
       result->type = RegisterValueType_IMMEDIATE;
       result->immediate_value = node->tok->value.integer;
    }
    else if (node->type == Ast_ID) {
       if (fitsInRegister(node)) {
-         result = allocate(c->arena, sizeof(RegisterValue));
+         result = allocate(c->scope->arena, sizeof(RegisterValue));
 
          result->type = RegisterValueType_STACK;
          result->offset = offsetForName(c, node->tok->value.string);
@@ -515,11 +525,8 @@ codegenEmit(Codegen* c, AstNode* node) {
          Assert(!"ID codegen not implemented.");
       }
    }
-   else if (node->type == Ast_EQUALS) {
-      // TODO: dispatch expressions to emitExpression
-      RegisterValue* left = codegenEmit(c, node->child);
-      RegisterValue* right = codegenEmit(c, node->child->sibling);
-      emitInstruction(c, "cmp %s, %s", registerString32(left), registerString(right));
+   else if (nodeIsExpression(node)) {
+      emitExpression(c, node);
    }
    else if (node->type == Ast_COMPOUND_STMT) {
       emitCompoundStatement(c, node);

@@ -2,6 +2,19 @@
 
 #define AllocType(arena, type) allocate(arena, sizeof(type))
 
+#define ArenaBootstrap(object, arenaName) \
+        size_t sz = sizeof(*object); \
+        u8* block = arenaBlock(&sz); \
+        block += sizeof(ArenaHeader); \
+        Arena a = { \
+           .used = 0, \
+           .size = sz, \
+           .block = block, \
+        };   \
+        Arena* p = allocate(&a, sizeof(Arena)); \
+        *p = a; \
+        object->arenaName = p;
+
 typedef struct Arena_s Arena;
 struct Arena_s {
    u8*     block;
@@ -15,6 +28,15 @@ typedef struct ArenaHeader_s {
    u8* previous;  // Pointer to the memory block of the previous arena.
 } ArenaHeader;
 
+
+u8*
+arenaBlock(size_t* num_bytes) {
+   size_t size = Max(ARENA_DEFAULT_BLOCK_SIZE, *num_bytes);
+   *num_bytes = size;
+   u8* chunk = calloc(1, *num_bytes + sizeof(ArenaHeader));
+   return chunk;
+}
+
 void*
 allocate(Arena* a, size_t num_bytes) {
    u8* ptr = NULL;
@@ -23,8 +45,8 @@ allocate(Arena* a, size_t num_bytes) {
       a->used += num_bytes;
    }
    else {
-      size_t next_size = Max(ARENA_DEFAULT_BLOCK_SIZE, num_bytes);
-      u8* next = calloc(1, next_size + sizeof(ArenaHeader));
+      size_t next_size = num_bytes;
+      u8* next = arenaBlock(&next_size);
       if (next) {
          ArenaHeader* h = (ArenaHeader*)next;
          h->previous = a->block;
@@ -48,11 +70,12 @@ deallocate(Arena* a) {
    if (!block) {
       fprintf(stderr, "WARNING: deallocating an arena with NULL block. (Double free?)\n");
    }
+
+   *a = (Arena){0};
    while (block) {
       ArenaHeader* h = (ArenaHeader*)block-1;
       u8* p = h->previous;
       free(h);
       block = p;
    }
-   *a = (Arena){0};
 }
