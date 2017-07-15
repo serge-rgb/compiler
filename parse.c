@@ -17,14 +17,24 @@ newNode(Arena* a) {
 }
 
 void
-parseError(char* msg) {
-   fprintf(stderr, "Parse error: %s\n", msg);
+parseError(char* msg, ...) {
+   va_list args;
+   va_start(args, msg);
+   char buffer[LINE_MAX] = {0};
+   vsnprintf(buffer, LINE_MAX, msg, args);
+   fprintf(stderr, "Parse error: %s\n", buffer);
+   va_end(args);
    exit(1);
 }
 
 b32
-peekCharPunctuator(Parser* p, char c) {
-   b32 result = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == c;
+peekCharPunctuator(Parser* p, int c) {
+   b32 result = false;
+   if (c < 128) {
+      result = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == c;
+   } else {
+      result = p->token->type == TokenType_PUNCTUATOR_MULTICHAR && p->token->value.character == c;
+   }
    return result;
 }
 
@@ -63,23 +73,11 @@ nextKeyword(Parser* p, int keyword) {
 
 Token*
 nextCharPunctuator(Parser* p, int c) {
-   if (c < 128) {
-      if (peekCharPunctuator(p, (char)c)) {
-         return nextToken(p);
-      }
-      else {
-         return NULL;
-      }
+   Token* result = NULL;
+   if (peekCharPunctuator(p, c)) {
+      result = nextToken(p);
    }
-   // Multichar
-   else {
-      if (p->token->type == TokenType_PUNCTUATOR_MULTICHAR && p->token->value.character == c) {
-         return nextToken(p);
-      }
-      else {
-         return NULL;
-      }
-   }
+   return result;
 }
 
 
@@ -238,7 +236,7 @@ logicalOrExpr(Parser* p) {
 
 AstNode*
 conditionalExpr(Parser* p) {
-   AstNode*    t = logicalOrExpr(p);
+   AstNode*    t  = logicalOrExpr(p);
    Token*      bt = marktrack(p);
    if (nextCharPunctuator(p, '?')) {
       AstNode* then_expr = parseExpression(p);
@@ -276,7 +274,35 @@ assignmentExpr(Parser* p) {
 
 AstNode*
 relationalExpression(Parser* p) {
-   return additiveExpr(p);
+   AstNode* left = parseOrBacktrack(additiveExpr, p);
+   if (left) {
+      while (peekCharPunctuator(p, '<') ||
+             peekCharPunctuator(p, '>') ||
+             peekCharPunctuator(p, GEQ) ||
+             peekCharPunctuator(p, LEQ)) {
+         Token* op = nextToken (p);
+         AstNode* right = relationalExpression(p);
+         if (!right) { parseError("Expected expression after relational operator."); }
+         AstType t = Ast_NONE;
+         // TODO: Ast types should reuse keyword and punctuator values.
+         switch (op->value.character) {
+            case '<': {
+                t = Ast_LESS;
+            } break;
+            case '>': {
+                t = Ast_GREATER;
+            } break;
+            case GEQ: {
+                t = Ast_GEQ;
+            } break;
+            case LEQ: {
+                t = Ast_LEQ;
+            } break;
+         }
+         left = makeAstNode(p->arena, t, left, right);
+      }
+   }
+   return left;
 }
 
 AstNode*

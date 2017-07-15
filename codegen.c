@@ -13,6 +13,7 @@ typedef struct RegisterValue_s {
       struct {
          char* reg;
          char* reg_32;
+         char* reg_8;
          b8    bound;
       };
       // IMMEDIATE
@@ -75,18 +76,22 @@ RegisterValue g_registers[] = {
    {
       .reg    = "rax",
       .reg_32 = "eax",
+      .reg_8  = "al",
    },
    {
       .reg    = "rbx",
       .reg_32 = "ebx",
+      .reg_8  = "bl",
    },
    {
       .reg    = "rcx",
       .reg_32 = "ecx",
+      .reg_8  = "cl",
    },
    {
       .reg    = "rdx",
       .reg_32 = "edx",
+      .reg_8  = "dl",
    },
    {
       .reg    = "rsi",
@@ -145,7 +150,11 @@ registerStringWithBitness(Codegen* c, RegisterValue* r, int bitness) {
          else if (bitness == 32) {
             res = r->reg_32;
          }
-      } break;
+         else if (bitness == 8) {
+            res = r->reg_8;
+         }
+      }
+      break;
       case RegisterValueType_IMMEDIATE: {
          res = allocate(c->scope->arena, 128);
          snprintf(res, 128, "0x%x", (int)r->immediate_value);
@@ -156,6 +165,8 @@ registerStringWithBitness(Codegen* c, RegisterValue* r, int bitness) {
             snprintf(res, 128, "DWORD [ rbp - 0x%x ]", (int)r->offset);
          else if (bitness == 64)
             snprintf(res, 128, "QWORD [ rbp - 0x%x ]", (int)r->offset);
+         else if (bitness == 8)
+            snprintf(res, 128, "BYTE [ rbp - 0x%x ]", (int)r->offset);
       } break;
    }
    return res;
@@ -296,7 +307,7 @@ needsRegister(Codegen* c, RegisterValue** r) {
    RegisterValue* old_r = *r;
    if (old_r->type != RegisterValueType_REGISTER) {
       *r = allocateRegister();
-      emitInstruction(c, "mov %s, %s", registerString32(c,*r), registerString32(c,old_r));
+      emitInstruction(c, "mov %s, %s", registerString32(c, *r), registerString32(c, old_r));
    }
 }
 
@@ -325,7 +336,6 @@ finishInstruction(Codegen* c, int val) {
    c->n_queue = 0;
 }
 
-
 void
 pushScope(Codegen* c) {
    Scope* prev_scope = c->scope;
@@ -346,7 +356,9 @@ nodeIsExpression(AstNode* node) {
    b32 result = false;
    if (node->type == Ast_MUL || node->type == Ast_DIV ||
        node->type == Ast_ADD || node->type == Ast_SUB ||
-       node->type == Ast_EQUALS) {
+       node->type == Ast_EQUALS || node->type == Ast_LESS ||
+       node->type == Ast_GREATER || node->type == Ast_LEQ ||
+       node->type == Ast_GEQ) {
       result = true;
    }
    return result;
@@ -363,32 +375,47 @@ emitExpression(Codegen* c, AstNode* node) {
 
       if (node->type == Ast_ADD) {
          needsRegister(c, &r0);
-         emitInstruction(c, "add %s, %s", registerString32(c,r0), registerString32(c,r1));
+         emitInstruction(c, "add %s, %s", registerString32(c, r0), registerString32(c, r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_SUB) {
          needsRegister(c, &r0);
-         emitInstruction(c, "sub %s, %s", registerString32(c,r0), registerString32(c,r1));
+         emitInstruction(c, "sub %s, %s", registerString32(c, r0), registerString32(c, r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_MUL || node->type == Ast_DIV) {
          char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
-            emitInstruction(c, "mov rax, %s", registerString32(c,r0));
+            emitInstruction(c, "mov rax, %s", registerString32(c, r0));
          }
 
-         emitInstruction(c, "%s %s", op, registerString32(c,r1));
+         emitInstruction(c, "%s %s", op, registerString32(c, r1));
          result = allocateRegister();
-         emitInstruction(c, "mov %s, rax", registerString32(c,result));
+         emitInstruction(c, "mov %s, rax", registerString32(c, result));
          freeRegister(r0);
          freeRegister(r1);
       }
-      else if (node->type == Ast_EQUALS) {
+      else if (node->type == Ast_EQUALS ||
+               node->type == Ast_LESS ||
+               node->type == Ast_GREATER ||
+               node->type == Ast_GEQ ||
+               node->type == Ast_LEQ) {
          RegisterValue* left = codegenEmit(c, node->child);
          RegisterValue* right = codegenEmit(c, node->child->sibling);
-         emitInstruction(c, "cmp %s, %s", registerString32(c,left), registerString(c,right));
+         if (node->type == Ast_EQUALS)
+            emitInstruction(c, "test %s, %s", registerString32(c, left), registerString(c, right));
+         else
+            emitInstruction(c, "cmp %s, %s", registerString32(c, left), registerString(c, right));
+         result = allocateRegister();
+         if (node->type == Ast_GREATER) {
+            emitInstruction(c, "setg al");
+            emitInstruction(c, "and al, 0x1", registerString(c, result));
+            emitInstruction(c, "movzx %s, al", registerString32(c, result));
+         } else {
+            Assert(!"Implement this");
+         }
       }
    }
    else if (node->type == Ast_NUMBER ||
@@ -396,7 +423,7 @@ emitExpression(Codegen* c, AstNode* node) {
       codegenEmit(c, node);
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister();
-      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(c,r), node->tok->value.integer);
+      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(c, r), node->tok->value.integer);
       emitInstruction(c, asm_line);
       result = r;
    }
@@ -404,7 +431,7 @@ emitExpression(Codegen* c, AstNode* node) {
       int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister();
-      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(c,r), offset);
+      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(c, r), offset);
       emitInstruction(c, asm_line);
       result = r;
    }
@@ -419,7 +446,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
          if (stmt->child) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
-               emitInstruction(c, "mov rax, %s", registerString(c,r));
+               emitInstruction(c, "mov rax, %s", registerString(c, r));
                // TODO: Use local labels?
                emitInstruction(c, "jmp func_end");
             }
@@ -442,8 +469,10 @@ emitStatement(Codegen* c, AstNode* stmt) {
       case Ast_IF: {
          AstNode* cond = stmt->child;
          AstNode* then = cond->sibling;
-         codegenEmit(c, cond);
-         emitInstruction(c, "jne else");
+         RegisterValue* cv = codegenEmit(c, cond);
+         // TODO: Treat <,<=,>,>=,== comparisons differently?
+         emitInstruction(c, "cmp %s, 0x0", registerString32(c, cv));
+         emitInstruction(c, "je else");
          codegenEmit(c, then);
          emitInstruction(c, "else:");
       } break;
@@ -526,7 +555,7 @@ codegenEmit(Codegen* c, AstNode* node) {
       }
    }
    else if (nodeIsExpression(node)) {
-      emitExpression(c, node);
+      result = emitExpression(c, node);
    }
    else if (node->type == Ast_COMPOUND_STMT) {
       emitCompoundStatement(c, node);

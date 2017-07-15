@@ -19,6 +19,10 @@ typedef enum AstType_n {
    Ast_DIV,
    Ast_LOGICAL_AND,
    Ast_EQUALS,
+   Ast_LESS,
+   Ast_LEQ,
+   Ast_GREATER,
+   Ast_GEQ,
    Ast_LOGICAL_OR,
    Ast_COMPOUND_STMT,
 } AstType;
