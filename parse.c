@@ -28,7 +28,7 @@ parseError(char* msg, ...) {
 }
 
 b32
-peekCharPunctuator(Parser* p, int c) {
+peekPunctuator(Parser* p, int c) {
    b32 result = false;
    if (c < 128) {
       result = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == c;
@@ -72,9 +72,9 @@ nextKeyword(Parser* p, int keyword) {
 }
 
 Token*
-nextCharPunctuator(Parser* p, int c) {
+nextPunctuator(Parser* p, int c) {
    Token* result = NULL;
-   if (peekCharPunctuator(p, c)) {
+   if (peekPunctuator(p, c)) {
       result = nextToken(p);
    }
    return result;
@@ -83,7 +83,7 @@ nextCharPunctuator(Parser* p, int c) {
 
 void
 expectSemicolon(Parser* p) {
-   if (!nextCharPunctuator(p, ';')) {
+   if (!nextPunctuator(p, ';')) {
       parseError("Expected semicolon!"); // TODO: Need to pass some context around to support good syntax error handling.
    }
 }
@@ -113,9 +113,9 @@ primaryExpr(Parser* p) {
    Token*   tok = nextToken(p);
    if (!tok) { return false; }
    if (tok->type == TokenType_NUMBER) {
-      t         = newNode(p->arena);
-      t->type   = Ast_NUMBER;
-      t->tok    = tok;
+      t       = newNode(p->arena);
+      t->type = Ast_NUMBER;
+      t->tok  = tok;
    }
    else if (tok->type == TokenType_ID) {
       t       = newNode(p->arena);
@@ -124,7 +124,6 @@ primaryExpr(Parser* p) {
    }
    // TODO: other constants, string literals
    else {
-
    }
    return t;
 }
@@ -154,15 +153,15 @@ unaryExpr(Parser* p) {
 AstNode*
 castExpr(Parser* p) {
    AstNode* t = NULL;
-   t          = unaryExpr(p);
+   t = unaryExpr(p);
    return t;
 }
 
 AstNode*
 multiplicativeExpr(Parser* p) {
-   AstNode*       left = castExpr(p);
+   AstNode* left = castExpr(p);
    if (left) {
-      while (peekCharPunctuator(p, '*') || peekCharPunctuator(p, '/')) {
+      while (peekPunctuator(p, '*') || peekPunctuator(p, '/')) {
          // Pop the *
          Token*   optok     = nextToken(p);
          // Another cast expression
@@ -182,7 +181,7 @@ AstNode*
 additiveExpr(Parser* p) {
    AstNode*       left      = multiplicativeExpr(p);
    if (left) {
-      while (peekCharPunctuator(p, '+') || peekCharPunctuator(p, '-')) {
+      while (peekPunctuator(p, '+') || peekPunctuator(p, '-')) {
          // Pop the + or the -
          Token*   optok     = nextToken(p);
          // Pop another multiplicative expression.
@@ -238,14 +237,14 @@ AstNode*
 conditionalExpr(Parser* p) {
    AstNode*    t  = logicalOrExpr(p);
    Token*      bt = marktrack(p);
-   if (nextCharPunctuator(p, '?')) {
+   if (nextPunctuator(p, '?')) {
       AstNode* then_expr = parseExpression(p);
       if (!then_expr) {
          parseError("Expected expression after ? token.");
       }
       else {
          bt = marktrack(p);
-         if (!nextCharPunctuator(p, ':')) {
+         if (!nextPunctuator(p, ':')) {
             backtrack(p, bt);
          }
          else {
@@ -276,10 +275,10 @@ AstNode*
 relationalExpression(Parser* p) {
    AstNode* left = parseOrBacktrack(additiveExpr, p);
    if (left) {
-      while (peekCharPunctuator(p, '<') ||
-             peekCharPunctuator(p, '>') ||
-             peekCharPunctuator(p, GEQ) ||
-             peekCharPunctuator(p, LEQ)) {
+      while (peekPunctuator(p, '<') ||
+             peekPunctuator(p, '>') ||
+             peekPunctuator(p, GEQ) ||
+             peekPunctuator(p, LEQ)) {
          Token* op = nextToken (p);
          AstNode* right = relationalExpression(p);
          if (!right) { parseError("Expected expression after relational operator."); }
@@ -311,7 +310,7 @@ equalityExpression(Parser* p) {
    // TODO: This left-recursion elimination pattern is repeating a lot.
    // Would it be a good tradeoff to abstract it away?
    if (left) {
-      while (nextCharPunctuator(p, EQUALS)) {
+      while (nextPunctuator(p, EQUALS)) {
          AstNode* right = relationalExpression(p);
          if (!right) { parseError("Expected expression after '=='."); }
          left = makeAstNode(p->arena, Ast_EQUALS, left, right);
@@ -397,13 +396,13 @@ parseDeclaration(Parser* p) {
       AstNode* initializer = NULL;
 
       Token* bt = marktrack(p);
-      if (nextCharPunctuator(p, '=')) {
+      if (nextPunctuator(p, '=')) {
          initializer = parseInitializer(p);
       }
       else {
          backtrack(p, bt);
       }
-      if (!nextCharPunctuator(p, ';')) {
+      if (!nextPunctuator(p, ';')) {
          parseError("Expected semicolon at the end of declaration.");
       }
       result = makeAstNode(p->arena, Ast_DECLARATION, identifier, initializer);
@@ -434,7 +433,7 @@ parseCompoundStatement(Parser* p) {
    Token* tok = marktrack(p);
    AstNode* compound_stmt = NULL;
 
-   if (nextCharPunctuator(p, '{')) {
+   if (nextPunctuator(p, '{')) {
       AstNode** cur = &first_stmt;
       do {
          if (*cur) {
@@ -445,7 +444,7 @@ parseCompoundStatement(Parser* p) {
             *cur = parseOrBacktrack(parseStatement, p);
          }
       } while (*cur);
-      if (nextCharPunctuator(p, '}')) {
+      if (nextPunctuator(p, '}')) {
          compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, first_stmt, NULL);
       } else {
          backtrack(p, tok);
@@ -468,15 +467,15 @@ parseStatement(Parser* p) {
    if ((stmt = parseCompoundStatement(p))) {
 
    }
-   else if (((stmt = parseOrBacktrack(parseExpression, p)) && nextCharPunctuator(p, ';')) ||
+   else if (((stmt = parseOrBacktrack(parseExpression, p)) && nextPunctuator(p, ';')) ||
             (stmt = parseOrBacktrack(parseJumpStatement, p)) ) {
    }
    else if (nextKeyword(p, Keyword_if)) {
-      if (nextCharPunctuator(p, '(')) {
+      if (nextPunctuator(p, '(')) {
          // TODO: There should be checking of `if` conditions.
          // For instance, emit a warning when using = instead of ==.
          AstNode* cond = parseExpression(p);
-         if (!nextCharPunctuator(p, ')')) {
+         if (!nextPunctuator(p, ')')) {
             parseError("Malformed if statement");
          }
          AstNode* then = parseStatement(p);
@@ -510,8 +509,8 @@ parseTranslationUnit(Parser* p) {
       AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);
 
       // TODO: Support something other than no-params
-      nextCharPunctuator(p, '(');
-      nextCharPunctuator(p, ')');
+      nextPunctuator(p, '(');
+      nextPunctuator(p, ')');
 
       parseOrBacktrack(parseDeclarationList, p);
       AstNode* stmts = parseCompoundStatement(p);

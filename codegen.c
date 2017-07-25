@@ -1,5 +1,4 @@
 static FILE* g_asm;
-
 typedef enum RegisterValueType_n {
    RegisterValueType_REGISTER,
    RegisterValueType_IMMEDIATE,
@@ -58,6 +57,7 @@ struct Scope_s {
    int stack_size;
    Arena* arena;
 
+   int if_count;
    Scope* prev;
 };
 
@@ -288,12 +288,14 @@ emitInstruction(Codegen* c, char* asm_line, ...) {
       codegenError("LINE_MAX is not sufficient for instruction length.");
    }
    if (out_asm[written-1] != '\n') {
-      //out_asm[written] = '\n';
-      *(out_asm + written) = '\n';
+      out_asm[written] = '\n';
    }
    // If we are waiting on an instruction being modified, queue up.
    if (c->waiting) {
-      c->queue[c->n_queue++] = out_asm;
+      if (c->n_queue < CODEGEN_QUEUE_SIZE)
+         c->queue[c->n_queue++] = out_asm;
+      else
+         codegenError("Queue overflow.");
    }
    else {
       fwrite(out_asm, 1, strlen(out_asm), g_asm);
@@ -472,9 +474,11 @@ emitStatement(Codegen* c, AstNode* stmt) {
          RegisterValue* cv = codegenEmit(c, cond);
          // TODO: Treat <,<=,>,>=,== comparisons differently?
          emitInstruction(c, "cmp %s, 0x0", registerString32(c, cv));
-         emitInstruction(c, "je else");
+         char else_label[256] = {0};
+         snprintf(else_label, 256, ".else%d", c->scope->if_count++);
+         emitInstruction(c, "je %s", else_label);
          codegenEmit(c, then);
-         emitInstruction(c, "else:");
+         emitInstruction(c, "%s:", else_label);
       } break;
       default: {
          // Not handled
@@ -499,8 +503,8 @@ emitCompoundStatement(Codegen* c, AstNode* compound) {
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node) {
-   AstNode* type = node->child;
-   AstNode* id = type->sibling;
+   AstNode* type     = node->child;
+   AstNode* id       = type->sibling;
    AstNode* compound = id->sibling;
 
    if (type && id && compound) {
