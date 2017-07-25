@@ -25,6 +25,7 @@ exit $?
 #include "string.c"
 #include "lexer.c"
 #include "tree.c"
+#include "html.c"
 #include "codegen.c"
 #include "parse.c"
 #include "main.c"

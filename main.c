@@ -33,6 +33,11 @@ main(void) {
 
    codegenFinish();
 
+   Html html = {0};
+   htmlBegin(&html);
+   htmlEmit(&html, "shown", "hidden");
+   htmlEnd(&html);
+
    return 0;
 }
 
