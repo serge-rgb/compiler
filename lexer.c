@@ -52,6 +52,62 @@ struct Token_s {
    Token*    next;
 };
 
+#define FILE_STREAM_BUFFER_SIZE 128
+typedef struct FileStream_s {
+   FILE* fd;
+   Buffer buffer;
+   char data[FILE_STREAM_BUFFER_SIZE];
+} FileStream;
+
+
+b32
+fileStreamInit(FileStream* fs, char* fname) {
+   FILE* fd = fopen(fname, "r");
+   b32 result = false;
+   if (fd) {
+      size_t num_bytes = FILE_STREAM_BUFFER_SIZE;
+      // Reading num_bytes - 1 to leave space for the NULL terminator.
+      size_t read = fread(fs->data, 1, num_bytes - 1, fd);
+      if (read > 0) {
+         result = true;
+         fs->buffer.current = fs->data;
+         fs->buffer.end = fs->data + read;
+      }
+   }
+   return result;
+}
+
+b32
+fileStreamHasContent(FileStream* fs) {
+   b32 result = false;
+   if (fs->buffer.current < fs->buffer.end) {
+      result = true;
+   } else {
+      // TODO: Check whether fs->fd is at the end or not.
+   }
+   return result;
+}
+
+char
+fileStreamRead(FileStream* fs) {
+   char result = 0;
+   if (fs->buffer.current < fs->buffer.end) {
+      result = *fs->buffer.current++;
+   }
+   else {
+      Assert(!"We need to read from the file and fill the buffer again.");
+   }
+   return result;
+}
+
+char
+fileStreamPeek(FileStream* fs) {
+   Assert(fs->buffer.current < fs->buffer.end);
+   char result = *fs->buffer.current;
+   return result;
+}
+
+
 void
 lexerError(char* msg) {
    fprintf(stderr, "Syntax error: %s\n", msg);
@@ -69,9 +125,9 @@ isWhitespace(char c) {
 // Returns 0 if it is not a punctuator. Otherwise, it returns the
 // token code of the mult-char punctuator.
 int
-isPunctuator(Buffer* b) {
+isPunctuator(FileStream* fs) {
    int result = 0;
-   char c = *b->current;
+   char c = fileStreamPeek(fs);
 
    // Check for single-char punctuators.
    b32 is_punctuator =
@@ -84,6 +140,8 @@ isPunctuator(Buffer* b) {
    if (is_punctuator) {
       result = c;
    }
+
+   // TODO: Implement 2-char look-ahead in FileStream.
 
    // Now check for multi-char punctuators.
    char c1 = *(b->current + 1);
@@ -114,9 +172,9 @@ isPunctuator(Buffer* b) {
 }
 
 void
-skipWhitespace(Buffer* b) {
-   while (isWhitespace(*b->current)) {
-      ++b->current;
+skipWhitespace(FileStream* fs) {
+   while (isWhitespace(fileStreamPeek(fs))) {
+      fileStreamRead(fs);
    }
 }
 
@@ -193,13 +251,13 @@ identifyToken(Buffer* b, Token* out) {
 }
 
 Token
-getToken(Arena* a, Buffer* buffer) {
+getToken(Arena* a, FileStream* fs) {
    Token t = {0};
-   skipWhitespace(buffer);
-   if (buffer->current >= buffer->end) {
+   skipWhitespace(fs);
+   if (fs->buffer.current >= fs->buffer.end) {
       return t;
    }
-   else if (isPunctuator(buffer)) {
+   else if (isPunctuator(fs->buffer)) {
       int punctuator_token = isPunctuator(buffer);
       if (punctuator_token && punctuator_token < ASCII_MAX) {
          t.type = TokenType_PUNCTUATOR;
@@ -302,15 +360,11 @@ tokenPrint(Token* token) {
 }
 
 Token*
-tokenize(Arena* a, char* buffer, size_t buffer_len) {
-   Buffer b = {0};
-   b.current = buffer;
-   b.end = buffer + buffer_len;
-
+tokenize(Arena* a, FileStream* fs, size_t buffer_len) {
    Token* t = AllocType(a, Token);
    Token* tokens = t;
-   while (b.current < b.end) {
-      *t = getToken(a, &b);
+   while (fileStreamHasContent(fs)) {
+      *t = getToken(a, fs);
       if (t->type != TokenType_NONE) {
          t->next = AllocType(a, Token);
          t = t->next;

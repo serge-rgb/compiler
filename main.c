@@ -1,5 +1,3 @@
-#define NUM_BYTES 1024
-
 
 int
 main(void) {
@@ -8,27 +6,32 @@ main(void) {
    stringInit(&a);
    FILE* fd = fopen("test.c", "r");
 
+   int result = 0;
+
    if (fd) {
-      size_t num_bytes = NUM_BYTES;
-      char buffer[NUM_BYTES] = {0};
-
-      size_t read = fread(buffer, 1, num_bytes, fd);
-      printf("Read %" PRI_size " bytes\n", read);
-      Token* tokens = tokenize(&a, buffer, read);
-
-      Parser p = {0};
-      Arena tmp_parser_arena = {0};
-      p.arena = &tmp_parser_arena;
-      p.token = tokens;
-
-      Codegen codegen = {0};
-      codegen.arena = &tmp_parser_arena;
-
-      AstNode* tree = parseTranslationUnit(&p);
-      if (tree) {
-         codegenEmit(&codegen, tree);
+      FileStream file_stream = {0};
+      if (!fileStreamInit(&file_stream, "test.c")) {
+         fprintf(stderr, "ERROR: Could not read file.\n");
+         result = 1;
       }
-      deallocate(&tmp_parser_arena);
+      else {
+         Token* tokens = tokenize(&a, &file_stream, read);
+
+         Parser p = {0};
+         Arena tmp_parser_arena = {0};
+         p.arena = &tmp_parser_arena;
+         p.token = tokens;
+
+         Codegen codegen = {0};
+         codegen.arena = &tmp_parser_arena;
+
+         AstNode* tree = parseTranslationUnit(&p);
+         if (tree) {
+            codegenEmit(&codegen, tree);
+         }
+         deallocate(&tmp_parser_arena);
+      }
+
    }
 
    codegenFinish();
@@ -38,7 +41,7 @@ main(void) {
    htmlEmit(&html, "shown", "hidden");
    htmlEnd(&html);
 
-   return 0;
+   return result;
 }
 
 #undef NUM_BYTES
