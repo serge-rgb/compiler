@@ -55,8 +55,6 @@ struct Token_s {
 #define FILE_STREAM_BUFFER_SIZE 128
 typedef struct FileStream_s {
    FILE* fd;
-   Buffer buffer;
-   char data[FILE_STREAM_BUFFER_SIZE];
 } FileStream;
 
 
@@ -65,14 +63,8 @@ fileStreamInit(FileStream* fs, char* fname) {
    FILE* fd = fopen(fname, "r");
    b32 result = false;
    if (fd) {
-      size_t num_bytes = FILE_STREAM_BUFFER_SIZE;
-      // Reading num_bytes - 1 to leave space for the NULL terminator.
-      size_t read = fread(fs->data, 1, num_bytes - 1, fd);
-      if (read > 0) {
-         result = true;
-         fs->buffer.current = fs->data;
-         fs->buffer.end = fs->data + read;
-      }
+      fs->fd = fd;
+      result = true;
    }
    return result;
 }
@@ -80,10 +72,11 @@ fileStreamInit(FileStream* fs, char* fname) {
 b32
 fileStreamHasContent(FileStream* fs) {
    b32 result = false;
-   if (fs->buffer.current < fs->buffer.end) {
+   char buffer = 0;
+   fread(&buffer, 1, 1, fs->fd);
+   if (!feof(fs->fd)) {
+      fseek(fs->fd, -1, SEEK_CUR);
       result = true;
-   } else {
-      // TODO: Check whether fs->fd is at the end or not.
    }
    return result;
 }
@@ -91,8 +84,9 @@ fileStreamHasContent(FileStream* fs) {
 char
 fileStreamRead(FileStream* fs) {
    char result = 0;
-   if (fs->buffer.current < fs->buffer.end) {
-      result = *fs->buffer.current++;
+   if (fileStreamHasContent(fs)) {
+      size_t read = fread(&result, sizeof(char), 1, fs->fd);
+      Assert(read);
    }
    else {
       Assert(!"We need to read from the file and fill the buffer again.");
@@ -102,8 +96,10 @@ fileStreamRead(FileStream* fs) {
 
 char
 fileStreamPeek(FileStream* fs) {
-   Assert(fs->buffer.current < fs->buffer.end);
-   char result = *fs->buffer.current;
+   char result;
+   size_t read = fread(&result, sizeof(char), 1, fs->fd);
+   Assert(read);
+   fseek(fs->fd, -1, SEEK_CUR);
    return result;
 }
 
@@ -127,7 +123,8 @@ isWhitespace(char c) {
 int
 isPunctuator(FileStream* fs) {
    int result = 0;
-   char c = fileStreamPeek(fs);
+
+   char c = fileStreamRead(fs);
 
    // Check for single-char punctuators.
    b32 is_punctuator =
@@ -144,9 +141,12 @@ isPunctuator(FileStream* fs) {
    // TODO: Implement 2-char look-ahead in FileStream.
 
    // Now check for multi-char punctuators.
-   char c1 = *(b->current + 1);
-   char c2 = *(b->current + 2);
-   for (Punctuator i = Punctuator_BEGIN + 1; i < Punctuator_END; ++i) {
+   char c1, c2;
+   size_t read = 0;
+   read += fread(&c1, sizeof(char), 1, fs->fd);
+   read += fread(&c2, sizeof(char), 1, fs->fd);
+   fseek(fs->fd, -read - 1, SEEK_CUR);
+   if (read == 2) for (Punctuator i = Punctuator_BEGIN + 1; i < Punctuator_END; ++i) {
       char* str = g_punctuator_strings[indexOfPunctuator(i)];
       size_t op_len = strlen(str);
       if (c == str[0]) {
@@ -168,12 +168,14 @@ isPunctuator(FileStream* fs) {
       }
    }
 
+
+
    return result;
 }
 
 void
 skipWhitespace(FileStream* fs) {
-   while (isWhitespace(fileStreamPeek(fs))) {
+   while (fileStreamHasContent(fs) && isWhitespace(fileStreamPeek(fs))) {
       fileStreamRead(fs);
    }
 }
@@ -254,14 +256,14 @@ Token
 getToken(Arena* a, FileStream* fs) {
    Token t = {0};
    skipWhitespace(fs);
-   if (fs->buffer.current >= fs->buffer.end) {
+   int punctuator_token;  // Initialized in 'if' condition.
+   if (!fileStreamHasContent(fs)) {
       return t;
    }
-   else if (isPunctuator(fs->buffer)) {
-      int punctuator_token = isPunctuator(buffer);
+   else if ((punctuator_token = isPunctuator(fs))) {
       if (punctuator_token && punctuator_token < ASCII_MAX) {
          t.type = TokenType_PUNCTUATOR;
-         t.value.character = *buffer->current++;
+         t.value.character = fileStreamRead(fs);
       }
       else {
          t.type = TokenType_PUNCTUATOR_MULTICHAR;
@@ -270,23 +272,24 @@ getToken(Arena* a, FileStream* fs) {
          // Advance the buffer by the length of othe operator.
          char* punctuator_str = g_punctuator_strings[indexOfPunctuator(punctuator_token)];
          size_t len = strlen(punctuator_str);
-         buffer->current += len;
+         fseek(fs->fd, len, SEEK_CUR);
       }
    }
-   else if (*buffer->current == '\"') {
+   else if (fileStreamPeek(fs) == '\"') {
       // We are inside a string. Parse until we get the end of the string.
       // TODO: Escape characters.
       t.type = TokenType_STRING_LITERAL;
       Buffer token_buffer = {0};
-      ++buffer->current;
-      token_buffer.current = buffer->current;
-      while (*buffer->current++ != '\"') {
-         if (buffer->current > buffer->end) {
+      fseek(fs->fd, 1, SEEK_CUR);
+      char* tmp = "String literals not working atm ;)";
+      token_buffer.current = tmp;
+      while (fileStreamRead(fs) != '\"') {
+         if (!fileStreamHasContent(fs)) {
             // TODO: File parsing information.
             lexerError("Expected \" while parsing string literal.");
          }
       }
-      token_buffer.end = buffer->current - 1;
+      token_buffer.end = tmp + strlen(tmp);
       char* str = getStringFromBuffer(&token_buffer);
       t.value.string = str;
    }
@@ -295,17 +298,13 @@ getToken(Arena* a, FileStream* fs) {
    // The rest are keywords and identifiers.
    else {
       Buffer token_buffer = {0};
-      token_buffer.current = buffer->current;
+      char tmptoken[128] = {0};
+      token_buffer.current = tmptoken;
+      token_buffer.end = tmptoken;
       //char* start = buffer;
-      while (!(isWhitespace(*buffer->current) || isPunctuator(buffer))) {
-         ++buffer->current;
-
-         if (buffer->current >= buffer->end) {
-            // TODO: File parsing information.
-            break;
-         }
+      while (!(isWhitespace(fileStreamPeek(fs)) || isPunctuator(fs))) {
+         *token_buffer.end++ = fileStreamRead(fs);
       }
-      token_buffer.end = buffer->current;
       identifyToken(&token_buffer, &t);
 
       char* str = getStringFromBuffer(&token_buffer);
@@ -360,7 +359,7 @@ tokenPrint(Token* token) {
 }
 
 Token*
-tokenize(Arena* a, FileStream* fs, size_t buffer_len) {
+tokenize(Arena* a, FileStream* fs) {
    Token* t = AllocType(a, Token);
    Token* tokens = t;
    while (fileStreamHasContent(fs)) {

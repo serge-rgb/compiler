@@ -2,8 +2,11 @@
 
 # This file builds and runs itself.
 
-clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f macho64 out.asm && ld -arch x86_64 -e _start out.o /usr/lib/libSystem.dylib -o out
-#clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f elf64 out.asm && ld out.o
+if [ `uname` = "Linux" ]; then
+   clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f elf64 out.asm && ld out.o
+else  # Assume it's macOS
+   clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f macho64 out.asm && ld -arch x86_64 -e _start out.o /usr/lib/libSystem.dylib -o out
+fi
 
 exit $?
 

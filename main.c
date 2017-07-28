@@ -15,7 +15,7 @@ main(void) {
          result = 1;
       }
       else {
-         Token* tokens = tokenize(&a, &file_stream, read);
+         Token* tokens = tokenize(&a, &file_stream);
 
          Parser p = {0};
          Arena tmp_parser_arena = {0};
