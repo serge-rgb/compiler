@@ -33,6 +33,8 @@ struct AstNode_s {
    Token*   tok;
    AstNode* child;
    AstNode* sibling;
+
+   u64      line_number;
 };
 
 typedef struct AstMul_s {
@@ -43,7 +45,7 @@ typedef struct AstMul_s {
 static AstNode* AstNode_MUL;
 
 AstNode*
-makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
+makeAstNodeWithLineNumber(Arena* a, AstType type, AstNode* left, AstNode* right, u64 line_number) {
    AstNode* n = AllocType(a, AstNode);
    n->type = type;
    n->child = left;
@@ -54,5 +56,20 @@ makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
       }
    }
 
+   n->line_number = line_number;
+
+   Assert(n->line_number);
+
    return n;
+}
+
+AstNode*
+makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
+   u64 line_number = 0;
+   if (left) {
+      line_number = left->line_number;
+   } else {
+      fprintf(stderr, "WARNING: Calling makeAstNode with NULL left node. Will emit line number as 0. \n");
+   }
+   return makeAstNodeWithLineNumber(a, type, left, right, line_number);
 }

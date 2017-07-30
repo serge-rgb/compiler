@@ -68,7 +68,11 @@ typedef struct Codegen_s {
    Scope* scope;
    char*  waiting;
    char*  queue[CODEGEN_QUEUE_SIZE];
+   u64    queue_lines[CODEGEN_QUEUE_SIZE];
    int    n_queue;              // Size of the queue.
+   Html*  html;
+   char*  file_name;
+   u64    last_line_number;
 } Codegen;
 
 static
@@ -269,8 +273,15 @@ codegenInit(void) {
    fwrite(prelude, 1, strlen(prelude), g_asm);
 }
 
+char*
+codegenHtmlHidden(Codegen* c, u64 line_number) {
+   char* hidden = allocate(c->arena, LINE_MAX);
+   snprintf(hidden, LINE_MAX, "%s: %llu", c->file_name, line_number);
+   return hidden;
+}
+
 void
-emitInstruction(Codegen* c, char* asm_line, ...) {
+emitInstruction(Codegen* c, u64 line_number, char* asm_line, ...) {
    va_list args;
    va_start(args, asm_line);
    // vprintf(asm_line, args);
@@ -283,6 +294,11 @@ emitInstruction(Codegen* c, char* asm_line, ...) {
       out_asm = stack_asm;
    }
 
+   if (!line_number) {
+      line_number = c->last_line_number;
+   } else {
+      c->last_line_number = line_number;
+   }
    int written = vsnprintf(out_asm, LINE_MAX, asm_line, args);
    if (written >= LINE_MAX - 2) {  // Counting two extra character for the new line and 0 terminator.
       codegenError("LINE_MAX is not sufficient for instruction length.");
@@ -292,14 +308,18 @@ emitInstruction(Codegen* c, char* asm_line, ...) {
    }
    // If we are waiting on an instruction being modified, queue up.
    if (c->waiting) {
-      if (c->n_queue < CODEGEN_QUEUE_SIZE)
+      if (c->n_queue < CODEGEN_QUEUE_SIZE) {
+         c->queue_lines[c->n_queue] = line_number;
          c->queue[c->n_queue++] = out_asm;
-      else
+      }
+      else {
          codegenError("Queue overflow.");
+      }
    }
    else {
       fwrite(out_asm, 1, strlen(out_asm), g_asm);
       printf("%s", out_asm);
+      htmlEmit(c->html, out_asm, codegenHtmlHidden(c, line_number));
       va_end(args);
    }
 }
@@ -309,7 +329,7 @@ needsRegister(Codegen* c, RegisterValue** r) {
    RegisterValue* old_r = *r;
    if (old_r->type != RegisterValueType_REGISTER) {
       *r = allocateRegister();
-      emitInstruction(c, "mov %s, %s", registerString32(c, *r), registerString32(c, old_r));
+      emitInstruction(c, 0, "mov %s, %s", registerString32(c, *r), registerString32(c, old_r));
    }
 }
 
@@ -331,9 +351,11 @@ finishInstruction(Codegen* c, int val) {
 
    c->waiting = NULL;
 
-   emitInstruction(c, newasm);
+   emitInstruction(c, 0, newasm);
    for (int i = 0; i < c->n_queue; ++i) {
-      emitInstruction(c, c->queue[i]);
+      emitInstruction(c, 0, c->queue[i]);
+      u64 line_number = c->queue_lines[i];
+      htmlEmit(c->html, newasm, codegenHtmlHidden(c, line_number));
    }
    c->n_queue = 0;
 }
@@ -344,7 +366,7 @@ pushScope(Codegen* c) {
    c->scope = allocate(c->arena, sizeof(*c->scope));
    ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
-   emitInstruction(c, "mov rdx, QWORD [rbp-4]");
+   emitInstruction(c, 0, "mov rdx, QWORD [rbp-4]");
 }
 
 void
@@ -377,25 +399,25 @@ emitExpression(Codegen* c, AstNode* node) {
 
       if (node->type == Ast_ADD) {
          needsRegister(c, &r0);
-         emitInstruction(c, "add %s, %s", registerString32(c, r0), registerString32(c, r1));
+         emitInstruction(c, child0->line_number, "add %s, %s", registerString32(c, r0), registerString32(c, r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_SUB) {
          needsRegister(c, &r0);
-         emitInstruction(c, "sub %s, %s", registerString32(c, r0), registerString32(c, r1));
+         emitInstruction(c, child0->line_number, "sub %s, %s", registerString32(c, r0), registerString32(c, r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_MUL || node->type == Ast_DIV) {
          char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
-            emitInstruction(c, "mov rax, %s", registerString32(c, r0));
+            emitInstruction(c, child0->line_number, "mov rax, %s", registerString32(c, r0));
          }
 
-         emitInstruction(c, "%s %s", op, registerString32(c, r1));
+         emitInstruction(c, node->line_number, "%s %s", op, registerString32(c, r1));
          result = allocateRegister();
-         emitInstruction(c, "mov %s, rax", registerString32(c, result));
+         emitInstruction(c, node->line_number, "mov %s, rax", registerString32(c, result));
          freeRegister(r0);
          freeRegister(r1);
       }
@@ -407,14 +429,14 @@ emitExpression(Codegen* c, AstNode* node) {
          RegisterValue* left = codegenEmit(c, node->child);
          RegisterValue* right = codegenEmit(c, node->child->sibling);
          if (node->type == Ast_EQUALS)
-            emitInstruction(c, "test %s, %s", registerString32(c, left), registerString(c, right));
+            emitInstruction(c, node->line_number, "test %s, %s", registerString32(c, left), registerString(c, right));
          else
-            emitInstruction(c, "cmp %s, %s", registerString32(c, left), registerString(c, right));
+            emitInstruction(c, node->line_number, "cmp %s, %s", registerString32(c, left), registerString(c, right));
          result = allocateRegister();
          if (node->type == Ast_GREATER) {
-            emitInstruction(c, "setg al");
-            emitInstruction(c, "and al, 0x1", registerString(c, result));
-            emitInstruction(c, "movzx %s, al", registerString32(c, result));
+            emitInstruction(c, node->line_number, "setg al");
+            emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
          } else {
             Assert(!"Implement this");
          }
@@ -426,7 +448,7 @@ emitExpression(Codegen* c, AstNode* node) {
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister();
       PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(c, r), node->tok->value.integer);
-      emitInstruction(c, asm_line);
+      emitInstruction(c, node->line_number, asm_line);
       result = r;
    }
    else if (node->type == Ast_ID) {
@@ -434,7 +456,7 @@ emitExpression(Codegen* c, AstNode* node) {
       char asm_line[LINE_MAX] = {0};
       RegisterValue* r = allocateRegister();
       PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(c, r), offset);
-      emitInstruction(c, asm_line);
+      emitInstruction(c, node->line_number, asm_line);
       result = r;
    }
    return result;
@@ -448,9 +470,9 @@ emitStatement(Codegen* c, AstNode* stmt) {
          if (stmt->child) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
-               emitInstruction(c, "mov rax, %s", registerString(c, r));
+               emitInstruction(c, stmt->line_number, "mov rax, %s", registerString(c, r));
                // TODO: Use local labels?
-               emitInstruction(c, "jmp func_end");
+               emitInstruction(c, stmt->line_number, "jmp func_end");
             }
          }
       } break;
@@ -466,19 +488,20 @@ emitStatement(Codegen* c, AstNode* stmt) {
          int offset = c->scope->stack_size + 4;
          c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
          c->scope->stack_size += 4;
-         emitInstruction(c, "mov DWORD [rbp-0x%x], 0x%x", offset, value);
+         emitInstruction(c, stmt->line_number, "mov DWORD [rbp-0x%x], 0x%x", offset, value);
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
          AstNode* then = cond->sibling;
          RegisterValue* cv = codegenEmit(c, cond);
+         needsRegister(c, &cv);
          // TODO: Treat <,<=,>,>=,== comparisons differently?
-         emitInstruction(c, "cmp %s, 0x0", registerString32(c, cv));
+         emitInstruction(c, stmt->line_number, "cmp %s, 0x0", registerString32(c, cv));
          char else_label[256] = {0};
          snprintf(else_label, 256, ".else%d", c->scope->if_count++);
-         emitInstruction(c, "je %s", else_label);
+         emitInstruction(c, stmt->line_number, "je %s", else_label);
          codegenEmit(c, then);
-         emitInstruction(c, "%s:", else_label);
+         emitInstruction(c, stmt->line_number, "%s:", else_label);
       } break;
       default: {
          // Not handled
@@ -508,10 +531,10 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
    AstNode* compound = id->sibling;
 
    if (type && id && compound) {
-      emitInstruction(c, "global %s", id->tok->value.string);
-      emitInstruction(c, "%s:", id->tok->value.string);
-      emitInstruction(c, "push rbp");
-      emitInstruction(c, "mov rbp, rsp");
+      emitInstruction(c, node->line_number, "global %s", id->tok->value.string);
+      emitInstruction(c, node->line_number, "%s:", id->tok->value.string);
+      emitInstruction(c, node->line_number, "push rbp");
+      emitInstruction(c, node->line_number, "mov rbp, rsp");
       queueInstruction(c, "sub rsp, ");
 
       // Push
@@ -524,10 +547,10 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
 
       finishInstruction(c, stack);
 
-      emitInstruction(c, "func_end:");
-      emitInstruction(c, "add rsp, %d", stack);
-      emitInstruction(c, "pop rbp");
-      emitInstruction(c, "ret");
+      emitInstruction(c, 0, "func_end:");
+      emitInstruction(c, 0, "add rsp, %d", stack);
+      emitInstruction(c, 0, "pop rbp");
+      emitInstruction(c, 0, "ret");
    }
    else {
       codegenError("Funcdef: Invalid node in the tree.");

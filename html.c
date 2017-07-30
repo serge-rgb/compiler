@@ -29,7 +29,7 @@ htmlBegin(Html* html) {
 void
 htmlEmit(Html* html, char* str, char* hidden) {
    char instr[128] = {0};
-   snprintf(instr, 128, "instr%d", html->instr_count);
+   snprintf(instr, 128, "instr%d", html->instr_count++);
    char out[1024] = {0};
    snprintf(out, 1024,
            "<p onclick=\"show('%s')\">%s</p>"

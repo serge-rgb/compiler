@@ -49,14 +49,16 @@ struct Token_s {
       int   integer;
    } value;
 
+   u64 line_number;
+
    Token*    next;
 };
 
-#define FILE_STREAM_BUFFER_SIZE 128
 typedef struct FileStream_s {
+   // TODO: Use a buffer to minimize calls to fwrite and friends.
    FILE* fd;
+   u64 line_number;
 } FileStream;
-
 
 b32
 fileStreamInit(FileStream* fs, char* fname) {
@@ -64,6 +66,7 @@ fileStreamInit(FileStream* fs, char* fname) {
    b32 result = false;
    if (fd) {
       fs->fd = fd;
+      fs->line_number = 1;
       result = true;
    }
    return result;
@@ -87,6 +90,7 @@ fileStreamRead(FileStream* fs) {
    if (fileStreamHasContent(fs)) {
       size_t read = fread(&result, sizeof(char), 1, fs->fd);
       Assert(read);
+      fs->line_number += (result == '\n');
    }
    else {
       Assert(!"We need to read from the file and fill the buffer again.");
@@ -101,6 +105,15 @@ fileStreamPeek(FileStream* fs) {
    Assert(read);
    fseek(fs->fd, -1, SEEK_CUR);
    return result;
+}
+
+void fileStreamClose(FileStream* fs) {
+   if (fs->fd) {
+      fclose(fs->fd);
+   }
+   else {
+      fprintf(stderr, "WARNING: Trying to close NULL file descriptor.");
+   }
 }
 
 
@@ -167,8 +180,6 @@ isPunctuator(FileStream* fs) {
          }
       }
    }
-
-
 
    return result;
 }
@@ -325,6 +336,7 @@ getToken(Arena* a, FileStream* fs) {
          t.value.string = str;
       }
    }
+   t.line_number = fs->line_number;
    return t;
 }
 

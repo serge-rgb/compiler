@@ -111,7 +111,7 @@ AstNode*
 primaryExpr(Parser* p) {
    AstNode* t   = NULL;
    Token*   tok = nextToken(p);
-   if (!tok) { return false; }
+   if (!tok) { return NULL; }
    if (tok->type == TokenType_NUMBER) {
       t       = newNode(p->arena);
       t->type = Ast_NUMBER;
@@ -124,6 +124,9 @@ primaryExpr(Parser* p) {
    }
    // TODO: other constants, string literals
    else {
+   }
+   if (t) {
+      t->line_number = tok->line_number;
    }
    return t;
 }
@@ -341,7 +344,7 @@ parseDeclarationSpecifiers(Parser* p) {
 
    if (t->type == TokenType_KEYWORD) {
 
-      result = makeAstNode(p->arena, Ast_KEYWORD, NULL, NULL);
+      result = makeAstNodeWithLineNumber(p->arena, Ast_KEYWORD, NULL, NULL, t->line_number);
       int v = t->value.integer;
       // Storage class specifiers
       if (v == Keyword_typedef ||
@@ -369,7 +372,7 @@ parseDeclarator(Parser* p) {
    AstNode* r = NULL;
    Token* t = nextToken(p);
    if (t->type == TokenType_ID) {
-      r = makeAstNode(p->arena, Ast_ID, NULL, NULL);
+      r = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
       r->tok = t;
    }
    return r;
