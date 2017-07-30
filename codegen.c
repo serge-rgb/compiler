@@ -353,9 +353,7 @@ finishInstruction(Codegen* c, int val) {
 
    emitInstruction(c, 0, newasm);
    for (int i = 0; i < c->n_queue; ++i) {
-      emitInstruction(c, 0, c->queue[i]);
-      u64 line_number = c->queue_lines[i];
-      htmlEmit(c->html, newasm, codegenHtmlHidden(c, line_number));
+      emitInstruction(c, c->queue_lines[i], c->queue[i]);
    }
    c->n_queue = 0;
 }

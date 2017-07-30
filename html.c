@@ -19,6 +19,14 @@ htmlBegin(Html* html) {
            "    document.getElementById(showName).removeAttribute('hidden');\n"
            "}\n"
            "</script>"
+           "<style>"
+           "p {"
+           "font-family: \"Lucida Console\", Monaco, monospace;"
+           "}"
+           ".hidden {"
+           "color: blue;"
+           "}"
+           "</style>"
            "</head>"
            "<body>";
 
@@ -33,7 +41,7 @@ htmlEmit(Html* html, char* str, char* hidden) {
    char out[1024] = {0};
    snprintf(out, 1024,
            "<p onclick=\"show('%s')\">%s</p>"
-           "<p id='%s' hidden> %s </p>",
+           "<p id='%s' class='hidden' hidden> ---- %s </p>",
             instr, str, instr, hidden);
    fwrite(out, 1, strlen(out), html->fd);
 }
