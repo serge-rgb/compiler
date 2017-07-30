@@ -467,11 +467,11 @@ parseStatement(Parser* p) {
    // compound
    // expression
    //
-   if ((stmt = parseCompoundStatement(p))) {
+   if ((stmt = parseCompoundStatement(p)) != NULL) {
 
    }
-   else if (((stmt = parseOrBacktrack(parseExpression, p)) && nextPunctuator(p, ';')) ||
-            (stmt = parseOrBacktrack(parseJumpStatement, p)) ) {
+   else if (((stmt = parseOrBacktrack(parseExpression, p)) != NULL && nextPunctuator(p, ';')) ||
+            (stmt = parseOrBacktrack(parseJumpStatement, p)) != NULL) {
    }
    else if (nextKeyword(p, Keyword_if)) {
       if (nextPunctuator(p, '(')) {
@@ -506,8 +506,8 @@ parseTranslationUnit(Parser* p) {
    AstNode* declaration_specifier = NULL;
    AstNode* declarator = NULL;
 
-   if ((declaration_specifier = parseDeclarationSpecifiers(p)) &&
-       (declarator = parseDeclarator(p))) {
+   if ((declaration_specifier = parseDeclarationSpecifiers(p)) != NULL &&
+       (declarator = parseDeclarator(p)) != NULL) {
 
       AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);
 

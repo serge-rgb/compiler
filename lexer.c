@@ -62,7 +62,8 @@ typedef struct FileStream_s {
 
 b32
 fileStreamInit(FileStream* fs, char* fname) {
-   FILE* fd = fopen(fname, "r");
+   // TODO: Handle different types of file encodings.
+   FILE* fd = fopen(fname, "rb");
    b32 result = false;
    if (fd) {
       fs->fd = fd;
@@ -155,9 +156,9 @@ isPunctuator(FileStream* fs) {
 
    // Now check for multi-char punctuators.
    char c1, c2;
-   size_t read = 0;
-   read += fread(&c1, sizeof(char), 1, fs->fd);
-   read += fread(&c2, sizeof(char), 1, fs->fd);
+   int read = 0;
+   read += (int)fread(&c1, sizeof(char), 1, fs->fd);
+   read += (int)fread(&c2, sizeof(char), 1, fs->fd);
    fseek(fs->fd, -read - 1, SEEK_CUR);
    if (read == 2) for (Punctuator i = Punctuator_BEGIN + 1; i < Punctuator_END; ++i) {
       char* str = g_punctuator_strings[indexOfPunctuator(i)];
@@ -271,7 +272,7 @@ getToken(Arena* a, FileStream* fs) {
    if (!fileStreamHasContent(fs)) {
       return t;
    }
-   else if ((punctuator_token = isPunctuator(fs))) {
+   else if ((punctuator_token = isPunctuator(fs)) != 0) {
       if (punctuator_token && punctuator_token < ASCII_MAX) {
          t.type = TokenType_PUNCTUATOR;
          t.value.character = fileStreamRead(fs);

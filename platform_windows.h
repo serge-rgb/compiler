@@ -11,5 +11,5 @@
 #endif
 #endif
 
-#define PlatformAssert(expr) do { if (!(expr)) { __builtin_trap(); } }  while(0)
+#define PlatformAssert(expr) do { if (!(expr)) { __debugbreak(); } }  while(0)
 #define PlatformPrintString(...) sprintf_s(__VA_ARGS__)
