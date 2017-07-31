@@ -10,15 +10,15 @@ typedef enum Keyword_n {
 #undef X
 } Keyword;
 
-typedef enum TokenType_n {
-   TokenType_NONE,
-   TokenType_PUNCTUATOR,
-   TokenType_PUNCTUATOR_MULTICHAR,
-   TokenType_STRING_LITERAL,
-   TokenType_NUMBER,
-   TokenType_ID,
-   TokenType_KEYWORD = 0xF000,
-} TokenType;
+typedef enum TType_n {
+   TType_NONE,
+   TType_PUNCTUATOR,
+   TType_PUNCTUATOR_MULTICHAR,
+   TType_STRING_LITERAL,
+   TType_NUMBER,
+   TType_ID,
+   TType_KEYWORD = 0xF000,
+} TType;
 
 typedef enum Punctuator_n {
    Punctuator_BEGIN = /*...*/  128,  // ASCII codes are reserved for single-char tokens.
@@ -42,7 +42,7 @@ indexOfPunctuator(Punctuator p) {
 
 typedef struct Token_s Token;
 struct Token_s {
-   TokenType type;
+   TType type;
    union {
       u8    character;
       char* string;
@@ -252,15 +252,15 @@ identifyToken(Buffer* b, Token* out) {
 
    // If it starts with a digit, it's numerical.
    if (isDigit(*b->current)) {
-      out->type = TokenType_NUMBER;
+      out->type = TType_NUMBER;
       // TODO: Different kinds of numbers..
    }
    else if ((kw = identifyKeyword(b), kw != -1)) {
-      out->type = TokenType_KEYWORD | kw;
+      out->type = TType_KEYWORD | kw;
       out->value.integer = kw;
    }
    else {
-      out->type = TokenType_ID;
+      out->type = TType_ID;
    }
 }
 
@@ -274,23 +274,23 @@ getToken(Arena* a, FileStream* fs) {
    }
    else if ((punctuator_token = isPunctuator(fs)) != 0) {
       if (punctuator_token && punctuator_token < ASCII_MAX) {
-         t.type = TokenType_PUNCTUATOR;
+         t.type = TType_PUNCTUATOR;
          t.value.character = fileStreamRead(fs);
       }
       else {
-         t.type = TokenType_PUNCTUATOR_MULTICHAR;
+         t.type = TType_PUNCTUATOR_MULTICHAR;
          Assert(punctuator_token < 255);
          t.value.character = (u8)punctuator_token;
          // Advance the buffer by the length of othe operator.
          char* punctuator_str = g_punctuator_strings[indexOfPunctuator(punctuator_token)];
          size_t len = strlen(punctuator_str);
-         fseek(fs->fd, len, SEEK_CUR);
+         fseek(fs->fd, (long)len, SEEK_CUR);
       }
    }
    else if (fileStreamPeek(fs) == '\"') {
       // We are inside a string. Parse until we get the end of the string.
       // TODO: Escape characters.
-      t.type = TokenType_STRING_LITERAL;
+      t.type = TType_STRING_LITERAL;
       Buffer token_buffer = {0};
       fseek(fs->fd, 1, SEEK_CUR);
       char* tmp = "String literals not working atm ;)";
@@ -320,7 +320,7 @@ getToken(Arena* a, FileStream* fs) {
       identifyToken(&token_buffer, &t);
 
       char* str = getStringFromBuffer(&token_buffer);
-      if (t.type == TokenType_NUMBER) {
+      if (t.type == TType_NUMBER) {
          int val = 0;
          ErrorCode err = parseInt(str, &val);
          if (err != SUCCESS) {
@@ -330,10 +330,10 @@ getToken(Arena* a, FileStream* fs) {
          }
          t.value.integer = val;
       }
-      else if (t.type & TokenType_KEYWORD) {
-         t.type = TokenType_KEYWORD;
+      else if (t.type & TType_KEYWORD) {
+         t.type = TType_KEYWORD;
       }
-      else if (t.type == TokenType_ID)  {
+      else if (t.type == TType_ID)  {
          t.value.string = str;
       }
    }
@@ -345,23 +345,23 @@ void
 tokenPrint(Token* token) {
    printf("[");
    switch(token->type) {
-      case TokenType_PUNCTUATOR: {
+      case TType_PUNCTUATOR: {
          printf("PUNCTUATOR %c", (char)token->value.character);
       } break;
-      case TokenType_PUNCTUATOR_MULTICHAR: {
+      case TType_PUNCTUATOR_MULTICHAR: {
          printf("PUNCTUATOR: %s", g_punctuator_strings[indexOfPunctuator(token->value.character)]);
       } break;
-      case TokenType_KEYWORD: {
+      case TType_KEYWORD: {
          printf("KEYWORD %s", g_keywords[token->value.integer]);
       } break;
-      case TokenType_NUMBER: {
+      case TType_NUMBER: {
          // TODO: Support floating point..
          printf("NUMBER: %i", token->value.integer);
       } break;
-      case TokenType_ID: {
+      case TType_ID: {
          printf("ID: %s", token->value.string);
       } break;
-      case TokenType_STRING_LITERAL: {
+      case TType_STRING_LITERAL: {
          printf("STRING: \"%s\"", token->value.string);
       } break;
       default: {
@@ -377,7 +377,7 @@ tokenize(Arena* a, FileStream* fs) {
    Token* tokens = t;
    while (fileStreamHasContent(fs)) {
       *t = getToken(a, fs);
-      if (t->type != TokenType_NONE) {
+      if (t->type != TType_NONE) {
          t->next = AllocType(a, Token);
          t = t->next;
       }

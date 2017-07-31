@@ -31,9 +31,9 @@ b32
 peekPunctuator(Parser* p, int c) {
    b32 result = false;
    if (c < 128) {
-      result = p->token->type == TokenType_PUNCTUATOR && p->token->value.character == c;
+      result = p->token->type == TType_PUNCTUATOR && p->token->value.character == c;
    } else {
-      result = p->token->type == TokenType_PUNCTUATOR_MULTICHAR && p->token->value.character == c;
+      result = p->token->type == TType_PUNCTUATOR_MULTICHAR && p->token->value.character == c;
    }
    return result;
 }
@@ -62,7 +62,7 @@ nextToken(Parser* p) {
 Token*
 nextKeyword(Parser* p, int keyword) {
    Token* tok = nextToken(p);
-   if (tok->type == TokenType_KEYWORD && tok->value.integer == keyword) {
+   if (tok->type == TType_KEYWORD && tok->value.integer == keyword) {
       return tok;
    }
    else {
@@ -112,12 +112,12 @@ primaryExpr(Parser* p) {
    AstNode* t   = NULL;
    Token*   tok = nextToken(p);
    if (!tok) { return NULL; }
-   if (tok->type == TokenType_NUMBER) {
+   if (tok->type == TType_NUMBER) {
       t       = newNode(p->arena);
       t->type = Ast_NUMBER;
       t->tok  = tok;
    }
-   else if (tok->type == TokenType_ID) {
+   else if (tok->type == TType_ID) {
       t       = newNode(p->arena);
       t->type = Ast_ID;
       t->tok  = tok;
@@ -136,7 +136,7 @@ postfixExpr(Parser* p) {
    AstNode*  t = NULL;
    if ((t = primaryExpr(p), t)) {
       Token* tok = nextToken(p);
-      if (tok->type == TokenType_PUNCTUATOR && tok->value.character == '[') {
+      if (tok->type == TType_PUNCTUATOR && tok->value.character == '[') {
          parseError ("I don't know how to continue");
       }
       else if (tok) {
@@ -211,7 +211,7 @@ AstNode*
 logicalAndExpr(Parser* p) {
    AstNode*       left = inclusiveOrExpr(p);
    if (left) {
-      while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == LOGICAL_AND) {
+      while (p->token->type == TType_PUNCTUATOR && p->token->value.character == LOGICAL_AND) {
          nextToken(p);          // Pop the logical and.
          AstNode* right      = inclusiveOrExpr(p);
          if (!right) { parseError("Expected expression after `&&`."); }
@@ -225,7 +225,7 @@ AstNode*
 logicalOrExpr(Parser* p) {
    AstNode*       left = logicalAndExpr(p);
    if (left) {
-      while (p->token->type == TokenType_PUNCTUATOR && p->token->value.character == LOGICAL_OR) {
+      while (p->token->type == TType_PUNCTUATOR && p->token->value.character == LOGICAL_OR) {
          nextToken(p);          // Pop the logical or
          AstNode* right      = logicalAndExpr(p);
          if (!right) { parseError("Expected expression after `||`"); }
@@ -342,7 +342,7 @@ parseDeclarationSpecifiers(Parser* p) {
    Token* bt = t;
    AstNode* result = NULL;
 
-   if (t->type == TokenType_KEYWORD) {
+   if (t->type == TType_KEYWORD) {
 
       result = makeAstNodeWithLineNumber(p->arena, Ast_KEYWORD, NULL, NULL, t->line_number);
       int v = t->value.integer;
@@ -371,7 +371,7 @@ AstNode*
 parseDeclarator(Parser* p) {
    AstNode* r = NULL;
    Token* t = nextToken(p);
-   if (t->type == TokenType_ID) {
+   if (t->type == TType_ID) {
       r = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
       r->tok = t;
    }
@@ -419,7 +419,7 @@ AstNode*
 parseJumpStatement(Parser* p) {
    AstNode* stmt = NULL;
    Token* t = nextToken(p);
-   if (t->type == TokenType_KEYWORD && t->value.integer == Keyword_return) {
+   if (t->type == TType_KEYWORD && t->value.integer == Keyword_return) {
       AstNode* expr = parseOrBacktrack(parseExpression, p);
       stmt = makeAstNode(p->arena, Ast_RETURN, expr, NULL);
       expectSemicolon(p);
