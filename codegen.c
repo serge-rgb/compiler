@@ -250,8 +250,11 @@ void
 codegenInit(void) {
    g_asm = fopen("out.asm", "w");
    char* prelude =
-      //"extern ExitProcess\n"
+#ifdef _WIN32
+      "extern ExitProcess\n"
+#else
       "extern _exit\n"
+#endif
       "section .text\n"
       "global _start\n"
       "_start:\n"
@@ -263,7 +266,10 @@ codegenInit(void) {
       "mov ebx, eax\n"
       "mov eax, 0x1\n"
       "int 0x80\n"
+#elif defined(_WIN32)
+      "call ExitProcess\n";
 #else
+      // assume linux
       // libc cleanup
       "mov edi, eax\n"
       "call _exit\n"
