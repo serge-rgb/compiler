@@ -1,4 +1,9 @@
 int
+myFunction() {
+   return 0;
+}
+
+int
 main() {
    int my_pretty_variable = 42;
    int another_var = 1;

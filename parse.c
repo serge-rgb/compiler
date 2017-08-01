@@ -492,12 +492,7 @@ parseStatement(Parser* p) {
 }
 
 AstNode*
-parseTranslationUnit(Parser* p) {
-   // How to parse a function declaration
-   // 1. declaration specifier
-   // 2. declarator
-   // 3. declaration list (one or more declarations)
-   // 4. compound statement
+parseFunctionDefinition(Parser* p) {
    AstNode* result = NULL;
 
    AstNode* declaration_specifier = NULL;
@@ -520,4 +515,28 @@ parseTranslationUnit(Parser* p) {
    }
    return result;
 
+}
+
+AstNode*
+parseTranslationUnit(Parser* p) {
+   // How to parse a function declaration
+   // 1. declaration specifier
+   // 2. declarator
+   // 3. declaration list (one or more declarations)
+   // 4. compound statement
+
+   // Return a list of declarations and function definitions.
+   //
+   AstNode* result = NULL;
+   AstNode** cur = &result;
+   while (true) {
+      *cur = parseFunctionDefinition(p);
+      if (*cur) {
+         cur = &((*cur)->sibling);
+      } else {
+         break;
+      }
+   }
+
+   return result;
 }

@@ -31,7 +31,7 @@ main(void) {
 
       AstNode* tree = parseTranslationUnit(&p);
       if (tree) {
-         codegenEmit(&codegen, tree);
+         codegenTranslationUnit(&codegen, tree);
       }
       deallocate(&tmp_parser_arena);
       printf("FileStream says it's on line %llu\n", file_stream.line_number);

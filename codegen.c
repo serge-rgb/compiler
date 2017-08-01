@@ -560,6 +560,14 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
    }
 }
 
+void
+codegenTranslationUnit(Codegen* c, AstNode* node) {
+   while (node) {
+      codegenEmit(c, node);
+      node = node->sibling;
+   }
+}
+
 RegisterValue*
 codegenEmit(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
