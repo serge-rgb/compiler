@@ -22,6 +22,7 @@ main(void) {
       Arena tmp_parser_arena = {0};
       p.arena = &tmp_parser_arena;
       p.token = tokens;
+      p.file_name = file_name;
 
       Codegen codegen = {0};
       codegen.file_name = file_name;

@@ -4,6 +4,7 @@ typedef struct Parser_s {
    Token* token;  // The next token to parse.
    Arena* arena;
    AstNode* tree;
+   char* file_name;
 } Parser;
 
 
@@ -22,7 +23,7 @@ parseError(char* msg, ...) {
    va_start(args, msg);
    char buffer[LINE_MAX] = {0};
    vsnprintf(buffer, LINE_MAX, msg, args);
-   fprintf(stderr, "Parse error: %s\n", buffer);
+   fprintf(stderr, "Syntax error: %s\n", buffer);
    va_end(args);
    exit(1);
 }
@@ -82,9 +83,9 @@ nextPunctuator(Parser* p, int c) {
 
 
 void
-expectSemicolon(Parser* p) {
-   if (!nextPunctuator(p, ';')) {
-      parseError("Expected semicolon!"); // TODO: Need to pass some context around to support good syntax error handling.
+expectPunctuator(Parser* p, int punctuator) {
+   if (!nextPunctuator(p, punctuator)) {
+      parseError("%s: %d Expected '%c'", p->file_name, p->token->line_number, punctuator);
    }
 }
 
@@ -405,9 +406,7 @@ parseDeclaration(Parser* p) {
       else {
          backtrack(p, bt);
       }
-      if (!nextPunctuator(p, ';')) {
-         parseError("Expected semicolon at the end of declaration.");
-      }
+      expectPunctuator(p, ';');
       result = makeAstNode(p->arena, Ast_DECLARATION, identifier, initializer);
    }
    return result;
@@ -422,7 +421,7 @@ parseJumpStatement(Parser* p) {
    if (t->type == TType_KEYWORD && t->value.integer == Keyword_return) {
       AstNode* expr = parseOrBacktrack(parseExpression, p);
       stmt = makeAstNode(p->arena, Ast_RETURN, expr, NULL);
-      expectSemicolon(p);
+      expectPunctuator(p, ';');
    }
    return stmt;
 }
@@ -478,9 +477,7 @@ parseStatement(Parser* p) {
          // TODO: There should be checking of `if` conditions.
          // For instance, emit a warning when using = instead of ==.
          AstNode* cond = parseExpression(p);
-         if (!nextPunctuator(p, ')')) {
-            parseError("Malformed if statement");
-         }
+         expectPunctuator(p, ')');
          AstNode* then = parseStatement(p);
          if (then) {
             stmt = makeAstNode(p->arena, Ast_IF, cond, then);

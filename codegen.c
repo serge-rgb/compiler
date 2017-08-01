@@ -475,8 +475,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
                emitInstruction(c, stmt->line_number, "mov rax, %s", registerString(c, r));
-               // TODO: Use local labels?
-               emitInstruction(c, stmt->line_number, "jmp func_end");
+               emitInstruction(c, stmt->line_number, "jmp .func_end");
             }
          }
       } break;
@@ -551,7 +550,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
 
       finishInstruction(c, stack);
 
-      emitInstruction(c, 0, "func_end:");
+      emitInstruction(c, 0, ".func_end:");
       emitInstruction(c, 0, "add rsp, %d", stack);
       emitInstruction(c, 0, "pop rbp");
       emitInstruction(c, 0, "ret");
