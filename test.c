@@ -9,6 +9,8 @@ main() {
    int another_var = 1;
    int yup = 2;
 
+   myFunction();
+
    if (1) {
       return 3;
    }

@@ -194,7 +194,10 @@ codegenError(char* msg, ...) {
    vsnprintf(buffer, LINE_MAX, msg, args);
    fprintf(stderr, "Codegen error: %s\n", buffer);
    va_end(args);
-   exit(1);
+
+   BreakHere;
+
+   exit(-1);
 }
 
 int
@@ -261,15 +264,13 @@ codegenInit(void) {
       "mov rbp, rsp\n"
       "push rbp\n"
       "call main\n"
-      // Linux exit syscall.
 #if defined(__linux__)
       "mov ebx, eax\n"
       "mov eax, 0x1\n"
-      "int 0x80\n"
+      "int 0x80\n"  // Linux exit syscall.
 #elif defined(_WIN32)
       "call ExitProcess\n";
-#else
-      // assume linux
+#else  // macos
       // libc cleanup
       "mov edi, eax\n"
       "call _exit\n"

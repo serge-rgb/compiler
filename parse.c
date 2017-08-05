@@ -128,24 +128,48 @@ primaryExpr(Parser* p) {
    }
    if (t) {
       t->line_number = tok->line_number;
+   } else {
+      // Backtrack
+      backtrack(p, tok);
    }
    return t;
 }
 
 AstNode*
 postfixExpr(Parser* p) {
-   AstNode*  t = NULL;
-   if ((t = primaryExpr(p), t)) {
-      Token* tok = nextToken(p);
-      if (tok->type == TType_PUNCTUATOR && tok->value.character == '[') {
-         parseError ("I don't know how to continue");
+   AstNode* left = primaryExpr(p);
+   while (left) {
+      AstNode* right = NULL;
+
+      if (nextPunctuator(p, '[')) {
+         Assert(!"NOT IMPL");
       }
-      else if (tok) {
-         backtrack(p, tok);
-         return t;
+      else if (nextPunctuator(p, '(')) {
+         // Function call!
+         if (nextPunctuator(p, '(')) {
+            Assert(!"Func call!");
+         }
+         else {
+            parseError("Expected ) in function call.");
+         }
+      }
+      else if (nextPunctuator(p, '.')) {
+         Assert(!"NOT IMPL");
+      }
+      else if (nextPunctuator(p, ARROW)) {
+         Assert(!"NOT IMPL");
+      }
+      else if (nextPunctuator(p, INCREMENT)) {
+         Assert(!"NOT IMPL");
+      }
+      else if (nextPunctuator(p, DECREMENT)) {
+         Assert(!"NOT IMPL");
+      }
+      if (!right) {
+         break;
       }
    }
-   return t;
+   return left;
 }
 
 AstNode*
@@ -160,6 +184,10 @@ castExpr(Parser* p) {
    t = unaryExpr(p);
    return t;
 }
+
+/**
+ * TODO: Write documentation about the way we handle left recursion in the C grammar.
+ **/
 
 AstNode*
 multiplicativeExpr(Parser* p) {

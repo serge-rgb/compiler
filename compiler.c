@@ -8,7 +8,7 @@ else  # Assume it's macOS
    clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f macho64 out.asm && ld -arch x86_64 -e _start out.o /usr/lib/libSystem.dylib -o out
 fi
 
-exit $?
+exit 0
 
 #endif
 
