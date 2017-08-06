@@ -9,6 +9,8 @@ typedef enum AstType_n {
    Ast_ID,
 
    Ast_FUNCDEF,
+   Ast_FUNCCALL,
+
    Ast_DECLARATION,
 
    Ast_RETURN,

@@ -58,7 +58,7 @@ allocate(Arena* a, size_t num_bytes) {
          ptr = a->block;  // Returning the start of the block.
       }
       else {
-         // TODO: Fail gracefully.
+         // TODO(medium): Fail gracefully.
       }
    }
    return ptr;

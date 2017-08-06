@@ -21,6 +21,13 @@ typedef int64_t i64;
 #define Megabytes(n) Kilobytes(1024)
 #define Gigabytes(n) Megabytes(1024)
 
+// Next multiple of p which is greater than v, or v if it is already aligned.
+#define AlignPow2(v, p) ( \
+                          ((v) & (p)-1 ) ? \
+                          (((v) + (p)) & ~((p)-1)) : \
+                          (v) \
+                        )
+
 #define Assert(expr) PlatformAssert(expr)
 
 #define PrintString(...) PlatformPrintString(__VA_ARGS__)

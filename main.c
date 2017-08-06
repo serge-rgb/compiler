@@ -28,6 +28,19 @@ main(void) {
       codegen.file_name = file_name;
       codegen.html = &html;
       codegen.arena = &tmp_parser_arena;
+#if defined(__APPLE__)
+   #if defined(__MACH__)
+      codegen.config |= Config_TARGET_MACOS;
+   #else
+      #error APPLE target not mac OS
+   #endif
+#elif defined(__linux__)
+      codegen.config |= Config_TARGET_LINUX;
+#elif defined(__WIN32)
+      codegen.config |= Config_TARGET_WIN;
+#else
+   #error Cannot determine target
+#endif
 
       AstNode* tree = parseTranslationUnit(&p);
       if (tree) {

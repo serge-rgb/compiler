@@ -23,6 +23,9 @@ parseError(char* msg, ...) {
    va_start(args, msg);
    char buffer[LINE_MAX] = {0};
    vsnprintf(buffer, LINE_MAX, msg, args);
+
+   BreakHere;
+
    fprintf(stderr, "Syntax error: %s\n", buffer);
    va_end(args);
    exit(1);
@@ -123,7 +126,7 @@ primaryExpr(Parser* p) {
       t->type = Ast_ID;
       t->tok  = tok;
    }
-   // TODO: other constants, string literals
+   // TODO(long): other constants, string literals
    else {
    }
    if (t) {
@@ -145,9 +148,9 @@ postfixExpr(Parser* p) {
          Assert(!"NOT IMPL");
       }
       else if (nextPunctuator(p, '(')) {
-         // Function call!
-         if (nextPunctuator(p, '(')) {
-            Assert(!"Func call!");
+         if (nextPunctuator(p, ')')) {
+            right = left;
+            left = makeAstNode(p->arena, Ast_FUNCCALL, left, NULL);
          }
          else {
             parseError("Expected ) in function call.");
@@ -186,7 +189,7 @@ castExpr(Parser* p) {
 }
 
 /**
- * TODO: Write documentation about the way we handle left recursion in the C grammar.
+ * TODO(medium): Write documentation about the way we handle left recursion in the C grammar.
  **/
 
 AstNode*
@@ -232,7 +235,7 @@ additiveExpr(Parser* p) {
 
 AstNode*
 inclusiveOrExpr(Parser* p) {
-   // TODO: Implement bit or.
+   // TODO(long): Implement bit or.
    return additiveExpr(p);
 }
 
@@ -299,7 +302,7 @@ conditionalExpr(Parser* p) {
 AstNode*
 assignmentExpr(Parser* p) {
    AstNode* t = conditionalExpr(p);
-   // TODO: unaryExpr assignmentOperator assignmentExpr
+   // TODO(long): unaryExpr assignmentOperator assignmentExpr
    return t;
 }
 
@@ -315,7 +318,7 @@ relationalExpression(Parser* p) {
          AstNode* right = relationalExpression(p);
          if (!right) { parseError("Expected expression after relational operator."); }
          AstType t = Ast_NONE;
-         // TODO: Ast types should reuse keyword and punctuator values.
+         // TODO(medium): Ast types should reuse keyword and punctuator values.
          switch (op->value.character) {
             case '<': {
                 t = Ast_LESS;
@@ -339,7 +342,7 @@ relationalExpression(Parser* p) {
 AstNode*
 equalityExpression(Parser* p) {
    AstNode* left                   = parseOrBacktrack(relationalExpression, p);
-   // TODO: This left-recursion elimination pattern is repeating a lot.
+   // TODO(long): This left-recursion elimination pattern is repeating a lot.
    // Would it be a good tradeoff to abstract it away?
    if (left) {
       while (nextPunctuator(p, EQUALS)) {
@@ -414,7 +417,7 @@ parseDeclarationList(Parser* p) {
 
 AstNode*
 parseInitializer(Parser* p) {
-   // TODO: Initializers.
+   // TODO(long): Initializers.
    AstNode* node = assignmentExpr(p);
    return node;
 }
@@ -489,7 +492,7 @@ parseCompoundStatement(Parser* p) {
 AstNode*
 parseStatement(Parser* p) {
    AstNode* stmt = NULL;
-   // TODO: Parse the different kinds of statements in the correct order.
+   // TODO(medium): Parse the different kinds of statements in the correct order.
    // label
    // compound
    // expression
@@ -502,7 +505,7 @@ parseStatement(Parser* p) {
    }
    else if (nextKeyword(p, Keyword_if)) {
       if (nextPunctuator(p, '(')) {
-         // TODO: There should be checking of `if` conditions.
+         // TODO(long): There should be checking of `if` conditions.
          // For instance, emit a warning when using = instead of ==.
          AstNode* cond = parseExpression(p);
          expectPunctuator(p, ')');
@@ -514,8 +517,7 @@ parseStatement(Parser* p) {
          }
       }
    }
-   // TODO:
-   //   iteration-statement
+   // TODO(long): iteration-statement
    return stmt;
 }
 
@@ -531,7 +533,7 @@ parseFunctionDefinition(Parser* p) {
 
       AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);
 
-      // TODO: Support something other than no-params
+      // TODO(long): Support something other than no-params
       nextPunctuator(p, '(');
       nextPunctuator(p, ')');
 

@@ -1,3 +1,4 @@
+
 static FILE* g_asm;
 typedef enum RegisterValueType_n {
    RegisterValueType_REGISTER,
@@ -61,6 +62,11 @@ struct Scope_s {
    Scope* prev;
 };
 
+
+typedef enum CodegenConfigFlags_n {
+   Config_TARGET_MACOS = (1<<1),
+} CodegenConfigFlags;
+
 #define CODEGEN_QUEUE_SIZE 1024
 
 typedef struct Codegen_s {
@@ -73,6 +79,7 @@ typedef struct Codegen_s {
    Html*  html;
    char*  file_name;
    u64    last_line_number;
+   u32    config;   // CodegenConfigFlags enum
 } Codegen;
 
 static
@@ -140,8 +147,38 @@ RegisterValue g_registers[] = {
 
 };
 
+// mac OS callee-save (e.g. non-volatile) registers:
+// rbp rbx r12 thru r15
+
+// Save all non-volatile registers.
+// (Windows: RDI, RSI, RBX, RBP, RSP)
+//
+
+static RegisterValue* g_darwin_non_volatile_registers[] = {
+   // Not including RBP here
+   &g_registers[Reg_RBX],
+   &g_registers[Reg_R12],
+   &g_registers[Reg_R13],
+   &g_registers[Reg_R14],
+   &g_registers[Reg_R15],
+};
+
+
 // Forward declaration for recursive calls.
 RegisterValue* codegenEmit(Codegen* c, AstNode* node);
+
+
+RegisterValue** getNonVolatileRegisters(Codegen* c, size_t* out_size) {
+   RegisterValue** result = NULL;
+   if (c->config & Config_TARGET_MACOS) {
+      Assert(out_size);
+      *out_size = ArrayCount(g_darwin_non_volatile_registers);
+      result = g_darwin_non_volatile_registers;
+   } else {
+      Assert(!"Not implemented.");
+   }
+   return result;
+}
 
 char*
 registerStringWithBitness(Codegen* c, RegisterValue* r, int bitness) {
@@ -367,11 +404,12 @@ finishInstruction(Codegen* c, int val) {
 
 void
 pushScope(Codegen* c) {
+   // TODO(medium): Different kinds of scope (6.2.1)
    Scope* prev_scope = c->scope;
    c->scope = allocate(c->arena, sizeof(*c->scope));
    ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
-   emitInstruction(c, 0, "mov rdx, QWORD [rbp-4]");
+   emitInstruction(c, 0, "mov rdx, QWORD [rbp - 0x4]");
 }
 
 void
@@ -484,28 +522,34 @@ emitStatement(Codegen* c, AstNode* stmt) {
          char* id_str = stmt->child->tok->value.string;
          u64 hash = hashStr(id_str, strlen(id_str));
          if (c->scope->offsets[hash % SCOPE_HASH_SIZE]) {
-            // TODO: Finish implementing hash map...
+            // TODO(medium): Finish implementing hash map...
             Assert(!"Hash map collision handling not implemented.");
          }
          int value = stmt->child->sibling->tok->value.integer;
-         // TODO: A value different than four for different kinds of types.
+         // TODO(long): A value different than four for different kinds of types.
          int offset = c->scope->stack_size + 4;
          c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
          c->scope->stack_size += 4;
-         emitInstruction(c, stmt->line_number, "mov DWORD [rbp-0x%x], 0x%x", offset, value);
+         emitInstruction(c, stmt->line_number, "mov DWORD [rbp - 0x%x], 0x%x", offset, value);
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
          AstNode* then = cond->sibling;
          RegisterValue* cv = codegenEmit(c, cond);
          needsRegister(c, &cv);
-         // TODO: Treat <,<=,>,>=,== comparisons differently?
+         // TODO(long): Treat <,<=,>,>=,== comparisons differently?
          emitInstruction(c, stmt->line_number, "cmp %s, 0x0", registerString32(c, cv));
          char else_label[256] = {0};
          snprintf(else_label, 256, ".else%d", c->scope->if_count++);
          emitInstruction(c, stmt->line_number, "je %s", else_label);
          codegenEmit(c, then);
          emitInstruction(c, stmt->line_number, "%s:", else_label);
+      } break;
+      // Expression statements.
+      case Ast_FUNCCALL: {
+         AstNode* func = stmt->child;
+         char* label = func->tok->value.string;
+         emitInstruction(c, stmt->line_number, "call %s", label);
       } break;
       default: {
          // Not handled
@@ -544,14 +588,30 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       // Push
       pushScope(c);
 
+      size_t non_volatiles_count = 0;
+      RegisterValue** non_volatiles = getNonVolatileRegisters(c, &non_volatiles_count);
+
+      for (size_t i = 0; i < non_volatiles_count; ++i) {
+         RegisterValue* r = non_volatiles[i];
+         r = NULL;
+      }
+
       emitCompoundStatement(c, compound);
 
       int stack = c->scope->stack_size;
+
+      // TODO(short): What is the stack alignment requirement for Linux/GCC?
+      stack = AlignPow2(stack, 16);
+      // TODO(short): On mac OS, the stack needs to be aligned to 32 or 64 byte boundaries when m256 or m512 values are passed on the stack.
+
       popScope(c);
 
       finishInstruction(c, stack);
 
       emitInstruction(c, 0, ".func_end:");
+
+      // Restore non-volatile registers.
+
       emitInstruction(c, 0, "add rsp, %d", stack);
       emitInstruction(c, 0, "pop rbp");
       emitInstruction(c, 0, "ret");
@@ -559,6 +619,13 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
    else {
       codegenError("Funcdef: Invalid node in the tree.");
    }
+}
+
+void
+emitFunctionCall(Codegen* c, AstNode* node) {
+   // Save all volatile registers which are bound.
+   // Call the function.
+   // Restore all volatile registers which are bound.
 }
 
 void
