@@ -1,21 +1,19 @@
 int
 myFunction() {
-   return 0;
+   return 42;
 }
 
 int
 main() {
    int my_pretty_variable = 42;
-   int another_var = 1;
-   int yup = 2;
-
-   myFunction();
 
    if (my_pretty_variable > 41) {
-      if (my_pretty_variable > 1) {
-         return my_pretty_variable;
+      if (my_pretty_variable < 1) {
+         return myFunction();
       }
-      return 0;
+      else {
+         return 1;
+      }
    }
-   return 1;
+   return 0;
 }

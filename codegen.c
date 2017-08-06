@@ -286,6 +286,8 @@ allocateRegister(Codegen* c) {
       }
    }
 
+   // TODO(long): Implement a graph coloring algorithm for register allocation.
+
    if (!result) {
       result = allocateStackRegister(c);
    }
@@ -318,7 +320,8 @@ codegenInit(Codegen* c) {
       "mov eax, 0x1\n"
       "int 0x80\n"  // Linux exit syscall.
 #elif defined(_WIN32)
-      "call ExitProcess\n";
+      "mov rcx, rax\n"
+      "call ExitProcess\n"
 #else  // macos
       // libc cleanup
       "mov edi, eax\n"
@@ -391,6 +394,20 @@ needsRegister(Codegen* c, RegisterValue** r) {
    }
 }
 
+RegisterValue*
+stashRegister(Codegen* c, RegisterValue* r) {
+   RegisterValue* stack = allocateStackRegister(c);
+   emitInstruction(c, 0, "mov %s, %s", registerString(c, stack), registerString(c, r));
+   r->bound = false;
+   return stack;
+}
+
+void
+stashPopRegister(Codegen* c, RegisterValue* r, RegisterValue* stack) {
+   emitInstruction(c, 0, "mov %s, %s", registerString(c, r), registerString(c, stack));
+   r->bound = true;
+}
+
 void
 incompleteInstruction(Codegen* c, char* waiting) {
    c->waiting = waiting;
@@ -425,7 +442,6 @@ pushScope(Codegen* c) {
    for (size_t i = 0; i < SCOPE_HASH_SIZE; ++i) {
       c->scope->offsets[i] = -1;
    }
-   c->scope->stack_size = 4;  // Leave space for EIP
    ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
    emitInstruction(c, 0, "mov rdx, QWORD [rbp - 0x4]");
@@ -444,7 +460,9 @@ nodeIsExpression(AstNode* node) {
        node->type == Ast_ADD || node->type == Ast_SUB ||
        node->type == Ast_EQUALS || node->type == Ast_LESS ||
        node->type == Ast_GREATER || node->type == Ast_LEQ ||
-       node->type == Ast_GEQ) {
+       node->type == Ast_GEQ ||
+       node->type == Ast_FUNCCALL ||
+       node->type == Ast_NUMBER || node->type == Ast_ID) {
       result = true;
    }
    return result;
@@ -455,9 +473,50 @@ emitExpression(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
    if (nodeIsExpression(node)) {
       AstNode* child0 = node->child;
-      AstNode* child1 = child0->sibling;
-      RegisterValue* r0 = codegenEmit(c, child0);
-      RegisterValue* r1 = codegenEmit(c, child1);
+      RegisterValue* r0 = NULL;
+      RegisterValue* r1 = NULL;
+
+      if (node->type == Ast_FUNCCALL) {
+         AstNode* func = node->child;
+         char* label = func->tok->value.string;
+         // Keep track of the volatile registers that were bound before we called the function
+         RegisterValue* stored[Reg_Count] = {0};
+         for (size_t i = 0; i < Reg_Count; ++i) {
+            RegisterValue* v = &g_registers[i];
+            if (v->bound && v->is_volatile) {
+               stored[i] = stashRegister(c, v);
+            }
+         }
+         emitInstruction(c, node->line_number, "call %s", label);
+         // Restore the volatile registers we saved.
+         for (size_t i = 0; i < Reg_Count; ++i) {
+            RegisterValue* v = &g_registers[i];
+            if (stored[i]) {
+               stashPopRegister(c, v, stored[i]);
+            }
+         }
+         result = &g_registers[Reg_RAX];
+      }
+      else if (node->type == Ast_NUMBER) {
+         char asm_line[LINE_MAX] = {0};
+         result = allocate(c->scope->arena, sizeof(RegisterValue));
+         result->type = RegisterValueType_IMMEDIATE;
+         result->immediate_value = node->tok->value.integer;
+      }
+      else if (node->type == Ast_ID) {
+         if (fitsInRegister(node)) {
+            result = allocate(c->scope->arena, sizeof(RegisterValue));
+
+            result->type = RegisterValueType_STACK;
+            result->offset = offsetForName(c, node->tok->value.string);
+         }
+      } else {
+         r0 = codegenEmit(c, child0);
+         AstNode* child1 = child0->sibling;
+         r1 = codegenEmit(c, child1);
+      }
+
+      // Expressions that use two children register values.
 
       if (node->type == Ast_ADD) {
          needsRegister(c, &r0);
@@ -488,37 +547,32 @@ emitExpression(Codegen* c, AstNode* node) {
                node->type == Ast_GREATER ||
                node->type == Ast_GEQ ||
                node->type == Ast_LEQ) {
-         RegisterValue* left = codegenEmit(c, node->child);
-         RegisterValue* right = codegenEmit(c, node->child->sibling);
-         if (node->type == Ast_EQUALS)
-            emitInstruction(c, node->line_number, "test %s, %s", registerString32(c, left), registerString(c, right));
-         else
-            emitInstruction(c, node->line_number, "cmp %s, %s", registerString32(c, left), registerString(c, right));
+         if (node->type == Ast_EQUALS) {
+            emitInstruction(c, node->line_number, "test %s, %s", registerString32(c, r0), registerString32(c, r1));
+         }
+         else {
+            emitInstruction(c, node->line_number, "cmp %s, %s", registerString32(c, r0), registerString32(c, r1));
+         }
+         freeRegister(r0);
+         freeRegister(r1);
          result = allocateRegister(c);
          if (node->type == Ast_GREATER) {
             emitInstruction(c, node->line_number, "setg al");
             emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
             emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
-         } else {
+         }
+         else if (node->type == Ast_LESS) {
+            emitInstruction(c, node->line_number, "setl al");
+            emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
+         }
+         else {
             Assert(!"Implement this");
          }
       }
    }
-   else if (node->type == Ast_NUMBER) {
-      codegenEmit(c, node);
-      char asm_line[LINE_MAX] = {0};
-      RegisterValue* r = allocateRegister(c);
-      PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(c, r), node->tok->value.integer);
-      emitInstruction(c, node->line_number, asm_line);
-      result = r;
-   }
-   else if (node->type == Ast_ID) {
-      int offset = offsetForName(c, node->tok->value.string);
-      char asm_line[LINE_MAX] = {0};
-      RegisterValue* r = allocateRegister(c);
-      PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(c, r), offset);
-      emitInstruction(c, node->line_number, asm_line);
-      result = r;
+   else {
+      Assert (!"Not an expression");
    }
    return result;
 }
@@ -532,8 +586,8 @@ emitStatement(Codegen* c, AstNode* stmt) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
                emitInstruction(c, stmt->line_number, "mov rax, %s", registerString(c, r));
-               emitInstruction(c, stmt->line_number, "jmp .func_end");
             }
+            emitInstruction(c, stmt->line_number, "jmp .func_end");
          }
       } break;
       case Ast_DECLARATION: {
@@ -554,6 +608,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
       case Ast_IF: {
          AstNode* cond = stmt->child;
          AstNode* then = cond->sibling;
+         AstNode* els = then ? then->sibling : NULL;
          RegisterValue* cv = codegenEmit(c, cond);
          needsRegister(c, &cv);
          // TODO(long): Treat <,<=,>,>=,== comparisons differently?
@@ -563,36 +618,19 @@ emitStatement(Codegen* c, AstNode* stmt) {
          emitInstruction(c, stmt->line_number, "je %s", else_label);
          codegenEmit(c, then);
          emitInstruction(c, stmt->line_number, "%s:", else_label);
-      } break;
-      // Expression statements.
-      case Ast_FUNCCALL: {
-         AstNode* func = stmt->child;
-         char* label = func->tok->value.string;
-         // TODO(medium): Save caller-save registers.
-         size_t volatiles_count = 0;
-
-         // Keep track of the volatile registers that were bound before we called the function
-         RegisterValue* stored[Reg_Count] = {0};
-         for (size_t i = 0; i < Reg_Count; ++i) {
-            RegisterValue* v = &g_registers[i];
-            if (v->bound && v->is_volatile) {
-               RegisterValue* stack = allocateStackRegister(c);
-               emitInstruction(c, stmt->line_number, "mov %s, %s", registerString(c, stack), registerString(c, v));
-               stored[i] = stack;
-            }
-         }
-         emitInstruction(c, stmt->line_number, "call %s", label);
-         // Restore the volatile registers we saved.
-         for (size_t i = 0; i < Reg_Count; ++i) {
-            RegisterValue* v = &g_registers[i];
-            if (stored[i]) {
-               emitInstruction(c, stmt->line_number, "mov %s, %s", registerString(c, &g_registers[i]), registerString(c, stored[i]));
-            }
+         if (els) {
+            //BreakHere;
+            codegenEmit(c, els);
          }
       } break;
       default: {
-         // Not handled
-         Assert(!"This type of statement is not handled.");
+         // Expression statements
+         if (nodeIsExpression(stmt)) {
+            emitExpression(c, stmt);
+         }
+         else {
+            Assert(!"This type of statement is not handled.");
+         }
       } break;
    }
 }
@@ -626,15 +664,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
 
       // Push
       pushScope(c);
-
-      size_t non_volatiles_count = 0;
-
-      for (size_t i = 0; i < Reg_Count; ++i) {
-         RegisterValue* r = &g_registers[i];
-         if (!r->is_volatile) {
-            // TODO(medium) non-volatiles.
-         }
-      }
 
       emitCompoundStatement(c, compound);
 
@@ -681,24 +710,6 @@ codegenEmit(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
    if (node->type == Ast_FUNCDEF) {
       emitFunctionDefinition(c, node);
-   }
-   else if (node->type == Ast_NUMBER) {
-      // Allocate an immediate value with this number.
-      result = allocate(c->scope->arena, sizeof(RegisterValue));
-      result->type = RegisterValueType_IMMEDIATE;
-      result->immediate_value = node->tok->value.integer;
-   }
-   else if (node->type == Ast_ID) {
-      if (fitsInRegister(node)) {
-         result = allocate(c->scope->arena, sizeof(RegisterValue));
-
-         result->type = RegisterValueType_STACK;
-         result->offset = offsetForName(c, node->tok->value.string);
-      }
-      else {
-         result = allocateRegister(c);
-         Assert(!"ID codegen not implemented.");
-      }
    }
    else if (nodeIsExpression(node)) {
       result = emitExpression(c, node);

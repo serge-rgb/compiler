@@ -361,6 +361,12 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
+b32
+isTypeSpecifier(Token* t) {
+   b32 result = t->value.integer == Keyword_int;
+   return result;
+}
+
 AstNode*
 parseDeclarationSpecifiers(Parser* p) {
    // One or more of:
@@ -384,7 +390,7 @@ parseDeclarationSpecifiers(Parser* p) {
 
       }
       // Type specifiers
-      else if (t->value.integer == Keyword_int) {
+      else if (isTypeSpecifier(t)) {
 
       }
       else {
@@ -509,6 +515,10 @@ parseStatement(Parser* p) {
          AstNode* then = parseStatement(p);
          if (then) {
             stmt = makeAstNode(p->arena, Ast_IF, cond, then);
+            if (nextKeyword(p, Keyword_else)) {
+               AstNode* els = parseStatement(p);
+               then->sibling = els;
+            }
          } else {
             parseError("Expected else clause after if.");
          }
