@@ -2,7 +2,6 @@
 int
 main(void) {
    Arena a = {0};
-   codegenInit();
    stringInit(&a);
    char* file_name = "test.c";
 
@@ -36,7 +35,7 @@ main(void) {
    #endif
 #elif defined(__linux__)
       codegen.config |= Config_TARGET_LINUX;
-#elif defined(__WIN32)
+#elif defined(_WIN32)
       codegen.config |= Config_TARGET_WIN;
 #else
    #error Cannot determine target
@@ -44,6 +43,7 @@ main(void) {
 
       AstNode* tree = parseTranslationUnit(&p);
       if (tree) {
+         codegenInit(&codegen);
          codegenTranslationUnit(&codegen, tree);
       }
       deallocate(&tmp_parser_arena);

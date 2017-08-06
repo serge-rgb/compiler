@@ -13,7 +13,6 @@ typedef enum Keyword_n {
 typedef enum TType_n {
    TType_NONE,
    TType_PUNCTUATOR,
-   TType_PUNCTUATOR_MULTICHAR,
    TType_STRING_LITERAL,
    TType_NUMBER,
    TType_ID,
@@ -36,6 +35,7 @@ char* g_punctuator_strings[] = {
 
 size_t
 indexOfPunctuator(Punctuator p) {
+   Assert (p < 256);
    size_t idx = p - 1 - Punctuator_BEGIN;
    return idx;
 }
@@ -273,18 +273,18 @@ getToken(Arena* a, FileStream* fs) {
       return t;
    }
    else if ((punctuator_token = isPunctuator(fs)) != 0) {
+      t.type = TType_PUNCTUATOR;
       if (punctuator_token && punctuator_token < ASCII_MAX) {
-         t.type = TType_PUNCTUATOR;
          t.value.character = fileStreamRead(fs);
       }
-      else {
-         t.type = TType_PUNCTUATOR_MULTICHAR;
-         Assert(punctuator_token < 255);
+      else if (punctuator_token < 255) {
          t.value.character = (u8)punctuator_token;
          // Advance the buffer by the length of othe operator.
          char* punctuator_str = g_punctuator_strings[indexOfPunctuator(punctuator_token)];
          size_t len = strlen(punctuator_str);
          fseek(fs->fd, (long)len, SEEK_CUR);
+      } else {
+         lexerError("Invalid punctuator value.");
       }
    }
    else if (fileStreamPeek(fs) == '\"') {
@@ -345,10 +345,12 @@ tokenPrint(Token* token) {
    printf("[");
    switch(token->type) {
       case TType_PUNCTUATOR: {
-         printf("PUNCTUATOR %c", (char)token->value.character);
-      } break;
-      case TType_PUNCTUATOR_MULTICHAR: {
-         printf("PUNCTUATOR: %s", g_punctuator_strings[indexOfPunctuator(token->value.character)]);
+         if (token->value.character < ASCII_MAX) {
+            printf("PUNCTUATOR %c", (char)token->value.character);
+         }
+         else {
+            printf("PUNCTUATOR: %s", g_punctuator_strings[indexOfPunctuator(token->value.character)]);
+         }
       } break;
       case TType_KEYWORD: {
          printf("KEYWORD %s", g_keywords[token->value.integer]);

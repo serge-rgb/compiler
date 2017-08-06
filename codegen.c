@@ -15,6 +15,7 @@ typedef struct RegisterValue_s {
          char* reg_32;
          char* reg_8;
          b8    bound;
+         b8    is_volatile;
       };
       // IMMEDIATE
       struct {
@@ -64,7 +65,9 @@ struct Scope_s {
 
 
 typedef enum CodegenConfigFlags_n {
-   Config_TARGET_MACOS = (1<<1),
+   Config_TARGET_MACOS = (1<<0),
+   Config_TARGET_LINUX = (1<<1),
+   Config_TARGET_WIN   = (1<<2),
 } CodegenConfigFlags;
 
 #define CODEGEN_QUEUE_SIZE 1024
@@ -147,37 +150,28 @@ RegisterValue g_registers[] = {
 
 };
 
-// mac OS callee-save (e.g. non-volatile) registers:
-// rbp rbx r12 thru r15
-
-// Save all non-volatile registers.
-// (Windows: RDI, RSI, RBX, RBP, RSP)
-//
-
-static RegisterValue* g_darwin_non_volatile_registers[] = {
-   // Not including RBP here
-   &g_registers[Reg_RBX],
-   &g_registers[Reg_R12],
-   &g_registers[Reg_R13],
-   &g_registers[Reg_R14],
-   &g_registers[Reg_R15],
-};
-
-
 // Forward declaration for recursive calls.
 RegisterValue* codegenEmit(Codegen* c, AstNode* node);
 
-
-RegisterValue** getNonVolatileRegisters(Codegen* c, size_t* out_size) {
-   RegisterValue** result = NULL;
+void
+setupVolatility(Codegen* c) {
    if (c->config & Config_TARGET_MACOS) {
-      Assert(out_size);
-      *out_size = ArrayCount(g_darwin_non_volatile_registers);
-      result = g_darwin_non_volatile_registers;
-   } else {
-      Assert(!"Not implemented.");
+      //TODO(short): Setup according to SystemV ABI
+      // These are the non-volatile registers in macos
+      //&g_registers[Reg_RBX],
+      //&g_registers[Reg_R12],
+      //&g_registers[Reg_R13],
+      //&g_registers[Reg_R14],
+      //&g_registers[Reg_R15],
    }
-   return result;
+   else if (c->config & Config_TARGET_WIN) {
+      int volatile_regs[] = {
+         Reg_RAX, Reg_RCX, Reg_RDX, Reg_R8, Reg_R9, Reg_R10, Reg_R11
+      };
+      for (int i = volatile_regs[0]; i < ArrayCount(volatile_regs); ++i) {
+         g_registers[i].is_volatile = true;
+      }
+   }
 }
 
 char*
@@ -241,8 +235,8 @@ int
 offsetForName(Codegen* c, char* name) {
    u64 hash = hashStr(name, strlen(name));
    int offset = c->scope->offsets[hash % SCOPE_HASH_SIZE];
-   if (!offset) {
-      codegenError("Tying to use variable name that is not bounded. %s\n", name);
+   if (offset == -1) {
+      codegenError("Tying to use variable name that is not bound. %s\n", name);
    }
    return offset;
 }
@@ -262,8 +256,25 @@ fitsInRegister(AstNode* node) {
 
 // Keep track of register values per identifier.
 
+int
+codegenPointerSize(Codegen* c) {
+   return 8;  // 8 bytes.
+}
+
+
 RegisterValue*
-allocateRegister(void) {
+allocateStackRegister(Codegen* c) {
+   RegisterValue* result = allocate(c->scope->arena, sizeof(RegisterValue));
+
+   result->type = RegisterValueType_STACK;
+   result->offset = c->scope->stack_size;
+   c->scope->stack_size += codegenPointerSize(c);
+
+   return result;
+}
+
+RegisterValue*
+allocateRegister(Codegen* c) {
    RegisterValue* result = NULL;
 
    for (size_t i = Reg_RCX; i < Reg_Count; ++i) {
@@ -275,10 +286,11 @@ allocateRegister(void) {
       }
    }
 
-   Assert(result != NULL);
+   if (!result) {
+      result = allocateStackRegister(c);
+   }
    return result;
 }
-
 void
 freeRegister(RegisterValue* reg) {
    if (reg->type == RegisterValueType_REGISTER) {
@@ -287,7 +299,7 @@ freeRegister(RegisterValue* reg) {
 }
 
 void
-codegenInit(void) {
+codegenInit(Codegen* c) {
    g_asm = fopen("out.asm", "w");
    char* prelude =
 #ifdef _WIN32
@@ -315,6 +327,8 @@ codegenInit(void) {
       ;
 
    fwrite(prelude, 1, strlen(prelude), g_asm);
+
+   setupVolatility(c);
 }
 
 char*
@@ -372,13 +386,13 @@ void
 needsRegister(Codegen* c, RegisterValue** r) {
    RegisterValue* old_r = *r;
    if (old_r->type != RegisterValueType_REGISTER) {
-      *r = allocateRegister();
+      *r = allocateRegister(c);
       emitInstruction(c, 0, "mov %s, %s", registerString32(c, *r), registerString32(c, old_r));
    }
 }
 
 void
-queueInstruction(Codegen* c, char* waiting) {
+incompleteInstruction(Codegen* c, char* waiting) {
    c->waiting = waiting;
 }
 
@@ -407,6 +421,11 @@ pushScope(Codegen* c) {
    // TODO(medium): Different kinds of scope (6.2.1)
    Scope* prev_scope = c->scope;
    c->scope = allocate(c->arena, sizeof(*c->scope));
+   // Since there can be offsets of zero, we set the uninitialized value to be -1.
+   for (size_t i = 0; i < SCOPE_HASH_SIZE; ++i) {
+      c->scope->offsets[i] = -1;
+   }
+   c->scope->stack_size = 4;  // Leave space for EIP
    ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
    emitInstruction(c, 0, "mov rdx, QWORD [rbp - 0x4]");
@@ -459,7 +478,7 @@ emitExpression(Codegen* c, AstNode* node) {
          }
 
          emitInstruction(c, node->line_number, "%s %s", op, registerString32(c, r1));
-         result = allocateRegister();
+         result = allocateRegister(c);
          emitInstruction(c, node->line_number, "mov %s, rax", registerString32(c, result));
          freeRegister(r0);
          freeRegister(r1);
@@ -475,7 +494,7 @@ emitExpression(Codegen* c, AstNode* node) {
             emitInstruction(c, node->line_number, "test %s, %s", registerString32(c, left), registerString(c, right));
          else
             emitInstruction(c, node->line_number, "cmp %s, %s", registerString32(c, left), registerString(c, right));
-         result = allocateRegister();
+         result = allocateRegister(c);
          if (node->type == Ast_GREATER) {
             emitInstruction(c, node->line_number, "setg al");
             emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
@@ -485,11 +504,10 @@ emitExpression(Codegen* c, AstNode* node) {
          }
       }
    }
-   else if (node->type == Ast_NUMBER ||
-            node->type == Ast_ID) {
+   else if (node->type == Ast_NUMBER) {
       codegenEmit(c, node);
       char asm_line[LINE_MAX] = {0};
-      RegisterValue* r = allocateRegister();
+      RegisterValue* r = allocateRegister(c);
       PrintString(asm_line, LINE_MAX, "mov %s, %d", registerString32(c, r), node->tok->value.integer);
       emitInstruction(c, node->line_number, asm_line);
       result = r;
@@ -497,7 +515,7 @@ emitExpression(Codegen* c, AstNode* node) {
    else if (node->type == Ast_ID) {
       int offset = offsetForName(c, node->tok->value.string);
       char asm_line[LINE_MAX] = {0};
-      RegisterValue* r = allocateRegister();
+      RegisterValue* r = allocateRegister(c);
       PrintString(asm_line, LINE_MAX, "mov %s, DWORD [rbp - 0x%x]", registerString32(c, r), offset);
       emitInstruction(c, node->line_number, asm_line);
       result = r;
@@ -521,14 +539,15 @@ emitStatement(Codegen* c, AstNode* stmt) {
       case Ast_DECLARATION: {
          char* id_str = stmt->child->tok->value.string;
          u64 hash = hashStr(id_str, strlen(id_str));
-         if (c->scope->offsets[hash % SCOPE_HASH_SIZE]) {
+         if (c->scope->offsets[hash % SCOPE_HASH_SIZE] != -1) {
             // TODO(medium): Finish implementing hash map...
             Assert(!"Hash map collision handling not implemented.");
          }
          int value = stmt->child->sibling->tok->value.integer;
-         // TODO(long): A value different than four for different kinds of types.
-         int offset = c->scope->stack_size + 4;
+         int offset = c->scope->stack_size;
+         //int offset = c->scope->stack_size += 4;
          c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
+         // TODO(long): A value different than four for different kinds of types.
          c->scope->stack_size += 4;
          emitInstruction(c, stmt->line_number, "mov DWORD [rbp - 0x%x], 0x%x", offset, value);
       } break;
@@ -549,7 +568,27 @@ emitStatement(Codegen* c, AstNode* stmt) {
       case Ast_FUNCCALL: {
          AstNode* func = stmt->child;
          char* label = func->tok->value.string;
+         // TODO(medium): Save caller-save registers.
+         size_t volatiles_count = 0;
+
+         // Keep track of the volatile registers that were bound before we called the function
+         RegisterValue* stored[Reg_Count] = {0};
+         for (size_t i = 0; i < Reg_Count; ++i) {
+            RegisterValue* v = &g_registers[i];
+            if (v->bound && v->is_volatile) {
+               RegisterValue* stack = allocateStackRegister(c);
+               emitInstruction(c, stmt->line_number, "mov %s, %s", registerString(c, stack), registerString(c, v));
+               stored[i] = stack;
+            }
+         }
          emitInstruction(c, stmt->line_number, "call %s", label);
+         // Restore the volatile registers we saved.
+         for (size_t i = 0; i < Reg_Count; ++i) {
+            RegisterValue* v = &g_registers[i];
+            if (stored[i]) {
+               emitInstruction(c, stmt->line_number, "mov %s, %s", registerString(c, &g_registers[i]), registerString(c, stored[i]));
+            }
+         }
       } break;
       default: {
          // Not handled
@@ -583,17 +622,18 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       emitInstruction(c, node->line_number, "%s:", id->tok->value.string);
       emitInstruction(c, node->line_number, "push rbp");
       emitInstruction(c, node->line_number, "mov rbp, rsp");
-      queueInstruction(c, "sub rsp, ");
+      incompleteInstruction(c, "sub rsp, ");
 
       // Push
       pushScope(c);
 
       size_t non_volatiles_count = 0;
-      RegisterValue** non_volatiles = getNonVolatileRegisters(c, &non_volatiles_count);
 
-      for (size_t i = 0; i < non_volatiles_count; ++i) {
-         RegisterValue* r = non_volatiles[i];
-         r = NULL;
+      for (size_t i = 0; i < Reg_Count; ++i) {
+         RegisterValue* r = &g_registers[i];
+         if (!r->is_volatile) {
+            // TODO(medium) non-volatiles.
+         }
       }
 
       emitCompoundStatement(c, compound);
@@ -656,7 +696,7 @@ codegenEmit(Codegen* c, AstNode* node) {
          result->offset = offsetForName(c, node->tok->value.string);
       }
       else {
-         result = allocateRegister();
+         result = allocateRegister(c);
          Assert(!"ID codegen not implemented.");
       }
    }

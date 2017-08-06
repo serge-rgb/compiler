@@ -11,15 +11,11 @@ main() {
 
    myFunction();
 
-   if (1) {
-      return 3;
-   }
-
    if (my_pretty_variable > 41) {
       if (my_pretty_variable > 1) {
-         return 0;
+         return my_pretty_variable;
       }
-      return 1;
+      return 0;
    }
    return 1;
 }

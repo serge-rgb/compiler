@@ -34,11 +34,8 @@ parseError(char* msg, ...) {
 b32
 peekPunctuator(Parser* p, int c) {
    b32 result = false;
-   if (c < 128) {
-      result = p->token->type == TType_PUNCTUATOR && p->token->value.character == c;
-   } else {
-      result = p->token->type == TType_PUNCTUATOR_MULTICHAR && p->token->value.character == c;
-   }
+   Assert(c < 256);
+   result = p->token->type == TType_PUNCTUATOR && p->token->value.character == c;
    return result;
 }
 
