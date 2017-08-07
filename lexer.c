@@ -35,7 +35,6 @@ char* g_punctuator_strings[] = {
 
 size_t
 indexOfPunctuator(Punctuator p) {
-   Assert (p < 256);
    size_t idx = p - 1 - Punctuator_BEGIN;
    return idx;
 }

@@ -498,7 +498,6 @@ emitExpression(Codegen* c, AstNode* node) {
          result = &g_registers[Reg_RAX];
       }
       else if (node->type == Ast_NUMBER) {
-         char asm_line[LINE_MAX] = {0};
          result = allocate(c->scope->arena, sizeof(RegisterValue));
          result->type = RegisterValueType_IMMEDIATE;
          result->immediate_value = node->tok->value.integer;
@@ -551,6 +550,7 @@ emitExpression(Codegen* c, AstNode* node) {
             emitInstruction(c, node->line_number, "test %s, %s", registerString32(c, r0), registerString32(c, r1));
          }
          else {
+            needsRegister(c, &r0);
             emitInstruction(c, node->line_number, "cmp %s, %s", registerString32(c, r0), registerString32(c, r1));
          }
          freeRegister(r0);
@@ -563,6 +563,16 @@ emitExpression(Codegen* c, AstNode* node) {
          }
          else if (node->type == Ast_LESS) {
             emitInstruction(c, node->line_number, "setl al");
+            emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
+         }
+         else if (node->type == Ast_GEQ) {
+            emitInstruction(c, node->line_number, "setge al");
+            emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
+         }
+         else if (node->type == Ast_LEQ) {
+            emitInstruction(c, node->line_number, "setle al");
             emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
             emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
          }
