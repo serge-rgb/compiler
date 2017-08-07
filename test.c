@@ -5,6 +5,7 @@ myFunction() {
 
 int
 main() {
+   cahr foo = 0;
    int my_pretty_variable = 42;
 
    if (my_pretty_variable > 41) {

@@ -363,7 +363,16 @@ parseExpression(Parser* p) {
 
 b32
 isTypeSpecifier(Token* t) {
-   b32 result = t->value.integer == Keyword_int;
+   b32 result =
+           t->value.integer == Keyword_int ||
+           t->value.integer == Keyword_char ||
+           t->value.integer == Keyword_float ||
+           t->value.integer == Keyword_long ||
+           t->value.integer == Keyword_short ||
+           t->value.integer == Keyword__Bool ||
+           t->value.integer == Keyword__Complex ||
+           t->value.integer == Keyword__Imaginary
+           ;
    return result;
 }
 
@@ -379,7 +388,7 @@ parseDeclarationSpecifiers(Parser* p) {
 
    if (t->type == TType_KEYWORD) {
 
-      result = makeAstNodeWithLineNumber(p->arena, Ast_KEYWORD, NULL, NULL, t->line_number);
+      result = makeAstNodeWithLineNumber(p->arena, Ast_TYPE_SPECIFIER, NULL, NULL, t->line_number);
       int v = t->value.integer;
       // Storage class specifiers
       if (v == Keyword_typedef ||
@@ -391,7 +400,8 @@ parseDeclarationSpecifiers(Parser* p) {
       }
       // Type specifiers
       else if (isTypeSpecifier(t)) {
-
+         if (t->value.integer == Keyword_char) {
+         }
       }
       else {
          result = NULL;
@@ -479,12 +489,14 @@ parseCompoundStatement(Parser* p) {
          if (!*cur) {
             *cur = parseOrBacktrack(parseStatement, p);
          }
+         if (!*cur) {
+            if (nextPunctuator(p, '}')) {
+               compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, first_stmt, NULL);
+            } else {
+               parseError("Unrecognized token.");
+            }
+         }
       } while (*cur);
-      if (nextPunctuator(p, '}')) {
-         compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, first_stmt, NULL);
-      } else {
-         backtrack(p, tok);
-      }
    } else {
       backtrack(p, tok);
    }

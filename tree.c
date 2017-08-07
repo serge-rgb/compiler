@@ -1,6 +1,8 @@
 typedef enum AstType_n {
    Ast_NONE,
 
+   Ast_TYPE_SPECIFIER,
+
    Ast_NUMBER,
    Ast_KEYWORD,
 
