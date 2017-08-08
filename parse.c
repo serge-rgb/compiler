@@ -7,6 +7,15 @@ typedef struct Parser_s {
    char* file_name;
 } Parser;
 
+typedef enum TypeType_n {
+   Type_INT,
+   Type_CHAR,
+} TypeType;
+
+typedef struct Type_s {
+   TypeType type; // Type type type...  type.
+} Type;
+
 
 // A function that takes a Parser and returns an AstNode*
 typedef AstNode* ParseFunction(Parser*);
@@ -361,9 +370,10 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
-b32
-isTypeSpecifier(Token* t) {
-   b32 result =
+Type*
+parseTypeSpecifier(Token* t) {
+   Type* result = NULL;
+   b32 is_type_spec =
            t->value.integer == Keyword_int ||
            t->value.integer == Keyword_char ||
            t->value.integer == Keyword_float ||
@@ -373,11 +383,44 @@ isTypeSpecifier(Token* t) {
            t->value.integer == Keyword__Complex ||
            t->value.integer == Keyword__Imaginary
            ;
+   if (is_type_spec) {
+      switch (t->value.integer) {
+         case Keyword_int: {
+            static Type type_int = {0};
+            type_int.type = Type_INT;
+            return &type_int;
+         } break;
+         case Keyword_char: {
+            static Type type_char = {0};
+            type_char.type = Type_CHAR;
+            return &type_char;
+         } break;
+         case Keyword_float: {
+
+         } //break;
+         case Keyword_long: {
+
+         } //break;
+         case Keyword_short: {
+
+         } //break;
+         case Keyword__Bool: {
+
+         } //break;
+         case Keyword__Complex: {
+
+         } //break;
+         case Keyword__Imaginary: {
+            Assert(!"Type specifier not implemented.");
+         } //break;
+      }
+   }
+   // TODO(large): User defined types.
    return result;
 }
 
 AstNode*
-parseDeclarationSpecifiers(Parser* p) {
+parseDeclarationSpecifiers(Parser* p, Type** out_type) {
    // One or more of:
    //   storage-class-specifier
    //   type-specifier
@@ -385,6 +428,7 @@ parseDeclarationSpecifiers(Parser* p) {
    Token* t = nextToken(p);
    Token* bt = t;
    AstNode* result = NULL;
+   Type* type = NULL;
 
    if (t->type == TType_KEYWORD) {
 
@@ -399,9 +443,9 @@ parseDeclarationSpecifiers(Parser* p) {
 
       }
       // Type specifiers
-      else if (isTypeSpecifier(t)) {
-         if (t->value.integer == Keyword_char) {
-         }
+      else if ((type = parseTypeSpecifier(t), type)) {
+         Assert(!*out_type);
+         *out_type = type;
       }
       else {
          result = NULL;
@@ -438,7 +482,8 @@ parseInitializer(Parser* p) {
 AstNode*
 parseDeclaration(Parser* p) {
    AstNode* result = NULL;
-   AstNode* specifiers = parseDeclarationSpecifiers(p);
+   Type* type = NULL;
+   AstNode* specifiers = parseDeclarationSpecifiers(p, &type);
    if (specifiers) {
       AstNode* identifier = parseDeclarator(p);
       AstNode* initializer = NULL;
@@ -547,7 +592,8 @@ parseFunctionDefinition(Parser* p) {
    AstNode* declaration_specifier = NULL;
    AstNode* declarator = NULL;
 
-   if ((declaration_specifier = parseDeclarationSpecifiers(p)) != NULL &&
+   Type* type = NULL;
+   if ((declaration_specifier = parseDeclarationSpecifiers(p, &type)) != NULL &&
        (declarator = parseDeclarator(p)) != NULL) {
 
       AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);

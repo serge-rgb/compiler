@@ -14,7 +14,6 @@ main() {
             return myFunction();
          }
       }
-
       else {
          return 1;
       }
