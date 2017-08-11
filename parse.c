@@ -7,16 +7,6 @@ typedef struct Parser_s {
    char* file_name;
 } Parser;
 
-typedef enum TypeType_n {
-   Type_INT,
-   Type_CHAR,
-} TypeType;
-
-typedef struct Type_s {
-   TypeType type; // Type type type...  type.
-} Type;
-
-
 // A function that takes a Parser and returns an AstNode*
 typedef AstNode* ParseFunction(Parser*);
 
@@ -370,9 +360,9 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
-Type*
-parseTypeSpecifier(Token* t) {
-   Type* result = NULL;
+Ctype*
+parseCtypeSpecifier(Token* t) {
+   Ctype* result = NULL;
    b32 is_type_spec =
            t->value.integer == Keyword_int ||
            t->value.integer == Keyword_char ||
@@ -386,12 +376,12 @@ parseTypeSpecifier(Token* t) {
    if (is_type_spec) {
       switch (t->value.integer) {
          case Keyword_int: {
-            static Type type_int = {0};
+            static Ctype type_int = {0};
             type_int.type = Type_INT;
             return &type_int;
          } break;
          case Keyword_char: {
-            static Type type_char = {0};
+            static Ctype type_char = {0};
             type_char.type = Type_CHAR;
             return &type_char;
          } break;
@@ -411,7 +401,7 @@ parseTypeSpecifier(Token* t) {
 
          } //break;
          case Keyword__Imaginary: {
-            Assert(!"Type specifier not implemented.");
+            Assert(!"Ctype specifier not implemented.");
          } //break;
       }
    }
@@ -420,7 +410,7 @@ parseTypeSpecifier(Token* t) {
 }
 
 AstNode*
-parseDeclarationSpecifiers(Parser* p, Type** out_type) {
+parseDeclarationSpecifiers(Parser* p, Ctype** out_type) {
    // One or more of:
    //   storage-class-specifier
    //   type-specifier
@@ -428,7 +418,7 @@ parseDeclarationSpecifiers(Parser* p, Type** out_type) {
    Token* t = nextToken(p);
    Token* bt = t;
    AstNode* result = NULL;
-   Type* type = NULL;
+   Ctype* type = NULL;
 
    if (t->type == TType_KEYWORD) {
 
@@ -442,8 +432,8 @@ parseDeclarationSpecifiers(Parser* p, Type** out_type) {
           v == Keyword_register) {
 
       }
-      // Type specifiers
-      else if ((type = parseTypeSpecifier(t), type)) {
+      // Ctype specifiers
+      else if ((type = parseCtypeSpecifier(t), type)) {
          Assert(!*out_type);
          *out_type = type;
       }
@@ -482,7 +472,7 @@ parseInitializer(Parser* p) {
 AstNode*
 parseDeclaration(Parser* p) {
    AstNode* result = NULL;
-   Type* type = NULL;
+   Ctype* type = NULL;
    AstNode* specifiers = parseDeclarationSpecifiers(p, &type);
    if (specifiers) {
       AstNode* identifier = parseDeclarator(p);
@@ -496,7 +486,11 @@ parseDeclaration(Parser* p) {
          backtrack(p, bt);
       }
       expectPunctuator(p, ';');
-      result = makeAstNode(p->arena, Ast_DECLARATION, identifier, initializer);
+
+      AstNode* ast_type = makeAstNodeWithLineNumber(p->arena, Ast_TYPE, NULL, NULL, specifiers->line_number);
+      ast_type->ctype = type;
+      identifier->sibling = initializer;
+      result = makeAstNode(p->arena, Ast_DECLARATION, ast_type, identifier);
    }
    return result;
 }
@@ -592,7 +586,7 @@ parseFunctionDefinition(Parser* p) {
    AstNode* declaration_specifier = NULL;
    AstNode* declarator = NULL;
 
-   Type* type = NULL;
+   Ctype* type = NULL;
    if ((declaration_specifier = parseDeclarationSpecifiers(p, &type)) != NULL &&
        (declarator = parseDeclarator(p)) != NULL) {
 

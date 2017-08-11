@@ -29,12 +29,29 @@ typedef enum AstType_n {
    Ast_GEQ,
    Ast_LOGICAL_OR,
    Ast_COMPOUND_STMT,
+
+   Ast_TYPE,
 } AstType;
+
+typedef enum CtypeType_n {
+   Type_INT,
+   Type_CHAR,
+} CtypeType;
+
+typedef struct Ctype_s {
+   CtypeType type; // Type type type...  type.
+} Ctype;
+
 
 typedef struct AstNode_s AstNode;
 struct AstNode_s {
    AstType  type;
-   Token*   tok;
+   union {
+      // When the node corresponds to a token.
+      Token*   tok;
+      // Otherwise..
+      Ctype* ctype;
+   };
    AstNode* child;
    AstNode* sibling;
 
@@ -76,4 +93,20 @@ makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
       fprintf(stderr, "WARNING: Calling makeAstNode with NULL left node. Will emit line number as 0. \n");
    }
    return makeAstNodeWithLineNumber(a, type, left, right, line_number);
+}
+
+u64
+numBytesForType(Ctype* ctype) {
+   switch (ctype->type) {
+      case Type_INT: {
+         return 4;
+      } break;
+      case Type_CHAR: {
+         return 1;
+      } break;
+      default: {
+         Assert(!"Don't know the size of this type.");
+      }
+   }
+   return 4;
 }

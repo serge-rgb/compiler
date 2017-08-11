@@ -55,8 +55,8 @@ enum RegisterEnum {
 typedef struct Scope_s Scope;
 struct Scope_s {
    // Hash map from string variable to offset in the stack.
-   int offsets[SCOPE_HASH_SIZE];
-   int stack_size;
+   i64 offsets[SCOPE_HASH_SIZE];
+   i64 stack_size;
    Arena* arena;
 
    int if_count;
@@ -231,10 +231,10 @@ codegenError(char* msg, ...) {
    exit(-1);
 }
 
-int
+u64
 offsetForName(Codegen* c, char* name) {
    u64 hash = hashStr(name, strlen(name));
-   int offset = c->scope->offsets[hash % SCOPE_HASH_SIZE];
+   u64 offset = c->scope->offsets[hash % SCOPE_HASH_SIZE];
    if (offset == -1) {
       codegenError("Tying to use variable name that is not bound. %s\n", name);
    }
@@ -414,7 +414,7 @@ incompleteInstruction(Codegen* c, char* waiting) {
 }
 
 void
-finishInstruction(Codegen* c, int val) {
+finishInstruction(Codegen* c, i64 val) {
    // Modify waiting. instruction.
    // Emit queued instructions.
 
@@ -422,7 +422,7 @@ finishInstruction(Codegen* c, int val) {
 
    char newasm[LINE_MAX] = {0};
 
-   snprintf(newasm, LINE_MAX, "%s %d", waiting, val);
+   snprintf(newasm, LINE_MAX, "%s %lld", waiting, val);
 
    c->waiting = NULL;
 
@@ -601,18 +601,18 @@ emitStatement(Codegen* c, AstNode* stmt) {
          }
       } break;
       case Ast_DECLARATION: {
-         char* id_str = stmt->child->tok->value.string;
+         AstNode* ast_type = stmt->child;
+         char* id_str = ast_type->sibling->tok->value.string;
          u64 hash = hashStr(id_str, strlen(id_str));
          if (c->scope->offsets[hash % SCOPE_HASH_SIZE] != -1) {
             // TODO(medium): Finish implementing hash map...
             Assert(!"Hash map collision handling not implemented.");
          }
-         int value = stmt->child->sibling->tok->value.integer;
-         int offset = c->scope->stack_size;
+         int value = ast_type->sibling->sibling->tok->value.integer;
+         u64 offset = c->scope->stack_size;
          //int offset = c->scope->stack_size += 4;
          c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
-         // TODO(long): A value different than four for different kinds of types.
-         c->scope->stack_size += 4;
+         c->scope->stack_size += numBytesForType(ast_type->ctype);
          emitInstruction(c, stmt->line_number, "mov DWORD [rbp - 0x%x], 0x%x", offset, value);
       } break;
       case Ast_IF: {
@@ -677,7 +677,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
 
       emitCompoundStatement(c, compound);
 
-      int stack = c->scope->stack_size;
+      i64 stack = c->scope->stack_size;
 
       // TODO(short): What is the stack alignment requirement for Linux/GCC?
       stack = AlignPow2(stack, 16);

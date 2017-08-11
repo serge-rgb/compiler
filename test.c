@@ -5,12 +5,13 @@ myFunction() {
 
 int
 main() {
-   char foo = 0;
+   // TODO, this will save it as a dword, not a byte...
+   char foo = 3;
    int my_pretty_variable = 42;
 
    if (my_pretty_variable > 41) {
       if (my_pretty_variable >= 1) {
-         if (0 <= 1) {
+         if (foo <= 1) {
             return myFunction();
          }
       }
