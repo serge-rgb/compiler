@@ -20,6 +20,8 @@ stringInit(Arena* a) {
    g_string_arena = a;
 }
 
+#define HashPointer(ptr) (hashStr((char*)(ptr), sizeof(*(ptr))))
+
 u64
 hashStr(char* str, size_t size) {
    u64 hash = 0;

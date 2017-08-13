@@ -197,12 +197,12 @@ registerString(Codegen* c, RegisterValue* r) {
       } break;
       case RegisterValueType_STACK: {
          res = allocate(c->scope->arena, 128);
-         if (r->bits == 32)
+         if (r->bits == 8)
+            snprintf(res, 128, "BYTE [ rbp - 0x%x ]", (int)r->offset);
+         else if (r->bits == 32)
             snprintf(res, 128, "DWORD [ rbp - 0x%x ]", (int)r->offset);
          else if (r->bits == 64)
             snprintf(res, 128, "QWORD [ rbp - 0x%x ]", (int)r->offset);
-         else if (r->bits == 8)
-            snprintf(res, 128, "BYTE [ rbp - 0x%x ]", (int)r->offset);
       } break;
    }
    Assert(res);
@@ -231,19 +231,6 @@ offsetForName(Codegen* c, char* name) {
       codegenError("Tying to use variable name that is not bound. %s\n", name);
    }
    return offset;
-}
-
-b32
-fitsInRegister(AstNode* node) {
-   b32 result = false;
-   if (node->type == Ast_NUMBER ||
-       node->type == Ast_ID) {
-      result = true;
-   }
-   else {
-      codegenError("I don't know whether this node fits inside a register.");
-   }
-   return result;
 }
 
 // Keep track of register values per identifier.
@@ -503,13 +490,15 @@ emitExpression(Codegen* c, AstNode* node) {
       }
       else if (node->type == Ast_ID) {
          // TODO(small): Add size to identifiers.
-         if (fitsInRegister(node)) {
-            result = allocate(c->scope->arena, sizeof(RegisterValue));
+         result = allocate(c->scope->arena, sizeof(RegisterValue));
 
-            result->type = RegisterValueType_STACK;
-            BreakHere;  // Add bits
-            result->offset = offsetForName(c, node->tok->value.string);
-         }
+         AstNode* ast_type =  node->child;
+         ast_type = NULL;
+
+
+
+         result->type = RegisterValueType_STACK;
+         result->offset = offsetForName(c, node->tok->value.string);
       } else {
          r0 = codegenEmit(c, child0);
          AstNode* child1 = child0->sibling;
@@ -609,14 +598,15 @@ emitStatement(Codegen* c, AstNode* stmt) {
          }
       } break;
       case Ast_DECLARATION: {
-         AstNode* ast_type = stmt->child;
-         char* id_str = ast_type->sibling->tok->value.string;
+         AstNode* ast_id = stmt->child;
+         AstNode* ast_type = ast_id->child;
+         char* id_str = ast_id->tok->value.string;
          u64 hash = hashStr(id_str, strlen(id_str));
          if (c->scope->offsets[hash % SCOPE_HASH_SIZE] != -1) {
             // TODO(medium): Finish implementing hash map...
             Assert(!"Hash map collision handling not implemented.");
          }
-         int value = ast_type->sibling->sibling->tok->value.integer;
+         int value = ast_id->sibling->tok->value.integer;
 
          int bits = 0;
          switch (ast_type->ctype->type) {
@@ -625,6 +615,9 @@ emitStatement(Codegen* c, AstNode* stmt) {
             } break;
             case Type_CHAR: {
                bits = 8;
+            } break;
+            default: {
+               Assert(!"Unknown size for type.");
             } break;
          }
 

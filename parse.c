@@ -1,10 +1,12 @@
 
 
+#define CTYPE_HASHMAP_SIZE 128
 typedef struct Parser_s {
    Token* token;  // The next token to parse.
    Arena* arena;
    AstNode* tree;
    char* file_name;
+   Ctype ctype_map[CTYPE_HASHMAP_SIZE];
 } Parser;
 
 // A function that takes a Parser and returns an AstNode*
@@ -14,6 +16,13 @@ AstNode*
 newNode(Arena* a) {
    AstNode* r = AllocType(a, AstNode);
    return r;
+}
+
+void
+setTypeForId(Parser* p, char* id, Ctype* type) {
+   u64 hash = HashPointer(type);
+   BreakHere;
+   hash = 0;
 }
 
 void
@@ -490,7 +499,8 @@ parseDeclaration(Parser* p) {
       AstNode* ast_type = makeAstNodeWithLineNumber(p->arena, Ast_TYPE, NULL, NULL, specifiers->line_number);
       ast_type->ctype = type;
       identifier->sibling = initializer;
-      result = makeAstNode(p->arena, Ast_DECLARATION, ast_type, identifier);
+      identifier->child = ast_type;
+      result = makeAstNode(p->arena, Ast_DECLARATION, identifier, NULL);
    }
    return result;
 }
