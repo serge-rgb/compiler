@@ -5,7 +5,6 @@ myFunction() {
 
 int
 main() {
-   // TODO, this will save it as a dword, not a byte...
    char foo = 3;
    int my_pretty_variable = 42;
 

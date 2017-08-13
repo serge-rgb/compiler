@@ -8,6 +8,7 @@ typedef enum RegisterValueType_n {
 
 typedef struct RegisterValue_s {
    RegisterValueType type;
+   int bits;
    union {
       // REGISTER
       struct {
@@ -175,17 +176,17 @@ setupVolatility(Codegen* c) {
 }
 
 char*
-registerStringWithBitness(Codegen* c, RegisterValue* r, int bitness) {
+registerString(Codegen* c, RegisterValue* r) {
    char *res = NULL;
    switch(r->type) {
       case RegisterValueType_REGISTER: {
-         if (bitness == 64) {
+         if (r->bits == 64) {
             res = r->reg;
          }
-         else if (bitness == 32) {
+         else if (r->bits == 32) {
             res = r->reg_32;
          }
-         else if (bitness == 8) {
+         else if (r->bits == 8) {
             res = r->reg_8;
          }
       }
@@ -196,25 +197,16 @@ registerStringWithBitness(Codegen* c, RegisterValue* r, int bitness) {
       } break;
       case RegisterValueType_STACK: {
          res = allocate(c->scope->arena, 128);
-         if (bitness == 32)
+         if (r->bits == 32)
             snprintf(res, 128, "DWORD [ rbp - 0x%x ]", (int)r->offset);
-         else if (bitness == 64)
+         else if (r->bits == 64)
             snprintf(res, 128, "QWORD [ rbp - 0x%x ]", (int)r->offset);
-         else if (bitness == 8)
+         else if (r->bits == 8)
             snprintf(res, 128, "BYTE [ rbp - 0x%x ]", (int)r->offset);
       } break;
    }
+   Assert(res);
    return res;
-}
-
-char *
-registerString(Codegen* c, RegisterValue* r) {
-   return registerStringWithBitness(c, r, 64);
-}
-
-char *
-registerString32(Codegen* c, RegisterValue* r) {
-   return registerStringWithBitness(c, r, 32);
 }
 
 void
@@ -263,24 +255,28 @@ codegenPointerSize(Codegen* c) {
 
 
 RegisterValue*
-allocateStackRegister(Codegen* c) {
+allocateStackRegister(Codegen* c, int num_bits) {
    RegisterValue* result = allocate(c->scope->arena, sizeof(RegisterValue));
 
    result->type = RegisterValueType_STACK;
    result->offset = c->scope->stack_size;
-   c->scope->stack_size += codegenPointerSize(c);
+   result->bits = num_bits;
+   c->scope->stack_size += num_bits;
 
    return result;
 }
 
 RegisterValue*
-allocateRegister(Codegen* c) {
+allocateRegister(Codegen* c, int bits) {
+   Assert(bits);
    RegisterValue* result = NULL;
 
    for (size_t i = Reg_RCX; i < Reg_Count; ++i) {
       RegisterValue* r = &g_registers[i];
+      // TODO(small): Select register corresponding to bitness.
       if (!r->bound) {
          r->bound = true;
+         r->bits = bits;
          result = r;
          break;
       }
@@ -289,7 +285,7 @@ allocateRegister(Codegen* c) {
    // TODO(long): Implement a graph coloring algorithm for register allocation.
 
    if (!result) {
-      result = allocateStackRegister(c);
+      result = allocateStackRegister(c, 64);
    }
    return result;
 }
@@ -389,14 +385,15 @@ void
 needsRegister(Codegen* c, RegisterValue** r) {
    RegisterValue* old_r = *r;
    if (old_r->type != RegisterValueType_REGISTER) {
-      *r = allocateRegister(c);
-      emitInstruction(c, 0, "mov %s, %s", registerString32(c, *r), registerString32(c, old_r));
+      Assert((*r)->bits);
+      *r = allocateRegister(c, (*r)->bits);
+      emitInstruction(c, 0, "mov %s, %s", registerString(c, *r), registerString(c, old_r));
    }
 }
 
 RegisterValue*
 stashRegister(Codegen* c, RegisterValue* r) {
-   RegisterValue* stack = allocateStackRegister(c);
+   RegisterValue* stack = allocateStackRegister(c, 64);
    emitInstruction(c, 0, "mov %s, %s", registerString(c, stack), registerString(c, r));
    r->bound = false;
    return stack;
@@ -501,43 +498,51 @@ emitExpression(Codegen* c, AstNode* node) {
          result = allocate(c->scope->arena, sizeof(RegisterValue));
          result->type = RegisterValueType_IMMEDIATE;
          result->immediate_value = node->tok->value.integer;
+         // TODO(large): Support non 32-bit integers.
+         result->bits = 32;
       }
       else if (node->type == Ast_ID) {
+         // TODO(small): Add size to identifiers.
          if (fitsInRegister(node)) {
             result = allocate(c->scope->arena, sizeof(RegisterValue));
 
             result->type = RegisterValueType_STACK;
+            BreakHere;  // Add bits
             result->offset = offsetForName(c, node->tok->value.string);
          }
       } else {
          r0 = codegenEmit(c, child0);
          AstNode* child1 = child0->sibling;
          r1 = codegenEmit(c, child1);
+         if (r0->bits != r1->bits) {
+            codegenError("Expected same number of bits in expression.");
+         }
       }
 
       // Expressions that use two children register values.
 
       if (node->type == Ast_ADD) {
          needsRegister(c, &r0);
-         emitInstruction(c, child0->line_number, "add %s, %s", registerString32(c, r0), registerString32(c, r1));
+         emitInstruction(c, child0->line_number, "add %s, %s", registerString(c, r0), registerString(c, r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_SUB) {
          needsRegister(c, &r0);
-         emitInstruction(c, child0->line_number, "sub %s, %s", registerString32(c, r0), registerString32(c, r1));
+         emitInstruction(c, child0->line_number, "sub %s, %s", registerString(c, r0), registerString(c, r1));
          result = r0;
          freeRegister(r1);
       }
       else if (node->type == Ast_MUL || node->type == Ast_DIV) {
          char* op = node->type == Ast_MUL ? "mul" : "div";
          if (r0 != &g_registers[Reg_RAX]) {
-            emitInstruction(c, child0->line_number, "mov rax, %s", registerString32(c, r0));
+            emitInstruction(c, child0->line_number, "mov rax, %s", registerString(c, r0));
          }
 
-         emitInstruction(c, node->line_number, "%s %s", op, registerString32(c, r1));
-         result = allocateRegister(c);
-         emitInstruction(c, node->line_number, "mov %s, rax", registerString32(c, result));
+         emitInstruction(c, node->line_number, "%s %s", op, registerString(c, r1));
+         // TODO(medium): Missing type
+         result = allocateRegister(c, 32);
+         emitInstruction(c, node->line_number, "mov %s, rax", registerString(c, result));
          freeRegister(r0);
          freeRegister(r1);
       }
@@ -546,35 +551,38 @@ emitExpression(Codegen* c, AstNode* node) {
                node->type == Ast_GREATER ||
                node->type == Ast_GEQ ||
                node->type == Ast_LEQ) {
+         if (r0->bits != r1->bits) {
+            codegenError("Expected same number of bits in expression.");
+         }
          if (node->type == Ast_EQUALS) {
-            emitInstruction(c, node->line_number, "test %s, %s", registerString32(c, r0), registerString32(c, r1));
+            emitInstruction(c, node->line_number, "test %s, %s", registerString(c, r0), registerString(c, r1));
          }
          else {
             needsRegister(c, &r0);
-            emitInstruction(c, node->line_number, "cmp %s, %s", registerString32(c, r0), registerString32(c, r1));
+            emitInstruction(c, node->line_number, "cmp %s, %s", registerString(c, r0), registerString(c, r1));
          }
          freeRegister(r0);
          freeRegister(r1);
-         result = allocateRegister(c);
+         result = allocateRegister(c, r0->bits);
          if (node->type == Ast_GREATER) {
             emitInstruction(c, node->line_number, "setg al");
             emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString(c, result));
          }
          else if (node->type == Ast_LESS) {
             emitInstruction(c, node->line_number, "setl al");
             emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString(c, result));
          }
          else if (node->type == Ast_GEQ) {
             emitInstruction(c, node->line_number, "setge al");
             emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString(c, result));
          }
          else if (node->type == Ast_LEQ) {
             emitInstruction(c, node->line_number, "setle al");
             emitInstruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            emitInstruction(c, node->line_number, "movzx %s, al", registerString32(c, result));
+            emitInstruction(c, node->line_number, "movzx %s, al", registerString(c, result));
          }
          else {
             Assert(!"Implement this");
@@ -609,11 +617,22 @@ emitStatement(Codegen* c, AstNode* stmt) {
             Assert(!"Hash map collision handling not implemented.");
          }
          int value = ast_type->sibling->sibling->tok->value.integer;
-         u64 offset = c->scope->stack_size;
-         //int offset = c->scope->stack_size += 4;
-         c->scope->offsets[hash % SCOPE_HASH_SIZE] = offset;
-         c->scope->stack_size += numBytesForType(ast_type->ctype);
-         emitInstruction(c, stmt->line_number, "mov DWORD [rbp - 0x%x], 0x%x", offset, value);
+
+         int bits = 0;
+         switch (ast_type->ctype->type) {
+            case Type_INT: {
+               bits = 32;
+            } break;
+            case Type_CHAR: {
+               bits = 8;
+            } break;
+         }
+
+         RegisterValue* s = allocateStackRegister(c, bits);
+         c->scope->offsets[hash % SCOPE_HASH_SIZE] = s->offset;
+
+         char* reg = registerString(c, s);
+         emitInstruction(c, stmt->line_number, "mov %s, 0x%x", reg, value);
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
@@ -622,14 +641,13 @@ emitStatement(Codegen* c, AstNode* stmt) {
          RegisterValue* cv = codegenEmit(c, cond);
          needsRegister(c, &cv);
          // TODO(long): Treat <,<=,>,>=,== comparisons differently?
-         emitInstruction(c, stmt->line_number, "cmp %s, 0x0", registerString32(c, cv));
+         emitInstruction(c, stmt->line_number, "cmp %s, 0x0", registerString(c, cv));
          char else_label[256] = {0};
          snprintf(else_label, 256, ".else%d", c->scope->if_count++);
          emitInstruction(c, stmt->line_number, "je %s", else_label);
          codegenEmit(c, then);
          emitInstruction(c, stmt->line_number, "%s:", else_label);
          if (els) {
-            //BreakHere;
             codegenEmit(c, els);
          }
       } break;

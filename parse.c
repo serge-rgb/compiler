@@ -239,7 +239,7 @@ AstNode*
 logicalAndExpr(Parser* p) {
    AstNode*       left = inclusiveOrExpr(p);
    if (left) {
-      while (p->token->type == TType_PUNCTUATOR && p->token->value.character == LOGICAL_AND) {
+      while (peekPunctuator(p, LOGICAL_AND)) {
          nextToken(p);          // Pop the logical and.
          AstNode* right      = inclusiveOrExpr(p);
          if (!right) { parseError("Expected expression after `&&`."); }
@@ -253,7 +253,7 @@ AstNode*
 logicalOrExpr(Parser* p) {
    AstNode*       left = logicalAndExpr(p);
    if (left) {
-      while (p->token->type == TType_PUNCTUATOR && p->token->value.character == LOGICAL_OR) {
+      while (peekPunctuator(p, LOGICAL_OR)) {
          nextToken(p);          // Pop the logical or
          AstNode* right      = logicalAndExpr(p);
          if (!right) { parseError("Expected expression after `||`"); }
