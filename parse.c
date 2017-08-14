@@ -19,9 +19,14 @@ newNode(Arena* a) {
 }
 
 void
-setTypeForId(Parser* p, char* id, Ctype* type) {
-   u64 hash = HashPointer(type);
-   BreakHere;
+setTypeForId(Parser* p, char* id, Ctype* ctype) {
+    BreakHere;
+   u64 hash = HashPointer(ctype);
+   Ctype* toset = &p->ctype_map[hash % CTYPE_HASHMAP_SIZE];
+   if (toset->type != Type_NONE) {
+      Assert(!"TODO: Hash map collision not implemented.");
+   }
+   *toset = *ctype;
    hash = 0;
 }
 
@@ -500,6 +505,7 @@ parseDeclaration(Parser* p) {
       ast_type->ctype = type;
       identifier->sibling = initializer;
       identifier->child = ast_type;
+      setTypeForId(p, identifier->tok->value.string, ast_type->ctype);
       result = makeAstNode(p->arena, Ast_DECLARATION, identifier, NULL);
    }
    return result;

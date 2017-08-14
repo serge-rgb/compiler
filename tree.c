@@ -34,6 +34,8 @@ typedef enum AstType_n {
 } AstType;
 
 typedef enum CtypeType_n {
+   Type_NONE,
+
    Type_INT,
    Type_CHAR,
 } CtypeType;
