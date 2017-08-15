@@ -1,31 +1,35 @@
-scc - Sergio's C compiler
-====================================
+scc - C with Cheese
+===================
 
-This is a compiler for a strict superset of the C
-language. Specifically, C99.  The goal of this project is to create a
-simple compiler that fully supports C99 but that also adds new
-features to the language.
+This is a compiler for a strict superset of the C language. Specifically, C11.
+The goal of this project is to create a simple compiler that fully supports C11
+but that also adds new features.
+
 
 List of features.
 -----------------
 
-All of C99 plus:
+- Very short compile times
+
+All of C11 plus:
 
 - Namespaces and a module system
-- Structs with optimal layout
+- Structs with optimal layout (auto struct Foo {  };  )
 - Native SIMD types a la Intel ISPC
-- New preprocessor
-- Reflection
-- Type dispatching
-- Operator overloading
+- Reflection (compiler-provided type info)
+- C++ decltype (typeof keyword ala GCC extension.)
 - Runtime automatic optional NULL dereference check.
 - Array bounds checking whenever possible.
-- Runtime pointer length info
-- C++ decltype
 - C++ auto
 - else after while
 - defer
-- Variable-sized array
+- Variable-sized array (does C11 already have this?)
+
+Maybe... :
+- "Fat" pointers (lang support for pointers + lengths)
+- New preprocessor
+- Type dispatch
+- Operator overloading
 
 
 High Level Action Plan
@@ -33,6 +37,5 @@ High Level Action Plan
 
 - Finish adding block-scope declarations to the code generator.
 - One by one, add the rest of the C int expressions.
-- Emit HTML for ASM. Every line a hyperlink to the codegen source.
-- Add conditional expressions.
+
 

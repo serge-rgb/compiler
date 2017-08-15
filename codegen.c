@@ -473,7 +473,6 @@ emitExpression(Codegen* c, AstNode* node) {
          result->bits = 32;
       }
       else if (node->type == Ast_ID) {
-         // TODO(small): Add size to identifiers.
          SymEntry* entry = sym_hmGet(&c->scope->symbol_table, node->tok->value.string);
 
          Assert(entry->regval->type == RegisterValueType_STACK);

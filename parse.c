@@ -1,7 +1,8 @@
 
+// Forward declaration. Defined in codegen.c
 typedef struct RegisterValue_s RegisterValue;
 
-typedef struct SymEntry {
+typedef struct SymEntry_s {
    Ctype ctype;
    RegisterValue* regval;
 } SymEntry;
