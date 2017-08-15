@@ -1,4 +1,4 @@
-int
+char
 myFunction() {
    return 42;
 }
@@ -10,7 +10,7 @@ main() {
 
    if (my_pretty_variable > 41) {
       if (my_pretty_variable >= 1) {
-         if (foo <= 1) {
+         if (foo >= 3) {
             return myFunction();
          }
       }

@@ -55,12 +55,11 @@ enum RegisterEnum {
 
 typedef struct Scope_s Scope;
 struct Scope_s {
-   // Hash map from string variable to offset in the stack.
-   i64 stack_size;
-   Arena* arena;
+   i64         stack_size;
+   Arena*      arena;
 
-   int if_count;
-   Scope* prev;
+   int         if_count;
+   Scope*      prev;
    sym_Hashmap symbol_table;
 };
 
@@ -75,17 +74,17 @@ typedef enum CodegenConfigFlags_n {
 
 
 typedef struct Codegen_s {
-   Arena* arena;
-   Scope* scope;
-   char*  waiting;
-   char*  queue[CODEGEN_QUEUE_SIZE];
-   u64    queue_lines[CODEGEN_QUEUE_SIZE];
-   int    n_queue;              // Size of the queue.
-   Html*  html;
-   char*  file_name;
-   u64    last_line_number;
-   u32    config;   // CodegenConfigFlags enum
-   sym_Hashmap* symbol_table;
+   Arena*         arena;
+   Scope*         scope;
+   char*          waiting;
+   char*          queue[CODEGEN_QUEUE_SIZE];
+   u64            queue_lines[CODEGEN_QUEUE_SIZE];
+   int            n_queue;              // Size of the queue.
+   Html*          html;
+   char*          file_name;
+   u64            last_line_number;
+   u32            config;   // CodegenConfigFlags enum
+   sym_Hashmap*   symbol_table;
 } Codegen;
 
 static
@@ -229,7 +228,6 @@ int
 codegenPointerSize(Codegen* c) {
    return 8;  // 8 bytes.
 }
-
 
 RegisterValue*
 allocateStackRegister(Codegen* c, int num_bits) {
@@ -486,7 +484,13 @@ emitExpression(Codegen* c, AstNode* node) {
          AstNode* child1 = child0->sibling;
          r1 = codegenEmit(c, child1);
          if (r0->bits != r1->bits) {
-            codegenError("Expected same number of bits in expression.");
+            // If both are integer types with the same sign, the one with the lower rank gets promoted.
+            if (r0->bits < r1->bits) {
+               r0->bits = r1->bits;
+            }
+            else {
+               r1->bits = r0->bits;
+            }
          }
       }
 
@@ -574,6 +578,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
          if (stmt->child) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
+               // TODO(large): Support different types of return types.
                emitInstruction(c, stmt->line_number, "mov rax, %s", registerString(c, r));
             }
             emitInstruction(c, stmt->line_number, "jmp .func_end");
