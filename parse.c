@@ -7,6 +7,7 @@ typedef struct SymEntry_s {
    RegisterValue* regval;
 } SymEntry;
 
+#define HashmapName     SymTable
 #define HashmapPrefix   sym
 #define HashmapKey      char*
 #define HashmapValue    SymEntry
@@ -20,7 +21,7 @@ typedef struct Parser_s {
    Arena* arena;
    AstNode* tree;
    char* file_name;
-   sym_Hashmap symbol_table;
+   SymTable symbol_table;
 } Parser;
 
 // A function that takes a Parser and returns an AstNode*
@@ -35,7 +36,7 @@ newNode(Arena* a) {
 void
 setTypeForId(Parser* p, char* id, Ctype* ctype) {
    SymEntry e = { .ctype = *ctype, .regval = NULL };
-   sym_hmInsert(&p->symbol_table, id, e);
+   symInsert(&p->symbol_table, id, e);
 }
 
 void

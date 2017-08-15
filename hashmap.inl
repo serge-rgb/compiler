@@ -5,6 +5,8 @@
  * hashmap.inl to define a hash map with the corresponding key and value types.
  * You can include hashmap.inl multiple times to define different Hash maps.
  *
+ * If HashmapName is not defined, the type name will be [prefix]Hashmap
+ *
  * By default, the keys are compared by value with ==. Define the KeyCompareFunc
  * preprocessor macro to implement your own key comparison. There is also the
  * HashFunction define to specify a hash function. See Example 2.
@@ -23,6 +25,7 @@
  * --------------------------------------
  *
  * `
+ * `  #define HashmapName     MyMap
  * `  #define HashmapPrefix   test
  * `  #define HashmapKey      int
  * `  #define HashmapVal      bool
@@ -30,10 +33,10 @@
  * `
  * `  // Now test_Hashmap is defined. Insert elements with test_hmInsert and
  * `  // get them with test_hmGet
- * `  test_Hashmap hm = {0};
+ * `  MyMap hm = {0};
  * `  hm.arena = my_arena;
- * `  test_hmInsert(&hm, 42, TRUE);
- * `  bool v = test_hmGet(&hm, 42);  // TRUE
+ * `  testInsert(&hm, 42, TRUE);
+ * `  bool v = testGet(&hm, 42);  // TRUE
  * `
  *
  * Example 2:  Hashmap mapping char* to int. This will define a hash map named
@@ -58,10 +61,10 @@
  * `      size_t len = strlen(*str);
  * `      return hashStr(*str, len);
  * `   }
- * `   #define HashmapPrefix str
- * `   #define HashmapKey char*
- * `   #define HashmapValue int
- * `   #define HashFunction myHash
+ * `   #define HashmapPrefix  str
+ * `   #define HashmapKey     char*
+ * `   #define HashmapValue   int
+ * `   #define HashFunction   myHash
  * `   #define KeyCompareFunc myKeyCompare
  * `   #include "hashmap.inl"
  * `
@@ -91,9 +94,13 @@
 #define HashFunction HashPointer
 #endif
 
+#if !defined(HashmapName)
+#define HashmapName Generic(Hashmap)
+#endif
+
 #define Generic(name)            GenericEx(name, HashmapPrefix)
 #define GenericEx(name, pref)    GenericExEx(name, pref)
-#define GenericExEx(name, pref)  pref ## _ ## name
+#define GenericExEx(name, pref)  pref ## name
 
 
 typedef struct Generic(HashmapKeyVal_s) Generic(HashmapKeyVal);
@@ -107,13 +114,13 @@ struct Generic(HashmapKeyVal_s) {
 typedef struct {
    Arena                   arena;
    Generic(HashmapKeyVal)  keyvals[HashmapSize];
-} Generic(Hashmap);
+} HashmapName;
 
 void
-Generic(hmInsert) (
-                   Generic(Hashmap)* hm,
-                   HashmapKey key,
-                   HashmapValue val) {
+Generic(Insert) (
+                 HashmapName* hm,
+                 HashmapKey key,
+                 HashmapValue val) {
    u64 hash = HashFunction(&key);
    Generic(HashmapKeyVal) *kv = &hm->keyvals[hash % HashmapSize];
    // Using the first element as a sentinel.
@@ -127,9 +134,9 @@ Generic(hmInsert) (
 }
 
 HashmapValue*
-Generic(hmGet) (
-                Generic(Hashmap)* hm,
-                HashmapKey        key) {
+Generic(Get) (
+              HashmapName* hm,
+              HashmapKey        key) {
    u64 hash = HashFunction(&key);
    Generic(HashmapKeyVal)* kv = hm->keyvals[hash % HashmapSize].next;
    HashmapValue* result = NULL;

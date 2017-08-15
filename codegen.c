@@ -55,12 +55,12 @@ enum RegisterEnum {
 
 typedef struct Scope_s Scope;
 struct Scope_s {
-   i64         stack_size;
-   Arena*      arena;
+   i64      stack_size;
+   Arena*   arena;
 
-   int         if_count;
-   Scope*      prev;
-   sym_Hashmap symbol_table;
+   int      if_count;
+   Scope*   prev;
+   SymTable symbol_table;
 };
 
 
@@ -74,17 +74,17 @@ typedef enum CodegenConfigFlags_n {
 
 
 typedef struct Codegen_s {
-   Arena*         arena;
-   Scope*         scope;
-   char*          waiting;
-   char*          queue[CODEGEN_QUEUE_SIZE];
-   u64            queue_lines[CODEGEN_QUEUE_SIZE];
-   int            n_queue;              // Size of the queue.
-   Html*          html;
-   char*          file_name;
-   u64            last_line_number;
-   u32            config;   // CodegenConfigFlags enum
-   sym_Hashmap*   symbol_table;
+   Arena*      arena;
+   Scope*      scope;
+   char*       waiting;
+   char*       queue[CODEGEN_QUEUE_SIZE];
+   u64         queue_lines[CODEGEN_QUEUE_SIZE];
+   int         n_queue;              // Size of the queue.
+   Html*       html;
+   char*       file_name;
+   u64         last_line_number;
+   u32         config;   // CodegenConfigFlags enum
+   SymTable*   symbol_table;
 } Codegen;
 
 static
@@ -473,7 +473,7 @@ emitExpression(Codegen* c, AstNode* node) {
          result->bits = 32;
       }
       else if (node->type == Ast_ID) {
-         SymEntry* entry = sym_hmGet(&c->scope->symbol_table, node->tok->value.string);
+         SymEntry* entry = symGet(&c->scope->symbol_table, node->tok->value.string);
 
          Assert(entry->regval->type == RegisterValueType_STACK);
 
@@ -589,7 +589,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
          char* id_str = ast_id->tok->value.string;
          int value = ast_id->sibling->tok->value.integer;
 
-         Assert (sym_hmGet(&c->scope->symbol_table, id_str) == NULL);
+         Assert (symGet(&c->scope->symbol_table, id_str) == NULL);
          int bits = 0;
          switch (ast_type->ctype->type) {
             case Type_INT: {
@@ -603,7 +603,7 @@ emitStatement(Codegen* c, AstNode* stmt) {
             } break;
          }
          RegisterValue* s = allocateStackRegister(c, bits);
-         sym_hmInsert(&c->scope->symbol_table, id_str, (SymEntry){.ctype = *ast_type->ctype, .regval = s});
+         symInsert(&c->scope->symbol_table, id_str, (SymEntry){.ctype = *ast_type->ctype, .regval = s});
 
          char* reg = registerString(c, s);
          emitInstruction(c, stmt->line_number, "mov %s, 0x%x", reg, value);
