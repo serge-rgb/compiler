@@ -78,10 +78,12 @@
 #endif
 
 #ifndef HashmapKey
+#warning "HashmapKey not defined. Default to int."
 #define HashmapKey int
 #endif
 
 #ifndef HashmapValue
+#warning "HashmapValue not defined. Default to int."
 #define HashmapValue int
 #endif
 
@@ -89,9 +91,9 @@
 #define HashFunction HashPointer
 #endif
 
-#define GenericExEx(name, pref) pref ## _ ## name
-#define GenericEx(name, pref) GenericExEx(name, pref)
-#define Generic(name) GenericEx(name, HashmapPrefix)
+#define Generic(name)            GenericEx(name, HashmapPrefix)
+#define GenericEx(name, pref)    GenericExEx(name, pref)
+#define GenericExEx(name, pref)  pref ## _ ## name
 
 
 typedef struct Generic(HashmapKeyVal_s) Generic(HashmapKeyVal);
@@ -103,7 +105,7 @@ struct Generic(HashmapKeyVal_s) {
 };
 
 typedef struct {
-   Arena*                  arena;
+   Arena                   arena;
    Generic(HashmapKeyVal)  keyvals[HashmapSize];
 } Generic(Hashmap);
 
@@ -112,14 +114,13 @@ Generic(hmInsert) (
                    Generic(Hashmap)* hm,
                    HashmapKey key,
                    HashmapValue val) {
-   BreakHere;
    u64 hash = HashFunction(&key);
    Generic(HashmapKeyVal) *kv = &hm->keyvals[hash % HashmapSize];
    // Using the first element as a sentinel.
    while(kv->next) {
       kv = kv->next;
    }
-   kv->next = AllocType(hm->arena, Generic(HashmapKeyVal));
+   kv->next = AllocType(&hm->arena, Generic(HashmapKeyVal));
    kv = kv->next;
    kv->key = key;
    kv->val = val;
@@ -146,8 +147,13 @@ Generic(hmGet) (
    return result;
 }
 
+#ifdef KeyCompareFunc
+#undef KeyCompareFunc
+#endif
 #undef Generic
 #undef GenericEx
 #undef GenericExEx
-#undef HashmapSize
+#undef HashmapKey
 #undef HashmapPrefix
+#undef HashmapSize
+#undef HashmapValue

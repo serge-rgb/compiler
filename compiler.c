@@ -25,10 +25,11 @@ exit 0
 #endif
 
 #include "memory.c"
+#include "hashmap.c"
 #include "string.c"
 #include "lexer.c"
 #include "tree.c"
 #include "html.c"
-#include "codegen.c"
 #include "parse.c"
+#include "codegen.c"
 #include "main.c"

@@ -56,12 +56,12 @@ enum RegisterEnum {
 typedef struct Scope_s Scope;
 struct Scope_s {
    // Hash map from string variable to offset in the stack.
-   i64 offsets[SCOPE_HASH_SIZE];
    i64 stack_size;
    Arena* arena;
 
    int if_count;
    Scope* prev;
+   sym_Hashmap symbol_table;
 };
 
 
@@ -72,6 +72,7 @@ typedef enum CodegenConfigFlags_n {
 } CodegenConfigFlags;
 
 #define CODEGEN_QUEUE_SIZE 1024
+
 
 typedef struct Codegen_s {
    Arena* arena;
@@ -84,6 +85,7 @@ typedef struct Codegen_s {
    char*  file_name;
    u64    last_line_number;
    u32    config;   // CodegenConfigFlags enum
+   sym_Hashmap* symbol_table;
 } Codegen;
 
 static
@@ -222,18 +224,6 @@ codegenError(char* msg, ...) {
 
    exit(-1);
 }
-
-u64
-offsetForName(Codegen* c, char* name) {
-   u64 hash = hashStr(name, strlen(name));
-   u64 offset = c->scope->offsets[hash % SCOPE_HASH_SIZE];
-   if (offset == -1) {
-      codegenError("Tying to use variable name that is not bound. %s\n", name);
-   }
-   return offset;
-}
-
-// Keep track of register values per identifier.
 
 int
 codegenPointerSize(Codegen* c) {
@@ -422,10 +412,6 @@ pushScope(Codegen* c) {
    // TODO(medium): Different kinds of scope (6.2.1)
    Scope* prev_scope = c->scope;
    c->scope = allocate(c->arena, sizeof(*c->scope));
-   // Since there can be offsets of zero, we set the uninitialized value to be -1.
-   for (size_t i = 0; i < SCOPE_HASH_SIZE; ++i) {
-      c->scope->offsets[i] = -1;
-   }
    ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
    emitInstruction(c, 0, "mov rdx, QWORD [rbp - 0x4]");
@@ -490,15 +476,11 @@ emitExpression(Codegen* c, AstNode* node) {
       }
       else if (node->type == Ast_ID) {
          // TODO(small): Add size to identifiers.
-         result = allocate(c->scope->arena, sizeof(RegisterValue));
+         SymEntry* entry = sym_hmGet(&c->scope->symbol_table, node->tok->value.string);
 
-         AstNode* ast_type =  node->child;
-         ast_type = NULL;
+         Assert(entry->regval->type == RegisterValueType_STACK);
 
-
-
-         result->type = RegisterValueType_STACK;
-         result->offset = offsetForName(c, node->tok->value.string);
+         result = entry->regval;
       } else {
          r0 = codegenEmit(c, child0);
          AstNode* child1 = child0->sibling;
@@ -601,13 +583,9 @@ emitStatement(Codegen* c, AstNode* stmt) {
          AstNode* ast_id = stmt->child;
          AstNode* ast_type = ast_id->child;
          char* id_str = ast_id->tok->value.string;
-         u64 hash = hashStr(id_str, strlen(id_str));
-         if (c->scope->offsets[hash % SCOPE_HASH_SIZE] != -1) {
-            // TODO(medium): Finish implementing hash map...
-            Assert(!"Hash map collision handling not implemented.");
-         }
          int value = ast_id->sibling->tok->value.integer;
 
+         Assert (sym_hmGet(&c->scope->symbol_table, id_str) == NULL);
          int bits = 0;
          switch (ast_type->ctype->type) {
             case Type_INT: {
@@ -620,9 +598,8 @@ emitStatement(Codegen* c, AstNode* stmt) {
                Assert(!"Unknown size for type.");
             } break;
          }
-
          RegisterValue* s = allocateStackRegister(c, bits);
-         c->scope->offsets[hash % SCOPE_HASH_SIZE] = s->offset;
+         sym_hmInsert(&c->scope->symbol_table, id_str, (SymEntry){.ctype = *ast_type->ctype, .regval = s});
 
          char* reg = registerString(c, s);
          emitInstruction(c, stmt->line_number, "mov %s, 0x%x", reg, value);

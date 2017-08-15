@@ -1,4 +1,17 @@
 
+typedef struct RegisterValue_s RegisterValue;
+
+typedef struct SymEntry {
+   Ctype ctype;
+   RegisterValue* regval;
+} SymEntry;
+
+#define HashmapPrefix   sym
+#define HashmapKey      char*
+#define HashmapValue    SymEntry
+#define HashFunction    hashStrPtr
+#define KeyCompareFunc  compareStringKey
+#include "hashmap.inl"
 
 #define CTYPE_HASHMAP_SIZE 128
 typedef struct Parser_s {
@@ -6,7 +19,7 @@ typedef struct Parser_s {
    Arena* arena;
    AstNode* tree;
    char* file_name;
-   Ctype ctype_map[CTYPE_HASHMAP_SIZE];
+   sym_Hashmap symbol_table;
 } Parser;
 
 // A function that takes a Parser and returns an AstNode*
@@ -20,14 +33,8 @@ newNode(Arena* a) {
 
 void
 setTypeForId(Parser* p, char* id, Ctype* ctype) {
-    BreakHere;
-   u64 hash = HashPointer(ctype);
-   Ctype* toset = &p->ctype_map[hash % CTYPE_HASHMAP_SIZE];
-   if (toset->type != Type_NONE) {
-      Assert(!"TODO: Hash map collision not implemented.");
-   }
-   *toset = *ctype;
-   hash = 0;
+   SymEntry e = { .ctype = *ctype, .regval = NULL };
+   sym_hmInsert(&p->symbol_table, id, e);
 }
 
 void

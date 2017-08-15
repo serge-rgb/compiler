@@ -2,33 +2,6 @@
 #define STRING_CACHE_MAX_SIZE 512
 
 
-#include "hashmap.h"
-
-b32 myCompare(char* a, char* b) {
-   b32 result = false;
-   size_t sa = strlen(a);
-   size_t sb = strlen(b);
-   if (sa == sb) {
-      size_t i;
-      for (i = 0; i < sa && a[i] == b[i]; ++i) {}
-      if (sa == i) {
-         result = true;
-      }
-   }
-   return result;
-}
-u64 myHash (char** str) {
-   size_t len = strlen(*str);
-   return hashStr(*str, len);
-}
-#define HashmapPrefix str
-#define HashmapKey char*
-#define HashmapValue int
-#define HashFunction myHash
-#define KeyCompareFunc myCompare
-#include "hashmap.inl"
-
-
 typedef struct Buffer_s {
    char* current;
    char* end;  // Points to the end of the buffer.
@@ -46,10 +19,6 @@ static StringList* g_string_map[STRING_HASH_BUCKET_SIZE];
 void
 stringInit(Arena* a) {
    g_string_arena = a;
-   str_Hashmap hm = {0};
-   hm.arena = a;
-   str_hmInsert(&hm, "foo", 42);
-   str_hmGet(&hm, "foo");
 }
 
 b32
