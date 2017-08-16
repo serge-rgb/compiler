@@ -483,6 +483,7 @@ emitExpression(Codegen* c, AstNode* node) {
          AstNode* child1 = child0->sibling;
          r1 = codegenEmit(c, child1);
          if (r0->bits != r1->bits) {
+            // TODO(large): promotion rules for non-integer types.
             // If both are integer types with the same sign, the one with the lower rank gets promoted.
             if (r0->bits < r1->bits) {
                r0->bits = r1->bits;
@@ -720,7 +721,7 @@ codegenEmit(Codegen* c, AstNode* node) {
       emitCompoundStatement(c, node);
    }
    else {
-      Assert(!"Codegen emit for this kind of node is not implemented.");
+      emitStatement(c, node);
    }
    return result;
 }
