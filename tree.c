@@ -31,8 +31,6 @@ typedef enum AstType_n {
    Ast_GEQ,
    Ast_LOGICAL_OR,
    Ast_COMPOUND_STMT,
-
-   Ast_TYPE,
 } AstType;
 
 typedef enum CtypeType_n {

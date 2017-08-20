@@ -433,7 +433,7 @@ parseCtypeSpecifier(Token* t) {
 }
 
 AstNode*
-parseDeclarationSpecifiers(Parser* p, Ctype** out_type) {
+parseDeclarationSpecifiers(Parser* p) {
    // One or more of:
    //   storage-class-specifier
    //   type-specifier
@@ -441,7 +441,7 @@ parseDeclarationSpecifiers(Parser* p, Ctype** out_type) {
    Token* t = nextToken(p);
    Token* bt = t;
    AstNode* result = NULL;
-   Ctype* type = NULL;
+   Ctype* ctype = NULL;
 
    if (t->type == TType_KEYWORD) {
 
@@ -456,14 +456,16 @@ parseDeclarationSpecifiers(Parser* p, Ctype** out_type) {
 
       }
       // Ctype specifiers
-      else if ((type = parseCtypeSpecifier(t), type)) {
-         Assert(!*out_type);
-         *out_type = type;
+      else if ((ctype = parseCtypeSpecifier(t), ctype)) {
+         result->ctype = ctype;
       }
       else {
          result = NULL;
          backtrack(p, bt);
       }
+   }
+   else {
+      backtrack(p, bt);
    }
 
    return result;
@@ -475,14 +477,31 @@ AstNode* parseDeclarator(Parser* p);
 AstNode*
 parameterTypeList(Parser* p) {
    AstNode* result = NULL;
+
+   AstNode* old = NULL;
+
    // Parse parameter, right to left.
-   AstNode* decl_spec = NULL;
-   AstNode* declarator = NULL;
-   Ctype* type = NULL;
-   if ((decl_spec = parseDeclarationSpecifiers(p, &type), decl_spec) &&
-       (declarator = parseDeclarator(p), declarator)) {
-      result = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
+   while (true) {
+      AstNode* decl_spec = parseOrBacktrack(parseDeclarationSpecifiers, p);
+      AstNode* declarator = parseOrBacktrack(parseDeclarator, p);
+
+      if (decl_spec && declarator) {
+         AstNode* new = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
+         new->sibling = old;
+         old = new;
+         if (peekPunctuator(p, ',')) {
+            // There is another parameter.
+            nextToken(p);
+         } else {
+            result = old;
+            break;
+         }
+      }
+      else {
+         break; // Empty param list
+      }
    }
+
    return result;
 }
 
@@ -493,8 +512,10 @@ parseDeclarator(Parser* p) {
    if (t->type == TType_ID) {
       r = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
       if (nextPunctuator(p, '(')) {
-         BreakHere;
-         parseOrBacktrack(parameterTypeList, p);
+         AstNode* params = parseOrBacktrack(parameterTypeList, p);
+         if (params) {
+            r->child = params;
+         }
          if (!nextPunctuator(p, ')')) {
             parseError("Expected ) in declarator");
          }
@@ -519,8 +540,7 @@ parseInitializer(Parser* p) {
 AstNode*
 parseDeclaration(Parser* p) {
    AstNode* result = NULL;
-   Ctype* type = NULL;
-   AstNode* specifiers = parseDeclarationSpecifiers(p, &type);
+   AstNode* specifiers = parseDeclarationSpecifiers(p);
    if (specifiers) {
       AstNode* identifier = parseDeclarator(p);
       AstNode* initializer = NULL;
@@ -534,11 +554,8 @@ parseDeclaration(Parser* p) {
       }
       expectPunctuator(p, ';');
 
-      AstNode* ast_type = makeAstNodeWithLineNumber(p->arena, Ast_TYPE, NULL, NULL, specifiers->line_number);
-      ast_type->ctype = type;
       identifier->sibling = initializer;
-      identifier->child = ast_type;
-      setTypeForId(p, identifier->tok->value.string, ast_type->ctype);
+      /* setTypeForId(p, identifier->tok->value.string, ast_type->ctype); */
       result = makeAstNode(p->arena, Ast_DECLARATION, identifier, NULL);
    }
    return result;
@@ -635,8 +652,7 @@ parseFunctionDefinition(Parser* p) {
    AstNode* declaration_specifier = NULL;
    AstNode* declarator = NULL;
 
-   Ctype* type = NULL;
-   if ((declaration_specifier = parseDeclarationSpecifiers(p, &type)) != NULL &&
+   if ((declaration_specifier = parseDeclarationSpecifiers(p)) != NULL &&
        (declarator = parseDeclarator(p)) != NULL) {
 
       AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);

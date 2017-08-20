@@ -1,5 +1,5 @@
 char
-myFunction(int p) {
+myFunction(int p, char q, int r) {
    return p;
 }
 

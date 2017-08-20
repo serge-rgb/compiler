@@ -22,6 +22,7 @@ All of C11 plus:
 - Array bounds checking whenever possible.
 - C++ auto
 - else after while
+- declarations inside if
 - defer
 - Variable-sized array (does C11 already have this?)
 
