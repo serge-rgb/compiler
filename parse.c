@@ -469,12 +469,36 @@ parseDeclarationSpecifiers(Parser* p, Ctype** out_type) {
    return result;
 }
 
+// Forward declaration to fix circular dependency with parseDeclarator
+AstNode* parseDeclarator(Parser* p);
+
+AstNode*
+parameterTypeList(Parser* p) {
+   AstNode* result = NULL;
+   // Parse parameter, right to left.
+   AstNode* decl_spec = NULL;
+   AstNode* declarator = NULL;
+   Ctype* type = NULL;
+   if ((decl_spec = parseDeclarationSpecifiers(p, &type), decl_spec) &&
+       (declarator = parseDeclarator(p), declarator)) {
+      result = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
+   }
+   return result;
+}
+
 AstNode*
 parseDeclarator(Parser* p) {
    AstNode* r = NULL;
    Token* t = nextToken(p);
    if (t->type == TType_ID) {
       r = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
+      if (nextPunctuator(p, '(')) {
+         BreakHere;
+         parseOrBacktrack(parameterTypeList, p);
+         if (!nextPunctuator(p, ')')) {
+            parseError("Expected ) in declarator");
+         }
+      }
       r->tok = t;
    }
    return r;
@@ -616,10 +640,6 @@ parseFunctionDefinition(Parser* p) {
        (declarator = parseDeclarator(p)) != NULL) {
 
       AstNode* funcdef = makeAstNode(p->arena, Ast_FUNCDEF, declaration_specifier, declarator);
-
-      // TODO(long): Support something other than no-params
-      nextPunctuator(p, '(');
-      nextPunctuator(p, ')');
 
       parseOrBacktrack(parseDeclarationList, p);
       AstNode* stmts = parseCompoundStatement(p);
