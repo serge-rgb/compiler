@@ -478,8 +478,6 @@ AstNode*
 parameterTypeList(Parser* p) {
    AstNode* result = NULL;
 
-   AstNode* old = NULL;
-
    // Parse parameter, right to left.
    while (true) {
       AstNode* decl_spec = parseOrBacktrack(parseDeclarationSpecifiers, p);
@@ -487,13 +485,13 @@ parameterTypeList(Parser* p) {
 
       if (decl_spec && declarator) {
          AstNode* new = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
-         new->sibling = old;
-         old = new;
+         new->sibling = result;
+         result = new;
+
          if (peekPunctuator(p, ',')) {
             // There is another parameter.
             nextToken(p);
          } else {
-            result = old;
             break;
          }
       }
@@ -511,6 +509,7 @@ parseDeclarator(Parser* p) {
    Token* t = nextToken(p);
    if (t->type == TType_ID) {
       r = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
+      printf("found declarator %s\n", t->value.string);
       if (nextPunctuator(p, '(')) {
          AstNode* params = parseOrBacktrack(parameterTypeList, p);
          if (params) {
@@ -554,9 +553,8 @@ parseDeclaration(Parser* p) {
       }
       expectPunctuator(p, ';');
 
+      result = makeAstNode(p->arena, Ast_DECLARATION, specifiers, identifier);
       identifier->sibling = initializer;
-      /* setTypeForId(p, identifier->tok->value.string, ast_type->ctype); */
-      result = makeAstNode(p->arena, Ast_DECLARATION, identifier, NULL);
    }
    return result;
 }

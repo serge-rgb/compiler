@@ -1,6 +1,6 @@
 char
-myFunction(int p, char q, int r) {
-   return p;
+myFunction(int p, int q, int r, int s) {
+   return 42;
 }
 
 int

@@ -585,9 +585,10 @@ emitStatement(Codegen* c, AstNode* stmt) {
          }
       } break;
       case Ast_DECLARATION: {
-         AstNode* ast_id = stmt->child;
-         AstNode* ast_type = ast_id->child;
+         AstNode* ast_type = stmt->child;
+         AstNode* ast_id = ast_type->sibling;
          char* id_str = ast_id->tok->value.string;
+
          int value = ast_id->sibling->tok->value.integer;
 
          Assert (symGet(&c->scope->symbol_table, id_str) == NULL);

@@ -1,37 +1,14 @@
 typedef enum AstType_n {
-   Ast_NONE,
-
-   Ast_TYPE_SPECIFIER,
-
-   Ast_NUMBER,
-   Ast_KEYWORD,
-
-   Ast_IF,
-
-   Ast_ID,
-
-   Ast_FUNCDEF,
-   Ast_FUNCCALL,
-
-   Ast_PARAMETER,
-
-   Ast_DECLARATION,
-
-   Ast_RETURN,
-
-   Ast_ADD,
-   Ast_SUB,
-   Ast_MUL,
-   Ast_DIV,
-   Ast_LOGICAL_AND,
-   Ast_EQUALS,
-   Ast_LESS,
-   Ast_LEQ,
-   Ast_GREATER,
-   Ast_GEQ,
-   Ast_LOGICAL_OR,
-   Ast_COMPOUND_STMT,
+#define X(node) node,
+#include "ast_nodes.inl"
+#undef X
 } AstType;
+
+char* g_ast_type_string[] = {
+#define X(node) #node ,
+#include "ast_nodes.inl"
+#undef X
+};
 
 typedef enum CtypeType_n {
    Type_NONE,
@@ -81,8 +58,6 @@ makeAstNodeWithLineNumber(Arena* a, AstType type, AstNode* left, AstNode* right,
 
    n->line_number = line_number;
 
-   Assert(n->line_number);
-
    return n;
 }
 
@@ -112,3 +87,53 @@ numBytesForType(Ctype* ctype) {
    }
    return 4;
 }
+
+
+void
+astPrintIndent(FILE* fd, int indent) {
+   for (int i = 0; i < indent; ++i) {
+      fprintf(fd, " ");
+   }
+}
+
+void
+astPrintNode(FILE* fd, AstNode* node, int indent) {
+   astPrintIndent(fd, indent);
+
+   fprintf(fd, "%s ", g_ast_type_string[node->type]);
+
+   switch (node->type) {
+      case Ast_ID: {
+         fprintf(fd, " [%s]", node->tok->value.string);
+      } break;
+      case Ast_NUMBER: {
+         fprintf(fd, " [%d]", node->tok->value.integer);
+      } break;
+      default: {
+
+      } break;
+   }
+
+   if (node->child) {
+      astPrintNode(fd, node->child, indent + 2);
+   }
+   for (AstNode* n = node->sibling; n; n = n->sibling) {
+      fprintf(fd, "\n");
+      astPrintNode(fd, n, indent + 2);
+   }
+}
+
+/**
+ * Print out a lisp-style representation of the AST for a given translation unit.
+ **/
+void
+astDebugOutput(AstNode* node) {
+   FILE* fd = fopen("ast.lisp", "w");
+
+   if (fd) {
+      astPrintNode(fd, node, 0);
+   }
+
+   fclose(fd);
+}
+

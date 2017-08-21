@@ -17,6 +17,7 @@ All of C11 plus:
 - Structs with optimal layout (auto struct Foo {  };  )
 - Native SIMD types a la Intel ISPC
 - Reflection (compiler-provided type info)
+-  print enum values as strings
 - C++ decltype (typeof keyword ala GCC extension.)
 - Runtime automatic optional NULL dereference check.
 - Array bounds checking whenever possible.
