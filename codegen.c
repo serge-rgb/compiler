@@ -308,7 +308,7 @@ codegenInit(Codegen* c) {
 char*
 codegenHtmlHidden(Codegen* c, u64 line_number) {
    char* hidden = allocate(c->arena, LINE_MAX);
-   snprintf(hidden, LINE_MAX, "%s: %llu", c->file_name, line_number);
+   snprintf(hidden, LINE_MAX, "%s: %lu", c->file_name, line_number);
    return hidden;
 }
 
@@ -394,7 +394,7 @@ finishInstruction(Codegen* c, i64 val) {
 
    char newasm[LINE_MAX] = {0};
 
-   snprintf(newasm, LINE_MAX, "%s %lld", waiting, val);
+   snprintf(newasm, LINE_MAX, "%s %ld", waiting, val);
 
    c->waiting = NULL;
 

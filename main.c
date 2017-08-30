@@ -43,14 +43,12 @@ main(void) {
 
       AstNode* tree = parseTranslationUnit(&p);
       if (tree) {
-         astDebugOutput(tree);
-
          codegen.symbol_table = &p.symbol_table;
          codegenInit(&codegen);
          codegenTranslationUnit(&codegen, tree);
       }
       deallocate(&tmp_parser_arena);
-      printf("FileStream says it's on line %llu\n", file_stream.line_number);
+      printf("FileStream says it's on line %lu\n", file_stream.line_number);
       fileStreamClose(&file_stream);
       htmlEnd(&html);
    }
