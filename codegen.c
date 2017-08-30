@@ -485,12 +485,20 @@ emitExpression(Codegen* c, AstNode* node) {
          if (r0->bits != r1->bits) {
             // TODO(large): promotion rules for non-integer types.
             // If both are integer types with the same sign, the one with the lower rank gets promoted.
+            needsRegister(c, &r0);
+            needsRegister(c, &r1);
+            RegisterValue* smaller = r1;
+            RegisterValue* larger = r0;
+
             if (r0->bits < r1->bits) {
-               r0->bits = r1->bits;
+               smaller = r0;
+               larger = r1;
             }
-            else {
-               r1->bits = r0->bits;
-            }
+
+            char* smaller_str = registerString(c, smaller);
+
+            smaller->bits = larger->bits;
+            emitInstruction(c, node->line_number, "movzx %s, %s", registerString(c, smaller), smaller_str);
          }
       }
 
