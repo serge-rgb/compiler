@@ -1,13 +1,13 @@
 char* g_keywords[] = {
-#define X(keyword) #keyword,
-#include "keywords.inl"
-#undef X
+   #define X(keyword) #keyword,
+   #include "keywords.inl"
+   #undef X
 };
 
 typedef enum Keyword_n {
-#define X(keyword) Keyword_ ## keyword,
-#include "keywords.inl"
-#undef X
+   #define X(keyword) Keyword_ ## keyword,
+   #include "keywords.inl"
+   #undef X
 } Keyword;
 
 typedef enum TType_n {

@@ -418,6 +418,7 @@ pushScope(Codegen* c) {
 void
 popScope(Codegen* c) {
    deallocate(c->scope->arena);
+   deallocate(&c->scope->symbol_table.arena);
    c->scope = c->scope->prev;
 }
 
@@ -586,8 +587,9 @@ emitStatement(Codegen* c, AstNode* stmt) {
          if (stmt->child) {
             RegisterValue* r = emitExpression(c, stmt->child);
             if (r != &g_registers[Reg_RAX]) {
-               // TODO(large): Support different types of return types.
-               emitInstruction(c, stmt->line_number, "mov rax, %s", registerString(c, r));
+               g_registers[Reg_RAX].bits = r->bits;
+               emitInstruction(c, stmt->line_number, "mov %s, %s",
+                               registerString(c, &g_registers[Reg_RAX]), registerString(c, r));
             }
             emitInstruction(c, stmt->line_number, "jmp .func_end");
          }
