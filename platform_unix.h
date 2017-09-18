@@ -5,6 +5,13 @@ int raise(int sig);
 
 #if defined(__linux__)
 #define SIGINT 5
+#define PLATFORM_FORMAT_I64 "ld"
+#define PLATFORM_FORMAT_U64 "lu"
+#elif defined(__MACH__)
+#define PLATFORM_FORMAT_I64 "lld"
+#define PLATFORM_FORMAT_U64 "llu"
+#else
+#error Uknown UNIX platform
 #endif
 
 extern int    snprintf( char * buffer, unsigned long bufsz, const char * format, ... );

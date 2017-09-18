@@ -157,22 +157,30 @@ RegisterValue* codegenEmit(Codegen* c, AstNode* node);
 
 void
 setupVolatility(Codegen* c) {
-   if (c->config & Config_TARGET_MACOS) {
-      //TODO(short): Setup according to SystemV ABI
+   int* volatile_regs = NULL;
+   if (   (c->config & Config_TARGET_MACOS)
+       || (c->config & Config_TARGET_LINUX)) {
       // These are the non-volatile registers in macos
-      //&g_registers[Reg_RBX],
-      //&g_registers[Reg_R12],
-      //&g_registers[Reg_R13],
-      //&g_registers[Reg_R14],
-      //&g_registers[Reg_R15],
+      static int volatile_regs_systemv[] = {
+         Reg_RBX,
+         Reg_RSI,
+         Reg_RDI,
+         Reg_R12,
+         Reg_R13,
+         Reg_R14,
+         Reg_R15,
+      };
+      volatile_regs = volatile_regs_systemv;
    }
    else if (c->config & Config_TARGET_WIN) {
-      int volatile_regs[] = {
+      static int volatile_regs_win64[] = {
          Reg_RAX, Reg_RCX, Reg_RDX, Reg_R8, Reg_R9, Reg_R10, Reg_R11
+                 // TODO(medium): Floating point registers volatility.
       };
-      for (int i = volatile_regs[0]; i < ArrayCount(volatile_regs); ++i) {
-         g_registers[i].is_volatile = true;
-      }
+      volatile_regs = volatile_regs_win64;
+   }
+   for (int i = volatile_regs[0]; i < ArrayCount(volatile_regs); ++i) {
+      g_registers[i].is_volatile = true;
    }
 }
 
@@ -308,7 +316,7 @@ codegenInit(Codegen* c) {
 char*
 codegenHtmlHidden(Codegen* c, u64 line_number) {
    char* hidden = allocate(c->arena, LINE_MAX);
-   snprintf(hidden, LINE_MAX, "%s: %lu", c->file_name, line_number);
+   snprintf(hidden, LINE_MAX, "%s: %" FORMAT_I64 , c->file_name, line_number);
    return hidden;
 }
 
@@ -366,6 +374,7 @@ needsRegister(Codegen* c, RegisterValue** r) {
    }
 }
 
+// Put a register in the stack.
 RegisterValue*
 stashRegister(Codegen* c, RegisterValue* r) {
    RegisterValue* stack = allocateStackRegister(c, 64);
@@ -394,7 +403,7 @@ finishInstruction(Codegen* c, i64 val) {
 
    char newasm[LINE_MAX] = {0};
 
-   snprintf(newasm, LINE_MAX, "%s %ld", waiting, val);
+   snprintf(newasm, LINE_MAX, "%s %" PLATFORM_FORMAT_I64, waiting, val);
 
    c->waiting = NULL;
 
@@ -418,7 +427,9 @@ pushScope(Codegen* c) {
 void
 popScope(Codegen* c) {
    deallocate(c->scope->arena);
-   deallocate(&c->scope->symbol_table.arena);
+   if (!arenaIsEmpty(&c->scope->symbol_table.arena)) {
+      deallocate(&c->scope->symbol_table.arena);
+   }
    c->scope = c->scope->prev;
 }
 
@@ -437,6 +448,27 @@ nodeIsExpression(AstNode* node) {
    return result;
 }
 
+void
+targetParameter(Codegen* c, u64 n_param, AstNode* param) {
+   if ((c->config & Config_TARGET_LINUX) || (c->config & Config_TARGET_MACOS)) {
+      switch(n_param) {
+         case 0: {
+         } break;
+         case 1: {
+         } break;
+         case 2: {
+         } break;
+         case 3: {
+         } break;
+         case 4: {
+         } break;
+      }
+   }
+   else {
+      Assert(!"Need to implement params on Windows.");
+   }
+}
+
 RegisterValue*
 emitExpression(Codegen* c, AstNode* node) {
    RegisterValue* result = NULL;
@@ -447,6 +479,7 @@ emitExpression(Codegen* c, AstNode* node) {
 
       if (node->type == Ast_FUNCCALL) {
          AstNode* func = node->child;
+         AstNode* params = func->sibling;
          char* label = func->tok->value.string;
          // Keep track of the volatile registers that were bound before we called the function
          RegisterValue* stored[Reg_Count] = {0};
@@ -455,6 +488,14 @@ emitExpression(Codegen* c, AstNode* node) {
             if (v->bound && v->is_volatile) {
                stored[i] = stashRegister(c, v);
             }
+         }
+         // Put the parameters in registers and/or the stack.
+         u64 n_param = 0;
+         for (AstNode* param = params;
+              param != NULL;
+              param = param->sibling) {
+
+            targetParameter(c, n_param++, param);
          }
          emitInstruction(c, node->line_number, "call %s", label);
          // Restore the volatile registers we saved.

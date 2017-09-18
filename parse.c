@@ -157,6 +157,9 @@ primaryExpr(Parser* p) {
    return t;
 }
 
+// Circular dependency with postfixExpr.
+AstNode* argumentExpressionList(Parser* p);
+
 AstNode*
 postfixExpr(Parser* p) {
    AstNode* left = primaryExpr(p);
@@ -169,10 +172,17 @@ postfixExpr(Parser* p) {
       else if (nextPunctuator(p, '(')) {
          if (nextPunctuator(p, ')')) {
             right = left;
-            left = makeAstNode(p->arena, Ast_FUNCCALL, left, NULL);
+            left = makeAstNode(p->arena, Ast_FUNCCALL, right, NULL);
          }
          else {
-            parseError("Expected ) in function call.");
+            AstNode* params = argumentExpressionList(p);
+            if (nextPunctuator(p, ')')) {
+               right = left;
+               left = makeAstNode(p->arena, Ast_FUNCCALL, right, params);
+            }
+            else {
+               parseError("Expected ) in function call.");
+            }
          }
       }
       else if (nextPunctuator(p, '.')) {
@@ -323,6 +333,17 @@ assignmentExpr(Parser* p) {
    AstNode* t = conditionalExpr(p);
    // TODO(long): unaryExpr assignmentOperator assignmentExpr
    return t;
+}
+
+AstNode*
+argumentExpressionList(Parser* p) {
+   AstNode* args = NULL;
+   AstNode* assignment = NULL;
+   while ((assignment = assignmentExpr(p))) {
+      assignment->sibling = args;
+      args = assignment;
+   }
+   return args;
 }
 
 AstNode*

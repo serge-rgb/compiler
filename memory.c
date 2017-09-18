@@ -68,6 +68,7 @@ void
 deallocate(Arena* a) {
    u8* block = a->block;
    if (!block) {
+      BreakHere;
       fprintf(stderr, "WARNING: deallocating an arena with NULL block. (Double free?)\n");
    }
 
@@ -78,4 +79,13 @@ deallocate(Arena* a) {
       free(h);
       block = p;
    }
+}
+
+// Helper functions.
+
+b32
+arenaIsEmpty(Arena* a) {
+   b32 empty = a->block == NULL;
+   Assert(!empty || !a->next);
+   return empty;
 }
