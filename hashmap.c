@@ -30,13 +30,15 @@ hashStrPtr (char** str) {
 b32
 compareStringKey (char* a, char* b) {
    b32 result = false;
-   size_t sa = strlen(a);
-   size_t sb = strlen(b);
-   if (sa == sb) {
-      size_t i;
-      for (i = 0; i < sa && a[i] == b[i]; ++i) {}
-      if (sa == i) {
-         result = true;
+   if (a && b) {
+      size_t sa = strlen(a);
+      size_t sb = strlen(b);
+      if (sa == sb) {
+         size_t i;
+         for (i = 0; i < sa && a[i] == b[i]; ++i) {}
+         if (sa == i) {
+            result = true;
+         }
       }
    }
    return result;

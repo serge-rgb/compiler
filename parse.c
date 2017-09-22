@@ -34,12 +34,6 @@ newNode(Arena* a) {
 }
 
 void
-setTypeForId(Parser* p, char* id, Ctype* ctype) {
-   SymEntry e = { .ctype = *ctype, .regval = NULL };
-   symInsert(&p->symbol_table, id, e);
-}
-
-void
 parseError(char* msg, ...) {
    va_list args;
    va_start(args, msg);
@@ -338,10 +332,21 @@ assignmentExpr(Parser* p) {
 AstNode*
 argumentExpressionList(Parser* p) {
    AstNode* args = NULL;
-   AstNode* assignment = NULL;
-   while ((assignment = assignmentExpr(p))) {
-      assignment->sibling = args;
-      args = assignment;
+   while (true) {
+      AstNode* assignment = assignmentExpr(p);
+      if (!assignment) {
+         parseError("Expected argument in expression list");
+      }
+      else {
+         assignment->sibling = args;
+         args = assignment;
+         if (peekPunctuator(p, ',')) {
+            nextToken(p);
+         }
+         else {
+            break;
+         }
+      }
    }
    return args;
 }

@@ -89,6 +89,11 @@ typedef struct Codegen_s {
 
 static
 RegisterValue g_registers[] = {
+   // TODO(large):  It's time to write a real register allocator.
+   // This array is wrong. Some 32 and 64-bit registers are aliased to two 8
+   // bit registers, which the current "solution" does not handle. We can do
+   // another shitty solution which can handle the multi-register aliasing or
+   // we can start doing a proper register allocator.
    {
       .reg    = "rax",
       .reg_32 = "eax",
@@ -112,14 +117,17 @@ RegisterValue g_registers[] = {
    {
       .reg    = "rsi",
       .reg_32 = "esi",
+      .reg_8 = "ah",
    },
    {
       .reg    = "rdi",
       .reg_32 = "edi",
+      .reg_8 = "bh"
    },
    {
       .reg    = "r8",
       .reg_32 = "r8d",
+      .reg_8 = "ch",
    },
    {
       .reg    = "r9",
@@ -184,6 +192,22 @@ setupVolatility(Codegen* c) {
    }
 }
 
+
+void
+codegenError(char* msg, ...) {
+   va_list args;
+   va_start(args, msg);
+   char buffer[LINE_MAX] = {0};
+   vsnprintf(buffer, LINE_MAX, msg, args);
+   fprintf(stderr, "Codegen error: %s\n", buffer);
+   va_end(args);
+
+   BreakHere;
+
+   exit(-1);
+}
+
+
 char*
 registerString(Codegen* c, RegisterValue* r) {
    char *res = NULL;
@@ -197,6 +221,9 @@ registerString(Codegen* c, RegisterValue* r) {
          }
          else if (r->bits == 8) {
             res = r->reg_8;
+         }
+         else {
+            codegenError("RegisterValue bits not set!");
          }
       }
       break;
@@ -213,23 +240,13 @@ registerString(Codegen* c, RegisterValue* r) {
          else if (r->bits == 64)
             snprintf(res, 128, "QWORD [ rbp - 0x%x ]", (int)r->offset);
       } break;
+      default: {
+         // WTF
+         BreakHere;
+      } break;
    }
    Assert(res);
    return res;
-}
-
-void
-codegenError(char* msg, ...) {
-   va_list args;
-   va_start(args, msg);
-   char buffer[LINE_MAX] = {0};
-   vsnprintf(buffer, LINE_MAX, msg, args);
-   fprintf(stderr, "Codegen error: %s\n", buffer);
-   va_end(args);
-
-   BreakHere;
-
-   exit(-1);
 }
 
 int
@@ -449,25 +466,69 @@ nodeIsExpression(AstNode* node) {
 }
 
 void
-targetParameter(Codegen* c, u64 n_param, AstNode* param) {
+targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
    if ((c->config & Config_TARGET_LINUX) || (c->config & Config_TARGET_MACOS)) {
-      switch(n_param) {
+      RegisterValue* r = &g_registers[Reg_RDI];
+      RegisterValue* p = codegenEmit(c, param);
+      switch (n_param) {
          case 0: {
+            // r is already RDI
          } break;
          case 1: {
+            r = &g_registers[Reg_RSI];
          } break;
          case 2: {
+            r = &g_registers[Reg_RDX];
          } break;
          case 3: {
+            r = &g_registers[Reg_RCX];
          } break;
          case 4: {
+            r = &g_registers[Reg_R8];
+         } break;
+         case 5: {
+            r = &g_registers[Reg_R9];
          } break;
       }
+      r->bits = p->bits;
+      emitInstruction(c, 0, "mov %s, %s", registerString(c, r), registerString(c, p));
    }
    else {
       Assert(!"Need to implement params on Windows.");
    }
 }
+
+RegisterValue*
+targetPopParameter(Codegen* c, u64 n_param) {
+   RegisterValue* r = &g_registers[Reg_RDI];
+   if ((c->config & Config_TARGET_MACOS) || (c->config & Config_TARGET_LINUX)) {
+      switch (n_param) {
+         case 0: {
+            // r is already RDI
+         } break;
+         case 1: {
+            r = &g_registers[Reg_RSI];
+         } break;
+         case 2: {
+            r = &g_registers[Reg_RDX];
+         } break;
+         case 3: {
+            r = &g_registers[Reg_RCX];
+         } break;
+         case 4: {
+            r = &g_registers[Reg_R8];
+         } break;
+         case 5: {
+            r = &g_registers[Reg_R9];
+         } break;
+      }
+   }
+   else {
+      Assert (!"Implement parameter pop in Windows.");
+   }
+   return r;
+}
+
 
 RegisterValue*
 emitExpression(Codegen* c, AstNode* node) {
@@ -495,7 +556,7 @@ emitExpression(Codegen* c, AstNode* node) {
               param != NULL;
               param = param->sibling) {
 
-            targetParameter(c, n_param++, param);
+            targetPushParameter(c, n_param++, param);
          }
          emitInstruction(c, node->line_number, "call %s", label);
          // Restore the volatile registers we saved.
@@ -516,8 +577,6 @@ emitExpression(Codegen* c, AstNode* node) {
       }
       else if (node->type == Ast_ID) {
          SymEntry* entry = symGet(&c->scope->symbol_table, node->tok->value.string);
-
-         Assert(entry->regval->type == RegisterValueType_STACK);
 
          result = entry->regval;
       } else {
@@ -706,13 +765,13 @@ emitCompoundStatement(Codegen* c, AstNode* compound) {
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node) {
-   AstNode* type     = node->child;
-   AstNode* id       = type->sibling;
-   AstNode* compound = id->sibling;
+   AstNode* type        = node->child;
+   AstNode* declarator  = type->sibling;
+   AstNode* compound    = declarator->sibling;
 
-   if (type && id && compound) {
-      emitInstruction(c, node->line_number, "global %s", id->tok->value.string);
-      emitInstruction(c, node->line_number, "%s:", id->tok->value.string);
+   if (type && declarator && compound) {
+      emitInstruction(c, node->line_number, "global %s", declarator->tok->value.string);
+      emitInstruction(c, node->line_number, "%s:", declarator->tok->value.string);
       emitInstruction(c, node->line_number, "push rbp");
       emitInstruction(c, node->line_number, "mov rbp, rsp");
       incompleteInstruction(c, "sub rsp, ");
@@ -720,11 +779,35 @@ emitFunctionDefinition(Codegen* c, AstNode* node) {
       // Push
       pushScope(c);
 
+      AstNode* params = declarator->child;
+
+      if (params) {
+         AstNode* p = params;
+         u64 n_param = 0;
+         while (p) {
+            Assert (p->type == Ast_PARAMETER);
+            AstNode* type_spec = p->child;
+            AstNode* declarator = type_spec->sibling;
+
+            Assert (type_spec && type_spec->type == Ast_TYPE_SPECIFIER);
+            Assert (declarator && declarator->type == Ast_ID);
+
+            RegisterValue* reg = targetPopParameter(c, n_param++);
+
+            reg->bits = 8 * numBytesForType(type_spec->ctype);
+            char* id_str = declarator->tok->value.string;
+
+            symInsert(&c->scope->symbol_table, id_str,
+               (SymEntry){.ctype = *type_spec->ctype, .regval = reg});
+
+            p = p->sibling;
+         }
+      }
+
       emitCompoundStatement(c, compound);
 
       i64 stack = c->scope->stack_size;
 
-      // TODO(short): What is the stack alignment requirement for Linux/GCC?
       stack = AlignPow2(stack, 16);
       // TODO(short): On mac OS, the stack needs to be aligned to 32 or 64 byte boundaries when m256 or m512 values are passed on the stack.
 

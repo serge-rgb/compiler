@@ -37,6 +37,7 @@ Maybe... :
 High Level Action Plan
 ----------------------
 
+- Find a good C unit testing tool.
 - Finish adding block-scope declarations to the code generator.
 - One by one, add the rest of the C int expressions.
 

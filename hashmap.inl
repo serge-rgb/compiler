@@ -98,6 +98,10 @@
 #define HashmapName Generic(Hashmap)
 #endif
 
+#if !defined(HashmapError)
+#define HashmapError(msg) Assert(!(msg))
+#endif
+
 #define Generic(name)            GenericEx(name, HashmapPrefix)
 #define GenericEx(name, pref)    GenericExEx(name, pref)
 #define GenericExEx(name, pref)  pref ## name
@@ -123,10 +127,22 @@ Generic(Insert) (
                  HashmapValue val) {
    u64 hash = HashFunction(&key);
    Generic(HashmapKeyVal) *kv = &hm->keyvals[hash % HashmapSize];
+   while (true) {
    // Using the first element as a sentinel.
-   while(kv->next) {
-      kv = kv->next;
-   }
+#if defined(KeyCompareFunc)
+      if (KeyCompareFunc(key, kv->key)) {
+#else
+      if (key == kv->key) {
+#endif
+         HashmapError("Duplicate key!");
+      }
+      if (kv->next) {
+         kv = kv->next;
+      }
+      else {
+         break;
+      }
+   } while(kv->next);
    kv->next = AllocType(&hm->arena, Generic(HashmapKeyVal));
    kv = kv->next;
    kv->key = key;

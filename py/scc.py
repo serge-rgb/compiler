@@ -22,7 +22,7 @@ PUNCTUATORS = [
     '<:', ':>', '<%', '%>', '%:', '%:%:',
 ]
 
-ONE_CHAR_PUNCTUATORS = [p in PUNCTUATORS if len(p) == 1]
+ONE_CHAR_PUNCTUATORS = PUNCTUATORS
 
 class CharStream:
     'A stream with lookahead'

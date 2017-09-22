@@ -27,9 +27,7 @@ typedef int64_t i64;
 
 // Next multiple of p which is greater than v, or v if it is already aligned.
 #define AlignPow2(v, p) ( \
-                          ((v) & (p)-1 ) ? \
-                          (((v) + (p)) & ~((p)-1)) : \
-                          (v) \
+	                        (((v) + (p) - 1) & ~((p) - 1)) \
                         )
 
 #define Assert(expr) PlatformAssert(expr)
