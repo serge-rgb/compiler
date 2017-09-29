@@ -714,7 +714,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
          if (stmt->child) {
-            emitExpression(c, stmt->child, Target_ACCUM);
+            emitExpression(c, stmt->child, target);
             instruction(c, stmt->line_number, "jmp .func_end");
          }
       } break;
@@ -817,25 +817,25 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          u64 n_param = 0;
          while (p) {
             Assert (p->type == Ast_PARAMETER);
-            AstNode* type_spec = p->child;
-            AstNode* declarator = type_spec->sibling;
+            AstNode* param_type_spec = p->child;
+            AstNode* param_declarator = param_type_spec->sibling;
 
-            Assert (type_spec && type_spec->type == Ast_TYPE_SPECIFIER);
-            Assert (declarator && declarator->type == Ast_ID);
+            Assert (param_type_spec && param_type_spec->type == Ast_TYPE_SPECIFIER);
+            Assert (param_declarator && param_declarator->type == Ast_ID);
 
             RegisterValue* reg = targetPopParameter(c, n_param++);
 
-            reg->bits = 8 * numBytesForType(type_spec->ctype);
-            char* id_str = declarator->tok->value.string;
+            reg->bits = (int)(8 * numBytesForType(param_type_spec->ctype));
+            char* id_str = param_declarator->tok->value.string;
 
             symInsert(&c->scope->symbol_table, id_str,
-               (SymEntry){.ctype = *type_spec->ctype, .regval = reg});
+               (SymEntry){.ctype = *param_type_spec->ctype, .regval = reg});
 
             p = p->sibling;
          }
       }
 
-      emitCompoundStatement(c, compound, target);
+      emitCompoundStatement(c, compound, Target_ACCUM);
 
       //i64 stack = c->scope->stack_size;
 
@@ -870,7 +870,13 @@ emitFunctionCall(Codegen* c, AstNode* node) {
 void
 codegenTranslationUnit(Codegen* c, AstNode* node) {
    while (node) {
-      codegenEmit(c, node, Target_TMP);
+      if (node->type == Ast_FUNCDEF) {
+         codegenEmit(c, node, Target_NONE);
+      }
+      else {
+         Assert (!"Implement top level declarations.");
+      }
+
       node = node->sibling;
    }
 }

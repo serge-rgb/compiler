@@ -48,7 +48,6 @@ main(void) {
          codegenTranslationUnit(&codegen, tree);
       }
       deallocate(&tmp_parser_arena);
-      printf("FileStream says it's on line %" FORMAT_U64 "\n", file_stream.line_number);
       fileStreamClose(&file_stream);
       htmlEnd(&html);
    }

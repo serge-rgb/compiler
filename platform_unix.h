@@ -12,6 +12,7 @@ int raise(int sig);
 #define PLATFORM_FORMAT_U64 "llu"
 #else
 #error Uknown UNIX platform
+asdfasd
 #endif
 
 extern int    snprintf( char * buffer, unsigned long bufsz, const char * format, ... );

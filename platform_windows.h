@@ -1,4 +1,6 @@
 #define PRI_size "zi"
+#define PLATFORM_FORMAT_I64 "lld"
+#define PLATFORM_FORMAT_U64 "llu"
 
 #if 0
 #if !defined(__clang__)
