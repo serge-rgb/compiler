@@ -34,7 +34,7 @@ typedef int64_t i64;
 
 #define PrintString(...) PlatformPrintString(__VA_ARGS__)
 
-#define INVALID_CODE_PATH Assert(!"Invalid code path.")
+#define InvalidCodePath Assert(!"Invalid code path.")
 
 #define ArrayCount(arr) (sizeof((arr)) / sizeof(*(arr)))
 

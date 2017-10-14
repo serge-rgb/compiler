@@ -176,7 +176,7 @@ isPunctuator(FileStream* fs) {
             }
          }
          else {
-            INVALID_CODE_PATH;
+            InvalidCodePath;
          }
       }
    }

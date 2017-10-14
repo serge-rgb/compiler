@@ -41,7 +41,7 @@ typedef struct RegisterValue_s {
 
 
 // Must be the same as g_registers.
-enum RegisterEnum {
+typedef enum RegisterEnum_n {
    Reg_RAX,
    Reg_RBX,
    Reg_RCX,
@@ -58,7 +58,7 @@ enum RegisterEnum {
    Reg_R15,
 
    Reg_Count,
-};
+} RegisterEnum;
 
 #define SCOPE_HASH_SIZE 1024
 
@@ -347,18 +347,11 @@ codegenHtmlHidden(Codegen* c, u64 line_number) {
 }
 
 void
-instruction(Codegen* c, u64 line_number, char* asm_line, ...) {
+instructionPrintf(Codegen* c, u64 line_number, char* asm_line, ...) {
    va_list args;
    va_start(args, asm_line);
-   // vprintf(asm_line, args);
-   char* out_asm = NULL;
-   char stack_asm[LINE_MAX] = {0};
-   if (c->waiting) {
-      out_asm = allocate(c->arena, LINE_MAX);
-   }
-   else {
-      out_asm = stack_asm;
-   }
+
+   char out_asm[LINE_MAX] = {0};
 
    if (!line_number) {
       line_number = c->last_line_number;
@@ -372,22 +365,51 @@ instruction(Codegen* c, u64 line_number, char* asm_line, ...) {
    if (out_asm[written-1] != '\n') {
       out_asm[written] = '\n';
    }
-   // If we are waiting on an instruction being modified, queue up.
-   if (c->waiting) {
-      if (c->n_queue < CODEGEN_QUEUE_SIZE) {
-         c->queue_lines[c->n_queue] = line_number;
-         c->queue[c->n_queue++] = out_asm;
+   fwrite(out_asm, 1, strlen(out_asm), g_asm);
+
+   printf("%s", out_asm);
+   htmlEmit(c->html, out_asm, codegenHtmlHidden(c, line_number));
+   va_end(args);
+}
+
+void
+instructionReg(Codegen* c, u64 line_number, char* asm_line, ...) {
+#define MaxRegs 2
+   BreakHere;
+   va_list args;
+   va_start(args, asm_line);
+   RegisterEnum reg = Reg_RAX;
+
+   RegisterEnum regs[MaxRegs];
+   int n_regs = 0;
+
+   for (char* citer = asm_line; *citer != '\0'; ++citer) {
+      if (n_regs < MaxRegs) {
+         if (*citer == '%') {
+            reg = va_arg(args, RegisterEnum);
+            regs[n_regs++] = reg;
+         }
       }
       else {
-         codegenError("Queue overflow.");
+         codegenError("Register string has more registers than supported.");
       }
    }
-   else {
-      fwrite(out_asm, 1, strlen(out_asm), g_asm);
-      printf("%s", out_asm);
-      htmlEmit(c->html, out_asm, codegenHtmlHidden(c, line_number));
-      va_end(args);
+   switch (n_regs) {
+      case 0: {
+         instructionPrintf(c, line_number, asm_line);
+      } break;
+      case 1: {
+         instructionPrintf(c, line_number, asm_line,
+                           registerString(c, &g_registers[regs[0]]));
+      } break;
+      case 2: {
+         instructionPrintf(c, line_number, asm_line,
+                           registerString(c, &g_registers[regs[0]]),
+                           registerString(c, &g_registers[regs[1]]));
+      } break;
+
    }
+#undef MaxRegs
 }
 
 void
@@ -396,7 +418,7 @@ needsRegister(Codegen* c, RegisterValue** r) {
    if (old_r->type != RegisterValueType_REGISTER) {
       Assert((*r)->bits);
       *r = allocateRegister(c, (*r)->bits);
-      instruction(c, 0, "mov %s, %s", registerString(c, *r), registerString(c, old_r));
+      instructionPrintf(c, 0, "mov %s, %s", registerString(c, *r), registerString(c, old_r));
    }
 }
 
@@ -404,14 +426,14 @@ needsRegister(Codegen* c, RegisterValue** r) {
 RegisterValue*
 stashRegister(Codegen* c, RegisterValue* r) {
    RegisterValue* stack = allocateStackRegister(c, 64);
-   instruction(c, 0, "mov %s, %s", registerString(c, stack), registerString(c, r));
+   instructionPrintf(c, 0, "mov %s, %s", registerString(c, stack), registerString(c, r));
    r->bound = false;
    return stack;
 }
 
 void
 stashPopRegister(Codegen* c, RegisterValue* r, RegisterValue* stack) {
-   instruction(c, 0, "mov %s, %s", registerString(c, r), registerString(c, stack));
+   instructionPrintf(c, 0, "mov %s, %s", registerString(c, r), registerString(c, stack));
    r->bound = true;
 }
 
@@ -433,9 +455,9 @@ finishInstruction(Codegen* c, i64 val) {
 
    c->waiting = NULL;
 
-   instruction(c, 0, newasm);
+   instructionPrintf(c, 0, newasm);
    for (int i = 0; i < c->n_queue; ++i) {
-      instruction(c, c->queue_lines[i], c->queue[i]);
+      instructionPrintf(c, c->queue_lines[i], c->queue[i]);
    }
    c->n_queue = 0;
 }
@@ -448,7 +470,7 @@ pushScope(Codegen* c) {
    ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
    // TODO: Why am I doing this???
-   // instruction(c, 0, "mov rdx, QWORD [rbp - 0x4]");
+   // instructionPrintf(c, 0, "mov rdx, QWORD [rbp - 0x4]");
 }
 
 void
@@ -501,7 +523,7 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
          } break;
       }
       r->bits = p->bits;
-      instruction(c, 0, "mov %s, %s", registerString(c, r), registerString(c, p));
+      instructionPrintf(c, 0, "mov %s, %s", registerString(c, r), registerString(c, p));
    }
    else {
       Assert(!"Need to implement params on Windows.");
@@ -569,7 +591,7 @@ emitExpression(Codegen* c, AstNode* node, EmitTarget target) {
 
             targetPushParameter(c, n_param++, param);
          }
-         instruction(c, node->line_number, "call %s", label);
+         instructionPrintf(c, node->line_number, "call %s", label);
          // Restore the volatile registers we saved.
          for (size_t i = 0; i < Reg_Count; ++i) {
             RegisterValue* v = &g_registers[i];
@@ -583,18 +605,18 @@ emitExpression(Codegen* c, AstNode* node, EmitTarget target) {
          switch (target) {
             case Target_ACCUM: {
                g_registers[Reg_RAX].bits = 32;
-               instruction(
-                  c, 
+               instructionPrintf(
+                  c,
                   node->line_number,
-                  "mov %s, %d", 
+                  "mov %s, %d",
                   registerString(c, &g_registers[Reg_RAX]),
                   node->tok->value.integer);
             } break;
             case Target_STACK: {
-               instruction(
-                  c, 
+               instructionPrintf(
+                  c,
                   node->line_number,
-                  "push %d", 
+                  "push %d",
                   node->tok->value.integer);
             } break;
          }
@@ -604,102 +626,41 @@ emitExpression(Codegen* c, AstNode* node, EmitTarget target) {
          SymEntry* entry = symGet(&c->scope->symbol_table, node->tok->value.string);
 
          result = entry->regval;
-      } else {
-         codegenError("PORT");
-         r0 = codegenEmit(c, child0, Target_TMP);
+      }
+      else {
          AstNode* child1 = child0->sibling;
-         r1 = codegenEmit(c, child1, Target_TMP);
-         if (r0->bits != r1->bits) {
-            // TODO(large): promotion rules for non-integer types.
-            // If both are integer types with the same sign, the one with the lower rank gets promoted.
-            needsRegister(c, &r0);
-            needsRegister(c, &r1);
-            RegisterValue* smaller = r1;
-            RegisterValue* larger = r0;
+         if (node->type == Ast_ADD ||
+             node->type == Ast_SUB ||
+             node->type == Ast_MUL ||
+             node->type == Ast_DIV) {
+            codegenEmit(c, child1, Target_STACK);
+            codegenEmit(c, child0, Target_ACCUM);
+            g_registers[Reg_RBX].bits = 64;
+            instructionPrintf(c, child0->line_number, "pop %s", registerString(c, &g_registers[Reg_RBX] ));
+            g_registers[Reg_RBX].bits = 32;
 
-            if (r0->bits < r1->bits) {
-               smaller = r0;
-               larger = r1;
+            char* instr = NULL;
+            switch (node->type) {
+               case Ast_ADD: instr = "add %s, %s"; break;
+               case Ast_SUB: instr = "sub %s, %s"; break;
+               case Ast_MUL: {
+                  instructionReg(c, 0, "imul %", Reg_RBX);
+               } break;
+                  // TODO(medium): SIGFPE with div
+
+               case Ast_DIV: { instructionPrintf(c, 0, "idiv %s", registerString(c, &g_registers[Reg_RBX])); } break;
+               default: break;
+            }
+            if (instr) {
+               instructionPrintf(c, 0, instr, registerString(c, &g_registers[Reg_RAX]), registerString(c, &g_registers[Reg_RBX]));
             }
 
-            char* smaller_str = registerString(c, smaller);
-
-            smaller->bits = larger->bits;
-            instruction(c, node->line_number, "movzx %s, %s", registerString(c, smaller), smaller_str);
-         }
-      }
-
-      // Expressions that use two children register values.
-
-      if (node->type == Ast_ADD) {
-         codegenError("PORT");
-         needsRegister(c, &r0);
-         instruction(c, child0->line_number, "add %s, %s", registerString(c, r0), registerString(c, r1));
-         result = r0;
-         freeRegister(r1);
-      }
-      else if (node->type == Ast_SUB) {
-         codegenError("PORT");
-         needsRegister(c, &r0);
-         instruction(c, child0->line_number, "sub %s, %s", registerString(c, r0), registerString(c, r1));
-         result = r0;
-         freeRegister(r1);
-      }
-      else if (node->type == Ast_MUL || node->type == Ast_DIV) {
-         codegenError("PORT");
-         char* op = node->type == Ast_MUL ? "mul" : "div";
-         if (r0 != &g_registers[Reg_RAX]) {
-            instruction(c, child0->line_number, "mov rax, %s", registerString(c, r0));
-         }
-
-         instruction(c, node->line_number, "%s %s", op, registerString(c, r1));
-         // TODO(medium): Missing type
-         result = allocateRegister(c, 32);
-         instruction(c, node->line_number, "mov %s, rax", registerString(c, result));
-         freeRegister(r0);
-         freeRegister(r1);
-      }
-      else if (node->type == Ast_EQUALS ||
-               node->type == Ast_LESS ||
-               node->type == Ast_GREATER ||
-               node->type == Ast_GEQ ||
-               node->type == Ast_LEQ) {
-         codegenError("PORT");
-         if (r0->bits != r1->bits) {
-            codegenError("Expected same number of bits in expression.");
-         }
-         if (node->type == Ast_EQUALS) {
-            instruction(c, node->line_number, "test %s, %s", registerString(c, r0), registerString(c, r1));
+            if (target == Target_STACK) {
+               instructionPrintf(c, 0, "push %s", registerString(c, &g_registers[Reg_RAX]));
+            }
          }
          else {
-            needsRegister(c, &r0);
-            instruction(c, node->line_number, "cmp %s, %s", registerString(c, r0), registerString(c, r1));
-         }
-         freeRegister(r0);
-         freeRegister(r1);
-         result = allocateRegister(c, r0->bits);
-         if (node->type == Ast_GREATER) {
-            instruction(c, node->line_number, "setg al");
-            instruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            instruction(c, node->line_number, "movzx %s, al", registerString(c, result));
-         }
-         else if (node->type == Ast_LESS) {
-            instruction(c, node->line_number, "setl al");
-            instruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            instruction(c, node->line_number, "movzx %s, al", registerString(c, result));
-         }
-         else if (node->type == Ast_GEQ) {
-            instruction(c, node->line_number, "setge al");
-            instruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            instruction(c, node->line_number, "movzx %s, al", registerString(c, result));
-         }
-         else if (node->type == Ast_LEQ) {
-            instruction(c, node->line_number, "setle al");
-            instruction(c, node->line_number, "and al, 0x1", registerString(c, result));
-            instruction(c, node->line_number, "movzx %s, al", registerString(c, result));
-         }
-         else {
-            Assert(!"Implement this");
+            codegenError("PORT ( expression )");
          }
       }
    }
@@ -715,7 +676,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          // Emit code for the expression and move it to rax.
          if (stmt->child) {
             emitExpression(c, stmt->child, target);
-            instruction(c, stmt->line_number, "jmp .func_end");
+            instructionPrintf(c, stmt->line_number, "jmp .func_end");
          }
       } break;
       case Ast_DECLARATION: {
@@ -742,7 +703,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          symInsert(&c->scope->symbol_table, id_str, (SymEntry){.ctype = *ast_type->ctype, .regval = s});
 
          char* reg = registerString(c, s);
-         instruction(c, stmt->line_number, "mov %s, 0x%x", reg, value);
+         instructionPrintf(c, stmt->line_number, "mov %s, 0x%x", reg, value);
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
@@ -751,12 +712,12 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          RegisterValue* cv = codegenEmit(c, cond, Target_TMP);
          needsRegister(c, &cv);
          // TODO(long): Treat <,<=,>,>=,== comparisons differently?
-         instruction(c, stmt->line_number, "cmp %s, 0x0", registerString(c, cv));
+         instructionPrintf(c, stmt->line_number, "cmp %s, 0x0", registerString(c, cv));
          char else_label[256] = {0};
          snprintf(else_label, 256, ".else%d", c->scope->if_count++);
-         instruction(c, stmt->line_number, "je %s", else_label);
+         instructionPrintf(c, stmt->line_number, "je %s", else_label);
          codegenEmit(c, then, Target_TMP);
-         instruction(c, stmt->line_number, "%s:", else_label);
+         instructionPrintf(c, stmt->line_number, "%s:", else_label);
          if (els) {
             codegenEmit(c, els, Target_TMP);
          }
@@ -795,15 +756,16 @@ emit(Codegen* c, AstNode* node, EmitTarget target) {
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
-   AstNode* type        = node->child;
+   AstNode* type
+    = node->child;
    AstNode* declarator  = type->sibling;
    AstNode* compound    = declarator->sibling;
 
    if (type && declarator && compound) {
-      instruction(c, node->line_number, "global %s", declarator->tok->value.string);
-      instruction(c, node->line_number, "%s:", declarator->tok->value.string);
-      instruction(c, node->line_number, "push rbp");
-      instruction(c, node->line_number, "mov rbp, rsp");
+      instructionPrintf(c, node->line_number, "global %s", declarator->tok->value.string);
+      instructionPrintf(c, node->line_number, "%s:", declarator->tok->value.string);
+      instructionPrintf(c, node->line_number, "push rbp");
+      instructionPrintf(c, node->line_number, "mov rbp, rsp");
 
       // incompleteInstruction(c, "sub rsp, ");
 
@@ -847,13 +809,13 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       // finishInstruction(c, stack);
 
-      instruction(c, 0, ".func_end:");
+      instructionPrintf(c, 0, ".func_end:");
 
       // Restore non-volatile registers.
 
       //instruction(c, 0, "add rsp, %d", stack);
-      instruction(c, 0, "pop rbp");
-      instruction(c, 0, "ret");
+      instructionPrintf(c, 0, "pop rbp");
+      instructionPrintf(c, 0, "ret");
    }
    else {
       codegenError("Funcdef: Invalid node in the tree.");
