@@ -10,17 +10,12 @@ char* g_ast_type_string[] = {
 #undef X
 };
 
-typedef enum CtypeType_n {
+typedef enum Ctype_n {
    Type_NONE,
 
    Type_INT,
    Type_CHAR,
-} CtypeType;
-
-typedef struct Ctype_s {
-   CtypeType type; // Type type type...  type.
 } Ctype;
-
 
 typedef struct AstNode_s AstNode;
 struct AstNode_s {
@@ -29,7 +24,7 @@ struct AstNode_s {
       // When the node corresponds to a token.
       Token*   tok;
       // Otherwise..
-      Ctype* ctype;
+      Ctype    ctype;
    };
    AstNode* child;
    AstNode* sibling;
@@ -73,8 +68,8 @@ makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
 }
 
 u64
-numBytesForType(Ctype* ctype) {
-   switch (ctype->type) {
+numBytesForType(Ctype ctype) {
+   switch (ctype) {
       case Type_INT: {
          return 4;
       } break;

@@ -2,18 +2,6 @@
 // Forward declaration. Defined in codegen.c
 typedef struct RegisterValue_s RegisterValue;
 
-typedef struct SymEntry_s {
-   Ctype ctype;
-   RegisterValue* regval;
-} SymEntry;
-
-#define HashmapName     SymTable
-#define HashmapPrefix   sym
-#define HashmapKey      char*
-#define HashmapValue    SymEntry
-#define HashFunction    hashStrPtr
-#define KeyCompareFunc  compareStringKey
-#include "hashmap.inl"
 
 #define CTYPE_HASHMAP_SIZE 128
 typedef struct Parser_s {
@@ -21,7 +9,6 @@ typedef struct Parser_s {
    Arena* arena;
    AstNode* tree;
    char* file_name;
-   SymTable symbol_table;
 } Parser;
 
 // A function that takes a Parser and returns an AstNode*
@@ -409,9 +396,9 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
-Ctype*
+Ctype
 parseCtypeSpecifier(Token* t) {
-   Ctype* result = NULL;
+   Ctype result = Type_NONE;
    b32 is_type_spec =
            t->value.integer == Keyword_int ||
            t->value.integer == Keyword_char ||
@@ -425,14 +412,10 @@ parseCtypeSpecifier(Token* t) {
    if (is_type_spec) {
       switch (t->value.integer) {
          case Keyword_int: {
-            static Ctype type_int = {0};
-            type_int.type = Type_INT;
-            return &type_int;
+            result = Type_INT;
          } break;
          case Keyword_char: {
-            static Ctype type_char = {0};
-            type_char.type = Type_CHAR;
-            return &type_char;
+            result = Type_CHAR;
          } break;
          case Keyword_float: {
 
@@ -454,7 +437,6 @@ parseCtypeSpecifier(Token* t) {
          } //break;
       }
    }
-   // TODO(large): User defined types.
    return result;
 }
 
@@ -467,7 +449,7 @@ parseDeclarationSpecifiers(Parser* p) {
    Token* t = nextToken(p);
    Token* bt = t;
    AstNode* result = NULL;
-   Ctype* ctype = NULL;
+   Ctype ctype = Type_NONE;
 
    if (t->type == TType_KEYWORD) {
 

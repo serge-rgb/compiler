@@ -1,5 +1,6 @@
 
 int
 main() {
-   return 84 * 2;
+   int foo = 8;
+   return 8 * foo - 22;
 }

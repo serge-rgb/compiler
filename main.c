@@ -43,7 +43,7 @@ main(void) {
 
       AstNode* tree = parseTranslationUnit(&p);
       if (tree) {
-         codegen.symbol_table = &p.symbol_table;
+         //codegen.symbol_table = {0};
          codegenInit(&codegen);
          codegenTranslationUnit(&codegen, tree);
       }
