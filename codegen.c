@@ -88,12 +88,12 @@ typedef struct StackValue_s {
 #define SCOPE_HASH_SIZE 1024
 typedef struct Scope_s Scope;
 struct Scope_s {
-   i64      stack_size;
-   Arena*   arena;
+   i64         stack_size;
+   Arena*      arena;
 
-   int      if_count;
-   Scope*   prev;
-   SymTable symbol_table;
+   int         if_count;
+   Scope*      prev;
+   SymTable    symbol_table;
 };
 
 
@@ -118,6 +118,7 @@ typedef struct Codegen_s {
    u64         last_line_number;
    u32         config;   // CodegenConfigFlags enum
    SymTable*   symbol_table;
+
    u64         stack_offset;
    u64         n_stack;
    StackValue  stack[1024];
@@ -198,6 +199,21 @@ RegisterValue g_registers[] = {
 
 // Forward declaration for recursive calls.
 void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
+
+SymEntry*
+findSymbol(Codegen* c, char* name) {
+
+   SymEntry* entry = NULL;
+   Scope* scope = c->scope;
+   while (scope) {
+      entry = symGet(&scope->symbol_table, name);
+      if (entry) break;
+      else scope = scope->prev;
+   }
+
+   return entry;
+
+}
 
 void
 setupVolatility(Codegen* c) {
@@ -439,8 +455,6 @@ pushScope(Codegen* c) {
    c->scope = allocate(c->arena, sizeof(*c->scope));
    ArenaBootstrap(c->scope, arena);
    c->scope->prev = prev_scope;
-   // TODO: Why am I doing this???
-   // instructionPrintf(c, 0, "mov rdx, QWORD [rbp - 0x4]");
 }
 
 void
@@ -581,7 +595,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
       }
       else if (node->type == Ast_ID) {
-         SymEntry* entry = symGet(&c->scope->symbol_table, node->tok->value.string);
+         SymEntry* entry = findSymbol(c, node->tok->value.string);
 
          if (!entry) {
             codegenError("Use of undeclared identifier %s", node->tok->value.string);
@@ -684,6 +698,7 @@ emitCondition(Codegen* c, AstNode* cond, char* then, char* els) {
             case Ast_LEQ: { instructionPrintf(c, 0, "jle %s", then); } break;
             case Ast_GREATER: { instructionPrintf(c, 0, "jg %s", then); } break;
             case Ast_GEQ: { instructionPrintf(c, 0, "jge %s", then); } break;
+            default: break;
          }
          instructionPrintf(c, 0, "jmp %s", els);
       } break;
@@ -742,8 +757,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          symInsert(&c->scope->symbol_table, id_str, entry);
 
          int rsp_relative = c->stack_offset - entry.offset;
-         switch (bits)
-         {
+         switch (bits) {
             case 32: {
                instructionPrintf(c, stmt->line_number, "mov DWORD [ rsp + %d ], 0x%x",
                                  rsp_relative, value);
@@ -790,6 +804,9 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
 
 void
 emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
+
+   pushScope(c);
+
    if (compound->type != Ast_COMPOUND_STMT) {
       codegenError("Expected a compound statement.");
    }
@@ -801,12 +818,10 @@ emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
       emitStatement(c, stmt, is_last ? target : Target_NONE);
       stmt = stmt->sibling;
    }
+
+   popScope(c);
 }
 
-void
-emit(Codegen* c, AstNode* node, EmitTarget target) {
-
-}
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
@@ -861,15 +876,16 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       // stack = AlignPow2(stack, 16);
       // TODO(short): On mac OS, the stack needs to be aligned to 32 or 64 byte boundaries when m256 or m512 values are passed on the stack.
 
-      popScope(c);
-
-      // finishInstruction(c, stack);
-
       instructionPrintf(c, 0, ".func_end:");
 
       while (c->stack[c->n_stack-1].type == Stack_OFFSET)  {
          stackPop(c, Reg_RBX);
       }
+
+      popScope(c);
+
+      // finishInstruction(c, stack);
+
 
       // Restore non-volatile registers.
 
