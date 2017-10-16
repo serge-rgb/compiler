@@ -259,7 +259,7 @@ registerString(Codegen* c, RegisterValue* r, int bits) {
             res = r->reg_8;
          }
          else {
-            codegenError("RegisterValue bits not set!");
+            codegenError("No size information.");
          }
       }
       break;
@@ -658,12 +658,51 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 }
 
 void
+emitCondition(Codegen* c, AstNode* cond, char* then, char* els) {
+   ExprType expr_type = {0};
+   // codegenEmit(c, cond, &expr_type, Target_ACCUM);
+   switch (cond->type) {
+      case Ast_LESS:
+      case Ast_LEQ:
+      case Ast_GREATER:
+      case Ast_GEQ:
+      case Ast_EQUALS: {
+         AstNode* left = cond->child;
+         AstNode* right = cond->child->sibling;
+         ExprType left_type = {0};
+         ExprType right_type = {0};
+         codegenEmit(c, right, &right_type, Target_STACK);
+         codegenEmit(c, left, &left_type, Target_ACCUM);
+         stackPop(c, Reg_RBX);
+         if (left_type.bits != right_type.bits) {
+            Assert(!"promotion!");
+         }
+         instructionReg(c, cond->line_number, "cmp %s, %s", left_type.bits, Reg_RAX, Reg_RBX);
+         switch(cond->type) {
+            case Ast_EQUALS: { instructionPrintf(c, 0, "je %s", then); } break;
+            case Ast_LESS: { instructionPrintf(c, 0, "jl %s", then); } break;
+            case Ast_LEQ: { instructionPrintf(c, 0, "jle %s", then); } break;
+            case Ast_GREATER: { instructionPrintf(c, 0, "jg %s", then); } break;
+            case Ast_GEQ: { instructionPrintf(c, 0, "jge %s", then); } break;
+         }
+         instructionPrintf(c, 0, "jmp %s", els);
+      } break;
+      default: {
+         codegenEmit(c, cond, &expr_type, Target_ACCUM);
+         instructionReg(c, cond->line_number, "cmp %s, %s", expr_type.bits, Reg_RAX, Reg_RBX);
+         instructionPrintf(c, 0, "jne %s", then);
+         instructionPrintf(c, 0, "jmp %s", els);
+      } break;
+   }
+}
+
+void
 emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
    switch (stmt->type) {
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
          if (stmt->child) {
-            emitExpression(c, stmt->child, NULL, target);
+            emitExpression(c, stmt->child, NULL, Target_ACCUM);
             instructionPrintf(c, stmt->line_number, "jmp .func_end");
          }
       } break;
@@ -716,11 +755,26 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          /* instructionPrintf(c, stmt->line_number, "mov %s, 0x%x", reg, value); */
       } break;
       case Ast_IF: {
-#if 0
          AstNode* cond = stmt->child;
          AstNode* then = cond->sibling;
          AstNode* els = then ? then->sibling : NULL;
-#endif
+         char then_label[1024] = {0};
+         char else_label[1024] = {0};
+         snprintf(then_label, 1024, ".then%d", c->scope->if_count);
+         snprintf(else_label, 1024, ".else%d", c->scope->if_count++);
+         emitCondition(c, cond, then_label, else_label);
+         instructionPrintf(c, then ? then->line_number : 0, "%s:", then_label);
+         if (then) {
+            codegenEmit(c, then, NULL, Target_NONE);
+         }
+         else {
+            codegenError("No then after if");
+         }
+         //instructionPrintf(then_label);
+         instructionPrintf(c, els? els->line_number : 0, "%s:", else_label);
+         if (els) {
+            codegenEmit(c, els, NULL, Target_NONE);
+         }
       } break;
       default: {
          // Expression statements
