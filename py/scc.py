@@ -30,7 +30,7 @@ class CharStream:
         self._lookahead = deque()
         self._stream = self.stream_file(filename)
 
-    def stream_file(self, filename):        
+    def stream_file(self, filename):
         with open(filename) as file:
             for line in file:
                 for char in line:
@@ -39,7 +39,7 @@ class CharStream:
     def peek(self, i=1):
         while len(self._lookahead) < i:
             # TODO: Make a test that triggers an exception on this call to 'next'
-            self._lookahead.append(next(self._stream))        
+            self._lookahead.append(next(self._stream))
         return self._lookahead[i - 1]
 
     def pop(self):
@@ -61,33 +61,33 @@ class CharStream:
 
 
 def enum_string(cl, i):
-    'Given a class cl, return the variable name of the enum of value i'    
+    'Given a class cl, return the variable name of the enum of value i'
     for key in cl.__dict__:
         val = cl.__dict__[key]
         if isinstance(val, int):
             if val == i:
-                return str(key)    
+                return str(key)
 
-class Token:  
+class Token:
     KEYWORD = 1
     IDENTIFIER = 2
     CONSTANT = 3
     STRING_LITERAL = 4
-    PUNCTUATOR = 5  
+    PUNCTUATOR = 5
 
-    def __init__(self):        
+    def __init__(self):
         self.str = None
         self.type = None
 
-    def __str__(self):        
+    def __str__(self):
         return '[' + enum_string(Token, self.type) + ' ' + self.str + ']'
 
 def identifyKeyword(str):
-    if str in KEYWORDS:        
-        return True    
+    if str in KEYWORDS:
+        return True
     return False
 
-def identifyPunctuator(stream):    
+def identifyPunctuator(stream):
     if stream.peek() == '(':
         p = stream.pop()
         tok = Token()
@@ -97,15 +97,15 @@ def identifyPunctuator(stream):
     else:
         return False, None
 
-def getToken(stream):        
+def getToken(stream):
     tok = None
     while stream.peek().isspace():
-        stream.pop()        
-    if stream.peek().isalpha():  
+        stream.pop()
+    if stream.peek().isalpha():
         tok = Token()
         token_str = ''
         while stream.peek().isalnum():
-            token_str += stream.pop()        
+            token_str += stream.pop()
         tok.str = token_str
         if identifyKeyword(token_str):
             tok.type = Token.KEYWORD
@@ -124,7 +124,9 @@ def main():
         print(t)
 
 token = getToken(stream)
-while token:
+while True:
     print(token)
     token = getToken(stream)
-    
+    if not token:
+        break
+

@@ -466,21 +466,6 @@ popScope(Codegen* c) {
    c->scope = c->scope->prev;
 }
 
-b32
-nodeIsExpression(AstNode* node) {
-   b32 result = false;
-   if (node->type == Ast_MUL || node->type == Ast_DIV ||
-       node->type == Ast_ADD || node->type == Ast_SUB ||
-       node->type == Ast_EQUALS || node->type == Ast_LESS ||
-       node->type == Ast_GREATER || node->type == Ast_LEQ ||
-       node->type == Ast_GEQ ||
-       node->type == Ast_FUNCCALL ||
-       node->type == Ast_NUMBER || node->type == Ast_ID) {
-      result = true;
-   }
-   return result;
-}
-
 void
 targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
 #if 0
@@ -633,10 +618,14 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             codegenEmit(c, child1, &type_right, Target_STACK);
             codegenEmit(c, child0, &type_left, Target_ACCUM);
 
-            stackPop(c, Reg_RBX);
+            if ( !isArithmeticType(type_left.ctype) ) {
+               codegenError("Left operator in binary expression is not arithmetic type.");
+            }
+            else if ( !isArithmeticType(type_right.ctype) ) {
+               codegenError("Left operator in expression is not arithmetic type.");
+            }
 
-            // TODO: Do integer promotion here.
-            //
+            stackPop(c, Reg_RBX);
 
             int bits = type_left.bits;
 
@@ -743,7 +732,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
 
          SymEntry entry = {
-            .expr_type = (ExprType){
+            .expr_type = (ExprType) {
                .bits = bits,
                .ctype = ast_type->ctype
             },
@@ -763,7 +752,8 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
                                  rsp_relative, value);
             } break;
             default: {
-               Assert(!"IMPL");
+               instructionPrintf(c, stmt->line_number, "mov BYTE [ rsp + %d ], 0x%x",
+                                 rsp_relative, value);
             } break;
          }
          /* instructionPrintf(c, stmt->line_number, "mov %s, 0x%x", reg, value); */

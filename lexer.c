@@ -300,7 +300,7 @@ getToken(Arena* a, FileStream* fs) {
          }
       }
       token_buffer.end = tmp + strlen(tmp);
-      char* str = getStringFromBuffer(&token_buffer);
+      char* str = getString(token_buffer.current);
       t.value.string = str;
    }
    // TODO(long): Operators
@@ -308,6 +308,7 @@ getToken(Arena* a, FileStream* fs) {
    // The rest are keywords and identifiers.
    else {
       Buffer token_buffer = {0};
+      // TODO(short): Stretchy-buffer for tokens...
       char tmptoken[128] = {0};
       token_buffer.current = tmptoken;
       token_buffer.end = tmptoken;
@@ -317,7 +318,7 @@ getToken(Arena* a, FileStream* fs) {
       }
       identifyToken(&token_buffer, &t);
 
-      char* str = getStringFromBuffer(&token_buffer);
+      char* str = getString(token_buffer.current);
       if (t.type == TType_NUMBER) {
          int val = 0;
          ErrorCode err = parseInt(str, &val);

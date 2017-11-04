@@ -121,10 +121,7 @@ typedef struct {
 } HashmapName;
 
 void
-Generic(Insert) (
-                 HashmapName* hm,
-                 HashmapKey key,
-                 HashmapValue val) {
+Generic(Insert) (HashmapName* hm, HashmapKey key, HashmapValue val) {
    u64 hash = HashFunction(&key);
    Generic(HashmapKeyVal) *kv = &hm->keyvals[hash % HashmapSize];
    while (true) {
@@ -150,9 +147,7 @@ Generic(Insert) (
 }
 
 HashmapValue*
-Generic(Get) (
-              HashmapName* hm,
-              HashmapKey        key) {
+Generic(Get) (HashmapName* hm, HashmapKey   key) {
    u64 hash = HashFunction(&key);
    Generic(HashmapKeyVal)* kv = hm->keyvals[hash % HashmapSize].next;
    HashmapValue* result = NULL;
@@ -176,6 +171,7 @@ Generic(Get) (
 #undef Generic
 #undef GenericEx
 #undef GenericExEx
+#undef HashmapName
 #undef HashmapKey
 #undef HashmapPrefix
 #undef HashmapSize

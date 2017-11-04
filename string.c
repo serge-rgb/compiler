@@ -14,7 +14,24 @@ struct StringList_s {
 };
 
 static Arena* g_string_arena;
-static StringList* g_string_map[STRING_HASH_BUCKET_SIZE];
+// TODO(small): Use Generic Hashmap impl.
+//static StringList* g_string_map[STRING_HASH_BUCKET_SIZE];
+//
+
+//
+// StringMap  -- A hash map matching string to strings.
+// Stores allocated strings without duplication.
+//    stringMapInsert
+//    stringMapGet
+#define HashmapName     StringMap
+#define HashmapPrefix   stringMap
+#define HashmapKey      char*
+#define HashmapValue    char*
+#define HashFunction    hashStrPtr
+#define KeyCompareFunc  compareStringKey
+#include "hashmap.inl"
+
+static StringMap g_string_map;
 
 void
 stringInit(Arena* a) {
@@ -37,41 +54,20 @@ stringsAreEqual(char* a, char* b) {
 }
 
 char*
-getStringFromBuffer(Buffer* buffer) {
-   char* str = NULL;
-   size_t size = buffer->end - buffer->current;
-   if (size < STRING_CACHE_MAX_SIZE) {
-      char temp_str[STRING_CACHE_MAX_SIZE] = {0};
-      memcpy(temp_str, buffer->current, size);
-      u64 hash = hashStr(temp_str, size) % STRING_HASH_BUCKET_SIZE;
-      StringList* l = g_string_map[hash];
-      while (l) {
-         if (stringsAreEqual(l->string, temp_str)) {
-            str = l->string;
-            break;
-         }
-         l = l->next;
-      }
-      if (!str) {  // Not found. Allocate new one.
-         char* new_str = allocate(g_string_arena, size+1); // Allocate one more byte for the string terminator.
-         memcpy(new_str, temp_str, size+1);
-         StringList* e = AllocType(g_string_arena, StringList);
-         e->string = new_str;
-         e->next = g_string_map[hash];
-         g_string_map[hash] = e;
-         str = new_str;
-      }
-   } else {
-      // TODO(short): Just allocate and return.
-      Assert(!"Don't know how to handle strings bigger than STRING_CACHE_MAX_SIZE");
-   }
-   return str;
-}
-
-char*
 getString(char* orig) {
-   Buffer b = {0};
-   b.current = orig;
-   b.end = orig + strlen(orig);
-   return getStringFromBuffer(&b);
+   char* result = NULL;
+   size_t size = strlen(orig) + 1;
+
+   char** str_in_map = NULL;
+   if ((str_in_map = stringMapGet(&g_string_map, orig))) {
+      result = *str_in_map;
+   }
+   else {  // String not in hashmap. Allocate new one and insert.
+      char* new_str = allocate(g_string_arena, size+1); // Allocate one more byte for the string terminator.
+      memcpy(new_str, orig, size+1);
+      stringMapInsert(&g_string_map, new_str, new_str);
+      result = new_str;
+   }
+
+   return result;
 }

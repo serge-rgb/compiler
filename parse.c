@@ -517,7 +517,6 @@ parseDeclarator(Parser* p) {
    Token* t = nextToken(p);
    if (t->type == TType_ID) {
       r = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
-      printf("found declarator %s\n", t->value.string);
       if (nextPunctuator(p, '(')) {
          AstNode* params = parseOrBacktrack(parameterTypeList, p);
          if (params) {

@@ -31,5 +31,6 @@ exit 0
 #include "tree.c"
 #include "html.c"
 #include "parse.c"
+#include "semantics.c"
 #include "codegen.c"
 #include "main.c"
