@@ -1,3 +1,6 @@
+#include "ctypes.h"
+
+
 typedef enum AstType_n {
 #define X(node) node,
 #include "ast_nodes.inl"
@@ -9,13 +12,6 @@ char* g_ast_type_string[] = {
 #include "ast_nodes.inl"
 #undef X
 };
-
-typedef enum Ctype_n {
-   Type_NONE,
-
-   Type_INT,
-   Type_CHAR,
-} Ctype;
 
 typedef struct AstNode_s AstNode;
 struct AstNode_s {
@@ -67,20 +63,5 @@ makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
    return makeAstNodeWithLineNumber(a, type, left, right, line_number);
 }
 
-u64
-numBytesForType(Ctype ctype) {
-   switch (ctype) {
-      case Type_INT: {
-         return 4;
-      } break;
-      case Type_CHAR: {
-         return 1;
-      } break;
-      default: {
-         Assert(!"Don't know the size of this type.");
-      }
-   }
-   return 4;
-}
 
 

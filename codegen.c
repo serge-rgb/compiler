@@ -587,12 +587,27 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
 
          u64 rsp_relative = c->stack_offset - entry->offset;
+
          char* size_str = NULL;
 
          switch (entry->expr_type.bits) {
             case 32: {
                size_str = "DWORD";
             } break;
+            case 16: {
+               size_str = "WORD";
+            } break;
+            case 8: {
+               size_str = "BYTE";
+            } break;
+            default: {
+               Assert(!"Can't handle this size.");
+            } break;
+         }
+         if (entry->expr_type.bits <= 16) {
+            instructionPrintf(c, 0, "xor %s, %s",
+                              registerString(c, &g_registers[Reg_RAX], 64),
+                              registerString(c, &g_registers[Reg_RAX], 64));
          }
          instructionPrintf(c, 0, "mov %s, %s [ rsp + %d ]",
                            registerString(c, &g_registers[Reg_RAX], entry->expr_type.bits),
@@ -627,17 +642,26 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             stackPop(c, Reg_RBX);
 
-            int bits = type_left.bits;
-
             if (type_left.bits != type_right.bits ||
                 type_left.ctype != type_right.ctype) {
-               Assert(!"Implement integer promotion ");
+               // If both are integer types, then apply integer promotion rules.
+               if (isIntegerType(type_left.ctype) && isIntegerType(type_right.ctype)) {
+                  ExprType* smaller = type_left.bits < type_right.bits ? &type_left  : &type_right;
+                  ExprType* bigger  = type_left.bits < type_right.bits ? &type_right : &type_left;
+
+
+                  smaller->bits = bigger->bits;
+               }
+               //
+               // If one of them is floating point... do floating point conversion.
+               // TODO(long): Implement floating point conversion rules.
             }
 
             if (expr_type) {
                *expr_type = type_left;
             }
 
+            int bits = type_left.bits;
             switch (node->type) {
                case Ast_ADD: { instructionReg(c, 0, "add %s, %s", bits, Reg_RAX, Reg_RBX); } break;
                case Ast_SUB: { instructionReg(c, 0, "sub %s, %s", bits, Reg_RAX, Reg_RBX); } break;
@@ -718,18 +742,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          int value = ast_id->sibling->tok->value.integer;
 
          Assert (symGet(&c->scope->symbol_table, id_str) == NULL);
-         int bits = 0;
-         switch (ast_type->ctype) {
-            case Type_INT: {
-               bits = 32;
-            } break;
-            case Type_CHAR: {
-               bits = 8;
-            } break;
-            default: {
-               Assert(!"Unknown size for type.");
-            } break;
-         }
+         int bits = 8 * numBytesForType(ast_type->ctype);
 
          SymEntry entry = {
             .expr_type = (ExprType) {
@@ -826,6 +839,8 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       instructionPrintf(c, node->line_number, "push rbp");
       instructionPrintf(c, node->line_number, "mov rbp, rsp");
 
+      // Helper when running in a debugger. Break on function entry.
+      instructionPrintf(c, 0, "int 3");
       // incompleteInstruction(c, "sub rsp, ");
 
       // Push

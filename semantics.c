@@ -1,6 +1,16 @@
+#include "ctypes.h"
 
 b32
 isArithmeticType(Ctype ctype) {
+   if (ctype == Type_INT ||
+       ctype == Type_CHAR) {
+      return true;
+   }
+   return false;
+}
+
+b32
+isIntegerType(Ctype ctype) {
    if (ctype == Type_INT ||
        ctype == Type_CHAR) {
       return true;
@@ -21,4 +31,20 @@ nodeIsExpression(AstNode* node) {
       isExpr = true;
    }
    return isExpr;
+}
+
+u64
+numBytesForType(Ctype ctype) {
+   switch (ctype) {
+      case Type_INT: {
+         return 4;
+      } break;
+      case Type_CHAR: {
+         return 1;
+      } break;
+      default: {
+         Assert(!"Don't know the size of this type.");
+      }
+   }
+   return 4;
 }
