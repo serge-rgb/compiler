@@ -1,0 +1,6 @@
+out.asm
+out.html
+out.o
+out
+*.dSYM
+compiler

@@ -744,6 +744,8 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          Assert (symGet(&c->scope->symbol_table, id_str) == NULL);
          int bits = 8 * numBytesForType(ast_type->ctype);
 
+         stackPushOffset(c, bits/8);
+
          SymEntry entry = {
             .expr_type = (ExprType) {
                .bits = bits,
@@ -752,21 +754,16 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             .offset = c->stack_offset
          };
 
-         stackPushOffset(c, bits/8);
-         // Push EBP this number of bytes, but store the current offset.
+         // Push ESP this number of bytes, but store the current offset.
          // Save this to sym table.
-         //
          symInsert(&c->scope->symbol_table, id_str, entry);
 
-         int rsp_relative = c->stack_offset - entry.offset;
          switch (bits) {
             case 32: {
-               instructionPrintf(c, stmt->line_number, "mov DWORD [ rsp + %d ], 0x%x",
-                                 rsp_relative, value);
+               instructionPrintf(c, stmt->line_number, "mov DWORD [ rsp ], 0x%x", value);
             } break;
             default: {
-               instructionPrintf(c, stmt->line_number, "mov BYTE [ rsp + %d ], 0x%x",
-                                 rsp_relative, value);
+               instructionPrintf(c, stmt->line_number, "mov BYTE [ rsp ], 0x%x", value);
             } break;
          }
          /* instructionPrintf(c, stmt->line_number, "mov %s, 0x%x", reg, value); */
