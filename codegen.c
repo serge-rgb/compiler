@@ -468,82 +468,84 @@ popScope(Codegen* c) {
 
 void
 targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
-#if 0
    if ((c->config & Config_TARGET_LINUX) || (c->config & Config_TARGET_MACOS)) {
-      RegisterValue* r = &g_registers[Reg_RDI];
-      RegisterValue* p = codegenEmit(c, param, Target_TMP);
+      RegisterEnum r = Reg_RDI;
+      ExprType type = {};
+      codegenEmit(c, param, &type, Target_ACCUM);
       switch (n_param) {
          case 0: {
             // r is already RDI
          } break;
          case 1: {
-            r = &g_registers[Reg_RSI];
+            r = Reg_RSI;
          } break;
          case 2: {
-            r = &g_registers[Reg_RDX];
+            r = Reg_RDX;
          } break;
          case 3: {
-            r = &g_registers[Reg_RCX];
+            r = Reg_RCX;
          } break;
          case 4: {
-            r = &g_registers[Reg_R8];
+            r = Reg_R8;
          } break;
          case 5: {
-            r = &g_registers[Reg_R9];
+            r = Reg_R9;
          } break;
       }
-      p->bits;
-      instructionPrintf(c, 0, "mov %s, %s", registerString(c, r), registerString(c, p));
+      instructionReg(c, 0, "mov %s, %s", type.bits, r, Reg_RAX);
    }
    else {
       Assert(!"Need to implement params on Windows.");
    }
-#endif
 }
 
-RegisterValue*
-targetPopParameter(Codegen* c, u64 n_param) {
-   RegisterValue* r = &g_registers[Reg_RDI];
+void
+targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
+   RegisterEnum r = Reg_RDI;
    if ((c->config & Config_TARGET_MACOS) || (c->config & Config_TARGET_LINUX)) {
       switch (n_param) {
          case 0: {
             // r is already RDI
          } break;
          case 1: {
-            r = &g_registers[Reg_RSI];
+            r = Reg_RSI;
          } break;
          case 2: {
-            r = &g_registers[Reg_RDX];
+            r = Reg_RDX;
          } break;
          case 3: {
-            r = &g_registers[Reg_RCX];
+            r = Reg_RCX;
          } break;
          case 4: {
-            r = &g_registers[Reg_R8];
+            r = Reg_R8;
          } break;
          case 5: {
-            r = &g_registers[Reg_R9];
+            r = Reg_R9;
          } break;
+      }
+      if (target == Target_STACK) {
+         stackPushReg(c, r);
+      }
+      else {
+         instructionReg(c, 0, "mov %s, %s", 64, Reg_RAX, r);
       }
    }
    else {
       Assert (!"Implement parameter pop in Windows.");
    }
-   return r;
 }
 
 
 void
 emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
-   RegisterValue* result = NULL;
    if (nodeIsExpression(node)) {
       AstNode* child0 = node->child;
 
       if (node->type == Ast_FUNCCALL) {
-         codegenError("PORT");
          AstNode* func = node->child;
-         AstNode* params = func->sibling;
          char* label = func->tok->value.string;
+
+         AstNode* params = func->sibling;
          // Put the parameters in registers and/or the stack.
          u64 n_param = 0;
          for (AstNode* param = params;
@@ -552,8 +554,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             targetPushParameter(c, n_param++, param);
          }
+
          instructionPrintf(c, node->line_number, "call %s", label);
-         result = &g_registers[Reg_RAX];
+         if (target == Target_STACK) {
+            stackPushReg(c, Reg_RAX);
+         }
       }
       else if (node->type == Ast_NUMBER) {
          int bits = 32;
@@ -738,8 +743,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          AstNode* ast_type = stmt->child;
          AstNode* ast_id = ast_type->sibling;
          char* id_str = ast_id->tok->value.string;
-
-         int value = ast_id->sibling->tok->value.integer;
+         AstNode* rhs = ast_id->sibling;
 
          Assert (symGet(&c->scope->symbol_table, id_str) == NULL);
          int bits = 8 * numBytesForType(ast_type->ctype);
@@ -758,15 +762,27 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          // Save this to sym table.
          symInsert(&c->scope->symbol_table, id_str, entry);
 
-         switch (bits) {
-            case 32: {
-               instructionPrintf(c, stmt->line_number, "mov DWORD [ rsp ], 0x%x", value);
-            } break;
-            default: {
-               instructionPrintf(c, stmt->line_number, "mov BYTE [ rsp ], 0x%x", value);
-            } break;
+         if (isLiteral(rhs)) {
+            // TODO: Non-integer values.
+            int value = rhs->tok->value.integer;
+
+            switch (bits) {
+               case 32: {
+                  instructionPrintf(c, stmt->line_number, "mov DWORD [ rsp ], 0x%x", value);
+               } break;
+               case 8: {
+                  instructionPrintf(c, stmt->line_number, "mov BYTE [ rsp ], 0x%x", value);
+               } break;
+               default: {
+                  Assert(!"IMPL");
+               } break;
+            }
          }
-         /* instructionPrintf(c, stmt->line_number, "mov %s, 0x%x", reg, value); */
+         else /* right-hand-side is not a literal*/ {
+            ExprType type = {};
+            codegenEmit(c, rhs, &type, Target_ACCUM );
+            instructionReg(c, rhs->line_number, "mov QWORD [ rsp ], %s", 64, Reg_RAX);
+         }
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
@@ -837,13 +853,11 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       instructionPrintf(c, node->line_number, "mov rbp, rsp");
 
       // Helper when running in a debugger. Break on function entry.
-      instructionPrintf(c, 0, "int 3");
-      // incompleteInstruction(c, "sub rsp, ");
+      // instructionPrintf(c, 0, "int 3");
 
       // Push
       pushScope(c);
 
-#if 0
       AstNode* params = declarator->child;
       if (params) {
          AstNode* p = params;
@@ -852,23 +866,24 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
             AstNode* param_declarator = param_type_spec->sibling;
+            char* id_str = param_declarator->tok->value.string;
 
             Assert (param_type_spec && param_type_spec->type == Ast_TYPE_SPECIFIER);
             Assert (param_declarator && param_declarator->type == Ast_ID);
 
-            RegisterValue* reg = targetPopParameter(c, n_param++);
-
+            targetPopParameter(c, n_param++, Target_STACK);
             int bits = (int)(8 * numBytesForType(param_type_spec->ctype));
-            char* id_str = param_declarator->tok->value.string;
 
-            symInsert(&c->scope->symbol_table, id_str,
-               (SymEntry){.ctype = *param_type_spec->ctype, .regval = reg});
+            SymEntry entry = {
+               .expr_type = { .bits = bits, .ctype = param_type_spec->ctype },
+               .offset = c->stack_offset,
+            };
+            symInsert(&c->scope->symbol_table, id_str, entry);
 
             p = p->sibling;
 
          }
       }
-#endif
 
       emitCompoundStatement(c, compound, Target_ACCUM);
 
@@ -880,7 +895,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       instructionPrintf(c, 0, ".func_end:");
 
-      while (c->stack[c->n_stack-1].type == Stack_OFFSET)  {
+      while (c->n_stack > 0)  {
          stackPop(c, Reg_RBX);
       }
 

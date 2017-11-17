@@ -48,3 +48,14 @@ numBytesForType(Ctype ctype) {
    }
    return 4;
 }
+
+
+b32
+isLiteral(AstNode* node) {
+   b32 result = false;
+   AstType t = node->type;
+   if (t == Ast_NUMBER ) {
+      result = true;
+   }
+   return result;
+}

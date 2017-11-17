@@ -1,6 +1,8 @@
+char func (int x) {
+   return 21 + x;
+}
+
 int
 main() {
-   char meh = 2;
-   int foo = 40;
-   return meh + foo;
+   return func(21);
 }

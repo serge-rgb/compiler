@@ -45,7 +45,7 @@ struct Token_s {
    union {
       u8    character;
       char* string;
-      int   integer;
+      u64   integer;
    } value;
 
    u64 line_number;
@@ -357,7 +357,7 @@ tokenPrint(Token* token) {
       } break;
       case TType_NUMBER: {
          // TODO(long): Support floating point..
-         printf("NUMBER: %i", token->value.integer);
+         printf("NUMBER: %i", (int)token->value.integer);
       } break;
       case TType_ID: {
          printf("ID: %s", token->value.string);
