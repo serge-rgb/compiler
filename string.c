@@ -14,9 +14,6 @@ struct StringList_s {
 };
 
 static Arena* g_string_arena;
-// TODO(small): Use Generic Hashmap impl.
-//static StringList* g_string_map[STRING_HASH_BUCKET_SIZE];
-//
 
 //
 // StringMap  -- A hash map matching string to strings.
@@ -41,14 +38,21 @@ stringInit(Arena* a) {
 b32
 stringsAreEqual(char* a, char* b) {
    b32 equal = true;
-   while (*a && *b) {
-      if (*a++ != *b++) {
+   if (!a || !b) {
+      if (a != b) {
          equal = false;
-         break;
       }
    }
-   if (equal && (*a != '\0' || *b != '\0')) {
-      equal = false;
+   if (a && b && a != b)  {
+      while (*a && *b) {
+         if (*a++ != *b++) {
+            equal = false;
+            break;
+         }
+      }
+      if (equal && (*a != '\0' || *b != '\0')) {
+         equal = false;
+      }
    }
    return equal;
 }
@@ -63,8 +67,8 @@ getString(char* orig) {
       result = *str_in_map;
    }
    else {  // String not in hashmap. Allocate new one and insert.
-      char* new_str = allocate(g_string_arena, size+1); // Allocate one more byte for the string terminator.
-      memcpy(new_str, orig, size+1);
+      char* new_str = allocate(g_string_arena, size);
+      memcpy(new_str, orig, size);
       stringMapInsert(&g_string_map, new_str, new_str);
       result = new_str;
    }

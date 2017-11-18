@@ -187,6 +187,20 @@ postfixExpr(Parser* p) {
 
 AstNode*
 unaryExpr(Parser* p) {
+   /**
+   ++
+   --
+   unary-operator
+      &
+      *
+      +
+      -
+      ~
+      !
+   sizeof
+   alignof
+   **/
+
    AstNode* t = postfixExpr(p);
    return t;
 }

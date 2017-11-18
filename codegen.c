@@ -307,8 +307,10 @@ codegenPointerSize(Codegen* c) {
 }
 
 void
-codegenInit(Codegen* c) {
-   g_asm = fopen("out.asm", "w");
+codegenInit(Codegen* c, char* outfile) {
+   char asmfile [PATH_MAX] = {};
+   snprintf(asmfile, PATH_MAX, "%s.asm", outfile);
+   g_asm = fopen(asmfile, "w");
    char* prelude =
 #ifdef _WIN32
       "extern ExitProcess\n"

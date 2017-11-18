@@ -166,8 +166,9 @@ Generic(Get) (HashmapName* hm, HashmapKey   key) {
 }
 
 #ifdef KeyCompareFunc
-#undef KeyCompareFunc
+  #undef KeyCompareFunc
 #endif
+
 #undef Generic
 #undef GenericEx
 #undef GenericExEx
