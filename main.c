@@ -61,6 +61,12 @@ compileTranslationUnit(char* file_name, char* outfile) {
    return result;
 }
 
+static void printargs(char** args, int nargs) {
+   for (int i = 0; i < nargs; ++i) {
+      printf("%s ", args[i]);
+   }
+   printf("\n");
+}
 
 int
 main(int args_n, char** args) {
@@ -80,7 +86,37 @@ main(int args_n, char** args) {
       if (arg[0] != '-') {
          char* file_name = arg;
          int res = compileTranslationUnit(file_name, outfile);
-         Assert(res == 0);
+         if (res == 0) {
+            // Call nasm from here.
+            char asm_file[PATH_MAX] = {0};
+            snprintf(asm_file, PATH_MAX, "%s.asm", outfile);
+            char obj_file[PATH_MAX] = {0};
+            snprintf(obj_file, PATH_MAX, "%s.o", outfile);
+            pid_t pid = fork();
+            printf("Running nasm\n");
+            if (pid == 0) {
+               char* nasm_args[] = { "nasm", "-f", "macho64", asm_file };
+               printargs(nasm_args, ArrayCount(nasm_args));
+               execve("/usr/local/bin/nasm", nasm_args, NULL);
+            } else if (pid == wait(NULL)) {
+               printf("Running ld\n");
+               char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", outfile };
+               pid = fork();
+               if (pid == 0) {
+                  printargs(ld_args, ArrayCount(ld_args));
+                  execve("/usr/bin/ld", ld_args, NULL);
+               } else if (pid == wait(NULL)) {
+                  printf("Running %s\n", outfile);
+                  char* out_args[] = { outfile };
+                  if (fork() == 0) {
+                     execve(outfile, out_args, NULL);
+                  }
+                  int status = 0;
+                  wait(&status);
+                  printf("Returned status: %x\n", status);
+               }
+            }
+         }
       }
       else if (arg_len > 1) {
          if (arg[1] == 'o') {
@@ -105,15 +141,15 @@ main(int args_n, char** args) {
                      {"test.c", "out.test"},
                   };
 
+                  if (ArrayCount(tests) == 2)
                   for (int test_i = 0; test_i < ArrayCount(tests); ++test_i) {
                      pid_t pid = fork();
-
-
                      if (/*child process*/pid == 0) {
-                        printf("About to call execve...\n");
-
-                           char* child_args[] = { "child", "-o", tests[test_i].out, tests[test_i].fname };
-                           execve("./compiler", child_args, NULL);
+                        char* child_args[] = { "compiler", "-o", tests[test_i].out, tests[test_i].fname };
+                        execve("./compiler", child_args, NULL);
+                     }
+                     else if (pid == wait(NULL)){
+                        printf ("Finished running ./compiler -o %s %s\n", tests[test_i].out, tests[test_i].fname);
                      }
                   }
                }
@@ -132,8 +168,6 @@ main(int args_n, char** args) {
          }
       }
    }
-
-
 }
 
 #undef NUM_BYTES
