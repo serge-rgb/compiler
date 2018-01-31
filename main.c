@@ -2,10 +2,7 @@
 
 int
 compileTranslationUnit(char* file_name, char* outfile) {
-
    fprintf(stderr, "Compiling file %s\n", file_name);
-
-   // TODO: outfile
 
    Arena a = {0};
    stringInit(&a);
@@ -50,18 +47,18 @@ compileTranslationUnit(char* file_name, char* outfile) {
       if (tree) {
          codegenInit(&codegen, outfile);
          codegenTranslationUnit(&codegen, tree);
+         codegenFinish();
       }
       deallocate(&tmp_parser_arena);
       fileStreamClose(&file_stream);
       htmlEnd(&html);
    }
 
-   codegenFinish();
-
    return result;
 }
 
-static void printargs(char** args, int nargs) {
+static void
+printargs(char** args, int nargs) {
    for (int i = 0; i < nargs; ++i) {
       printf("%s ", args[i]);
    }
@@ -70,7 +67,6 @@ static void printargs(char** args, int nargs) {
 
 int
 main(int args_n, char** args) {
-
    fprintf(stderr, "scc call. arguments: %d\n", args_n);
    if (args_n <= 1) {
       fprintf(stderr, "scc - v0.0.1\n");
@@ -84,7 +80,9 @@ main(int args_n, char** args) {
       size_t arg_len = strlen(arg);
 
       if (arg[0] != '-') {
+         BreakHere;
          char* file_name = arg;
+         // TODO: Redirect stderr
          int res = compileTranslationUnit(file_name, outfile);
          if (res == 0) {
             // Call nasm from here.
@@ -98,14 +96,16 @@ main(int args_n, char** args) {
                char* nasm_args[] = { "nasm", "-f", "macho64", asm_file };
                printargs(nasm_args, ArrayCount(nasm_args));
                execve("/usr/local/bin/nasm", nasm_args, NULL);
-            } else if (pid == wait(NULL)) {
+            }
+            else if (pid == wait(NULL)) {
                printf("Running ld\n");
                char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", outfile };
                pid = fork();
                if (pid == 0) {
                   printargs(ld_args, ArrayCount(ld_args));
                   execve("/usr/bin/ld", ld_args, NULL);
-               } else if (pid == wait(NULL)) {
+               }
+               else if (pid == wait(NULL)) {
                   printf("Running %s\n", outfile);
                   char* out_args[] = { outfile };
                   if (fork() == 0) {
@@ -113,7 +113,12 @@ main(int args_n, char** args) {
                   }
                   int status = 0;
                   wait(&status);
-                  printf("Returned status: %x\n", status);
+                  if (WIFEXITED(status)) {
+                     printf("Returned status: %d\n", WEXITSTATUS(status));
+                  }
+                  else {
+                     printf("Program exited incorrectly.");
+                  }
                }
             }
          }
@@ -137,11 +142,12 @@ main(int args_n, char** args) {
                   };
 
                   struct Pair tests [] =  {
-                     {"tests/basic.c", "out.basic"},
-                     {"test.c", "out.test"},
+                     /* {"tests/basic.c", "tests/out.basic"}, */
+                     /* {"tests/test.c", "tests/out.test"}, */
+                     /* {"tests/for_1.c", "tests/out.for_1"}, */
+                     {"tests/while1.c", "tests/out.while1"},
                   };
 
-                  if (ArrayCount(tests) == 2)
                   for (int test_i = 0; test_i < ArrayCount(tests); ++test_i) {
                      pid_t pid = fork();
                      if (/*child process*/pid == 0) {
@@ -155,15 +161,6 @@ main(int args_n, char** args) {
                }
             } else {
                fprintf(stderr, "Expected test argument..\n");
-            }
-         }
-         if (arg[1] == 'h') {
-            printf("OMG I GOT THE H FLAG\n");
-            if (arg_i + 1 < args_n) {
-               printf("Hello message: [%s]\n", args[++arg_i]);
-            }
-            else {
-               fprintf(stderr, "Expected hello message.\n");
             }
          }
       }
