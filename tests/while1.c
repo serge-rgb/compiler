@@ -1,9 +1,6 @@
 int main() {
-   int i = 2;
-   while (i) {
-      i--;
+   if (1) {
+      return 1;
    }
-   i = 1;
-   while (--i) {}
-   return i;
+   return 0;
 }

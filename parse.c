@@ -503,18 +503,19 @@ parameterTypeList(Parser* p) {
    // Parse parameter, right to left.
    while (true) {
       AstNode* decl_spec = parseOrBacktrack(parseDeclarationSpecifiers, p);
-      AstNode* declarator = parseOrBacktrack(parseDeclarator, p);
+      if (decl_spec) {
+         AstNode* declarator = parseOrBacktrack(parseDeclarator, p);
+         if (declarator) {
+            AstNode* new = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
+            new->sibling = result;
+            result = new;
 
-      if (decl_spec && declarator) {
-         AstNode* new = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
-         new->sibling = result;
-         result = new;
-
-         if (peekPunctuator(p, ',')) {
-            // There is another parameter.
-            nextToken(p);
-         } else {
-            break;
+            if (peekPunctuator(p, ',')) {
+               // There is another parameter.
+               nextToken(p);
+            } else {
+               break;
+            }
          }
       }
       else {
@@ -528,19 +529,30 @@ parameterTypeList(Parser* p) {
 AstNode*
 parseDeclarator(Parser* p) {
    AstNode* r = NULL;
-   Token* t = nextToken(p);
-   if (t->type == TType_ID) {
-      r = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
+   Token* t;
+   if (nextPunctuator(p, '(')) {
+      parseError("Function declarators not supported yet");
+   }
+   else if (nextPunctuator(p, '*')) {
+      parseError("pointer declarators not supported yet");
+   }
+   else if ((t = nextToken(p)) && (t->type == TType_ID)) {
+
+      AstNode* id = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
+      id->tok = t;
       if (nextPunctuator(p, '(')) {
          AstNode* params = parseOrBacktrack(parameterTypeList, p);
          if (params) {
-            r->child = params;
+            id->sibling = params;
          }
          if (!nextPunctuator(p, ')')) {
             parseError("Expected ) in declarator");
          }
       }
-      r->tok = t;
+      r = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATOR, id, NULL, t->line_number);
+   }
+   else {
+      parseError("unhandled error");
    }
    return r;
 }
@@ -562,7 +574,7 @@ parseDeclaration(Parser* p) {
    AstNode* result = NULL;
    AstNode* specifiers = parseDeclarationSpecifiers(p);
    if (specifiers) {
-      AstNode* identifier = parseDeclarator(p);
+      AstNode* declarator = parseDeclarator(p);
       AstNode* initializer = NULL;
 
       Token* bt = marktrack(p);
@@ -574,8 +586,8 @@ parseDeclaration(Parser* p) {
       }
       expectPunctuator(p, ';');
 
-      result = makeAstNode(p->arena, Ast_DECLARATION, specifiers, identifier);
-      identifier->sibling = initializer;
+      result = makeAstNode(p->arena, Ast_DECLARATION, specifiers, declarator);
+      declarator->sibling = initializer;
    }
    return result;
 }
@@ -633,9 +645,6 @@ parseStatement(Parser* p) {
    AstNode* stmt = NULL;
    // TODO(medium): Parse the different kinds of statements in the correct order.
    // label
-   // compound
-   // expression
-   //
    if ((stmt = parseCompoundStatement(p)) != NULL) {
 
    }
@@ -660,7 +669,28 @@ parseStatement(Parser* p) {
          }
       }
    }
-   // TODO(long): iteration-statement
+   // === Iteration ===
+   else if (nextKeyword(p, Keyword_while)) {
+      if (nextPunctuator(p, '(')) {
+         AstNode* expr = parseExpression(p);
+         if (!expr) {
+            parseError("expected expression inside parens");
+         }
+         AstNode* statement = parseStatement(p);
+         if (!statement) {
+            parseError("expected statement after while");
+         }
+         AstNode* declarations = makeAstNode(p->arena, Ast_NONE, 0,0);
+         AstNode* control_before = expr;
+         AstNode* body = statement;
+
+         declarations->sibling = control_before;
+         control_before->sibling = body;
+         body->sibling = NULL;
+
+         makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
+      }
+   }
    return stmt;
 }
 

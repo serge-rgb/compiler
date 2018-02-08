@@ -80,7 +80,6 @@ main(int args_n, char** args) {
       size_t arg_len = strlen(arg);
 
       if (arg[0] != '-') {
-         BreakHere;
          char* file_name = arg;
          // TODO: Redirect stderr
          int res = compileTranslationUnit(file_name, outfile);

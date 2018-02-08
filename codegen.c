@@ -843,14 +843,14 @@ emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
-   AstNode* type
-    = node->child;
+   AstNode* type        = node->child;
    AstNode* declarator  = type->sibling;
    AstNode* compound    = declarator->sibling;
 
    if (type && declarator && compound) {
-      instructionPrintf(c, node->line_number, "global %s", declarator->tok->value.string);
-      instructionPrintf(c, node->line_number, "%s:", declarator->tok->value.string);
+      char *func_name = declarator->child->tok->value.string;
+      instructionPrintf(c, node->line_number, "global %s", func_name);
+      instructionPrintf(c, node->line_number, "%s:", func_name);
       instructionPrintf(c, node->line_number, "push rbp");
       instructionPrintf(c, node->line_number, "mov rbp, rsp");
 
@@ -860,7 +860,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       // Push
       pushScope(c);
 
-      AstNode* params = declarator->child;
+      AstNode* params = declarator->child->sibling;
       if (params) {
          AstNode* p = params;
          u64 n_param = 0;
