@@ -120,6 +120,9 @@ main(int args_n, char** args) {
                   }
                }
             }
+         } else {
+            printf("Compilation error.");
+            exit(1);
          }
       }
       else if (arg_len > 1) {
@@ -151,7 +154,18 @@ main(int args_n, char** args) {
                      pid_t pid = fork();
                      if (/*child process*/pid == 0) {
                         char* child_args[] = { "compiler", "-o", tests[test_i].out, tests[test_i].fname };
-                        execve("./compiler", child_args, NULL);
+                        pid = fork();
+                        if (pid == 0) {
+                           execve("./compiler", child_args, NULL);
+                        }
+                        else if (pid == wait(NULL)) {
+                           int status = 0;
+                           wait(&status);
+                           if (!(WIFEXITED(status) && 0!=WEXITSTATUS(status))) {
+                              printf("Test failed: %s\n", tests[test_i].fname);
+                              break;
+                           }
+                        }
                      }
                      else if (pid == wait(NULL)){
                         printf ("Finished running ./compiler -o %s %s\n", tests[test_i].out, tests[test_i].fname);

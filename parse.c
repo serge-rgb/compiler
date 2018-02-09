@@ -38,7 +38,7 @@ b32
 peekPunctuator(Parser* p, int c) {
    b32 result = false;
    Assert(c < 256);
-   result = p->token->type == TType_PUNCTUATOR && p->token->value.character == c;
+   result = p->token->type == TType_PUNCTUATOR && p->token->cast.character == c;
    return result;
 }
 
@@ -66,7 +66,7 @@ nextToken(Parser* p) {
 Token*
 nextKeyword(Parser* p, int keyword) {
    Token* tok = nextToken(p);
-   if (tok->type == TType_KEYWORD && tok->value.integer == keyword) {
+   if (tok->type == TType_KEYWORD && tok->cast.int32 == keyword) {
       return tok;
    }
    else {
@@ -226,7 +226,7 @@ multiplicativeExpr(Parser* p) {
          // Another cast expression
          AstNode* right     = castExpr(p);
          if (right) {
-            int   node_type = optok->value.character == '*' ? Ast_MUL : Ast_DIV;
+            int   node_type = optok->cast.character == '*' ? Ast_MUL : Ast_DIV;
             left            = makeAstNode(p->arena, node_type, left, right);
          } else {
             parseError("Expected expression after '*'");
@@ -246,7 +246,7 @@ additiveExpr(Parser* p) {
          // Pop another multiplicative expression.
          AstNode* right     = multiplicativeExpr(p);
          if (right) {
-            int   node_type = optok->value.character == '+' ? Ast_ADD : Ast_SUB;
+            int   node_type = optok->cast.character == '+' ? Ast_ADD : Ast_SUB;
             left            = makeAstNode(p->arena, node_type, left, right);
          } else {
             parseError("Expected expression after '+'");
@@ -365,7 +365,7 @@ relationalExpression(Parser* p) {
          if (!right) { parseError("Expected expression after relational operator."); }
          AstType t = Ast_NONE;
          // TODO(medium): Ast types should reuse keyword and punctuator values.
-         switch (op->value.character) {
+         switch (op->cast.character) {
             case '<': {
                 t = Ast_LESS;
             } break;
@@ -414,17 +414,17 @@ Ctype
 parseCtypeSpecifier(Token* t) {
    Ctype result = Type_NONE;
    b32 is_type_spec =
-           t->value.integer == Keyword_int ||
-           t->value.integer == Keyword_char ||
-           t->value.integer == Keyword_float ||
-           t->value.integer == Keyword_long ||
-           t->value.integer == Keyword_short ||
-           t->value.integer == Keyword__Bool ||
-           t->value.integer == Keyword__Complex ||
-           t->value.integer == Keyword__Imaginary
+           t->value == Keyword_int ||
+           t->value == Keyword_char ||
+           t->value == Keyword_float ||
+           t->value == Keyword_long ||
+           t->value == Keyword_short ||
+           t->value == Keyword__Bool ||
+           t->value == Keyword__Complex ||
+           t->value == Keyword__Imaginary
            ;
    if (is_type_spec) {
-      switch (t->value.integer) {
+      switch (t->value) {
          case Keyword_int: {
             result = Type_INT;
          } break;
@@ -468,7 +468,7 @@ parseDeclarationSpecifiers(Parser* p) {
    if (t->type == TType_KEYWORD) {
 
       result = makeAstNodeWithLineNumber(p->arena, Ast_TYPE_SPECIFIER, NULL, NULL, t->line_number);
-      int v = t->value.integer;
+      int v = t->cast.integer;
       // Storage class specifiers
       if (v == Keyword_typedef ||
           v == Keyword_extern ||
@@ -598,7 +598,7 @@ AstNode*
 parseJumpStatement(Parser* p) {
    AstNode* stmt = NULL;
    Token* t = nextToken(p);
-   if (t->type == TType_KEYWORD && t->value.integer == Keyword_return) {
+   if (t->type == TType_KEYWORD && t->value == Keyword_return) {
       AstNode* expr = parseOrBacktrack(parseExpression, p);
       stmt = makeAstNode(p->arena, Ast_RETURN, expr, NULL);
       expectPunctuator(p, ';');
@@ -676,19 +676,24 @@ parseStatement(Parser* p) {
          if (!expr) {
             parseError("expected expression inside parens");
          }
-         AstNode* statement = parseStatement(p);
-         if (!statement) {
-            parseError("expected statement after while");
+         if (!nextPunctuator(p, ')')) {
+            parseError("Expected ) after while");
          }
-         AstNode* declarations = makeAstNode(p->arena, Ast_NONE, 0,0);
-         AstNode* control_before = expr;
-         AstNode* body = statement;
+         else {
+            AstNode* statement = parseStatement(p);
+            if (!statement) {
+               parseError("expected statement after while");
+            }
+            AstNode* declarations = makeAstNode(p->arena, Ast_NONE, 0,0);
+            AstNode* control_before = expr;
+            AstNode* body = statement;
 
-         declarations->sibling = control_before;
-         control_before->sibling = body;
-         body->sibling = NULL;
+            declarations->sibling = control_before;
+            control_before->sibling = body;
+            body->sibling = NULL;
 
-         makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
+            stmt = makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
+         }
       }
    }
    return stmt;

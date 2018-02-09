@@ -12,6 +12,13 @@ exit 0
 
 #endif
 
+// Configuration
+
+
+#define SCC_DEBUG
+
+// ----
+
 #include <stddef.h>
 #include <stdint.h>
 

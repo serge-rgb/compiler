@@ -545,7 +545,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
       if (node->type == Ast_FUNCCALL) {
          AstNode* func = node->child;
-         char* label = func->tok->value.string;
+         char* label = func->tok->cast.string;
 
          AstNode* params = func->sibling;
          // Put the parameters in registers and/or the stack.
@@ -571,10 +571,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   node->line_number,
                   "mov %s, %d",
                   registerString(c, &g_registers[Reg_RAX], bits),
-                  node->tok->value.integer);
+                  node->tok->cast.integer);
             } break;
             case Target_STACK: {
-               stackPushImm(c, node->tok->value.integer);
+               stackPushImm(c, node->tok->value);
             } break;
             case Target_NONE: { /* Nothing */ } break;
             case Target_TMP: {
@@ -587,10 +587,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
       }
       else if (node->type == Ast_ID) {
-         SymEntry* entry = findSymbol(c, node->tok->value.string);
+         SymEntry* entry = findSymbol(c, node->tok->cast.string);
 
          if (!entry) {
-            codegenError("Use of undeclared identifier %s", node->tok->value.string);
+            codegenError("Use of undeclared identifier %s", node->tok->cast.string);
          }
 
          u64 rsp_relative = c->stack_offset - entry->offset;
@@ -744,7 +744,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       case Ast_DECLARATION: {
          AstNode* ast_type = stmt->child;
          AstNode* ast_id = ast_type->sibling;
-         char* id_str = ast_id->tok->value.string;
+         char* id_str = ast_id->tok->cast.string;
          AstNode* rhs = ast_id->sibling;
 
          Assert (symGet(&c->scope->symbol_table, id_str) == NULL);
@@ -766,7 +766,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
 
          if (isLiteral(rhs)) {
             // TODO: Non-integer values.
-            int value = rhs->tok->value.integer;
+            int value = rhs->tok->value;
 
             switch (bits) {
                case 32: {
@@ -808,10 +808,22 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             codegenEmit(c, els, NULL, Target_NONE);
          }
       } break;
+      case Ast_ITERATION: {
+         AstNode* decl = stmt->child;
+         AstNode* control = decl->sibling;
+         AstNode* after = control->sibling;
+         AstNode* body = after->sibling;
+         pushScope(c); {
+            if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
+            if (control->type != Ast_NONE) { emitStatement(c, control, Target_ACCUM); }
+            if (after->type != Ast_NONE) { emitStatement(c, after, Target_ACCUM); }
+            if (body->type != Ast_NONE) { emitStatement(c, body, Target_ACCUM); }
+         } popScope(c);
+      }
       default: {
          // Expression statements
          if (nodeIsExpression(stmt)) {
-            emitExpression(c, stmt, NULL, Target_TMP);
+            emitExpression(c, stmt, NULL, target);
          }
          else {
             Assert(!"This type of statement is not handled.");
@@ -848,7 +860,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    AstNode* compound    = declarator->sibling;
 
    if (type && declarator && compound) {
-      char *func_name = declarator->child->tok->value.string;
+      char *func_name = declarator->child->tok->cast.string;
       instructionPrintf(c, node->line_number, "global %s", func_name);
       instructionPrintf(c, node->line_number, "%s:", func_name);
       instructionPrintf(c, node->line_number, "push rbp");
@@ -868,7 +880,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
             AstNode* param_declarator = param_type_spec->sibling;
-            char* id_str = param_declarator->tok->value.string;
+            char* id_str = param_declarator->tok->cast.string;
 
             Assert (param_type_spec && param_type_spec->type == Ast_TYPE_SPECIFIER);
             Assert (param_declarator && param_declarator->type == Ast_ID);

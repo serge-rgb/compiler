@@ -43,10 +43,15 @@ typedef struct Token_s Token;
 struct Token_s {
    TType type;
    union {
-      u8    character;
-      char* string;
-      u64   integer;
-   } value;
+      u64 value;
+      union {
+         char*    string;
+         u8       character;
+         u16      uint16;
+         i32      int32;
+         i32      integer;
+      } cast;
+   };
 
    u64 line_number;
 
@@ -256,7 +261,7 @@ identifyToken(Buffer* b, Token* out) {
    }
    else if ((kw = identifyKeyword(b), kw != -1)) {
       out->type = TType_KEYWORD | kw;
-      out->value.integer = kw;
+      out->value = kw;
    }
    else {
       out->type = TType_ID;
@@ -274,10 +279,10 @@ getToken(Arena* a, FileStream* fs) {
    else if ((punctuator_token = isPunctuator(fs)) != 0) {
       t.type = TType_PUNCTUATOR;
       if (punctuator_token && punctuator_token < ASCII_MAX) {
-         t.value.character = fileStreamRead(fs);
+         t.cast.character = fileStreamRead(fs);
       }
       else if (punctuator_token < 255) {
-         t.value.character = (u8)punctuator_token;
+         t.cast.character = (u8)punctuator_token;
          // Advance the buffer by the length of othe operator.
          char* punctuator_str = g_punctuator_strings[indexOfPunctuator(punctuator_token)];
          size_t len = strlen(punctuator_str);
@@ -301,7 +306,7 @@ getToken(Arena* a, FileStream* fs) {
       }
       token_buffer.end = tmp + strlen(tmp);
       char* str = getString(token_buffer.current);
-      t.value.string = str;
+      t.cast.string = str;
    }
    // TODO(long): Operators
    // TODO(long): Constants
@@ -327,13 +332,13 @@ getToken(Arena* a, FileStream* fs) {
             PrintString(msg, 1024, "Error while parsing integer. Token string %s", str);
             lexerError(msg);
          }
-         t.value.integer = val;
+         t.cast.int32 = val;
       }
       else if (t.type & TType_KEYWORD) {
          t.type = TType_KEYWORD;
       }
       else if (t.type == TType_ID)  {
-         t.value.string = str;
+         t.cast.string = str;
       }
    }
    t.line_number = fs->line_number;
@@ -345,25 +350,25 @@ tokenPrint(Token* token) {
    printf("[");
    switch(token->type) {
       case TType_PUNCTUATOR: {
-         if (token->value.character < ASCII_MAX) {
-            printf("PUNCTUATOR %c", (char)token->value.character);
+         if (token->value < ASCII_MAX) {
+            printf("PUNCTUATOR %c", (char)token->cast.character);
          }
          else {
-            printf("PUNCTUATOR: %s", g_punctuator_strings[indexOfPunctuator(token->value.character)]);
+            printf("PUNCTUATOR: %s", g_punctuator_strings[indexOfPunctuator(token->cast.character)]);
          }
       } break;
       case TType_KEYWORD: {
-         printf("KEYWORD %s", g_keywords[token->value.integer]);
+         printf("KEYWORD %s", g_keywords[token->value]);
       } break;
       case TType_NUMBER: {
          // TODO(long): Support floating point..
-         printf("NUMBER: %i", (int)token->value.integer);
+         printf("NUMBER: %i", (int)token->value);
       } break;
       case TType_ID: {
-         printf("ID: %s", token->value.string);
+         printf("ID: %s", token->cast.string);
       } break;
       case TType_STRING_LITERAL: {
-         printf("STRING: \"%s\"", token->value.string);
+         printf("STRING: \"%s\"", token->cast.string);
       } break;
       default: {
          printf("This token type is not printable yet. Type %d ", token->type);
