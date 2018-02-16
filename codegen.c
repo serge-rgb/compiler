@@ -731,9 +731,15 @@ emitCondition(Codegen* c, AstNode* cond, char* then, char* els) {
    }
 }
 
+// forward decl
+void emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target);
+
 void
 emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
    switch (stmt->type) {
+      case Ast_COMPOUND_STMT : {
+         emitCompoundStatement(c, stmt, target);
+      } break;
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
          if (stmt->child) {
@@ -814,12 +820,31 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          AstNode* after = control->sibling;
          AstNode* body = after->sibling;
          pushScope(c); {
+            char loop_label[1024] = {0}; {
+               snprintf(loop_label, sizeof(loop_label), ".body%d", c->scope->if_count);
+            }
+            char end_label[1024] = {0}; {
+               snprintf(end_label, sizeof(end_label), ".end%d", c->scope->if_count++);
+            }
+            b32 after_is_control = (control->type == Ast_NONE);
             if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
-            if (control->type != Ast_NONE) { emitStatement(c, control, Target_ACCUM); }
-            if (after->type != Ast_NONE) { emitStatement(c, after, Target_ACCUM); }
-            if (body->type != Ast_NONE) { emitStatement(c, body, Target_ACCUM); }
+
+            instructionPrintf(c, 0, "%s:", loop_label);
+            if (control->type != Ast_NONE) {
+               emitStatement(c, control, Target_ACCUM);
+               instructionReg(c, 0, "test %s, %s", 64, Reg_RAX, Reg_RAX);
+               instructionPrintf(c, 0, "jz %s", end_label);
+            }
+            if (body->type != Ast_NONE) {
+               emitStatement(c, body, Target_ACCUM);
+            }
+            if (after->type != Ast_NONE) {
+               emitStatement(c, after, Target_ACCUM);
+            }
+            instructionPrintf(c, 0, "jmp %s", loop_label);
+            instructionPrintf(c, 0, "%s:", end_label);
          } popScope(c);
-      }
+      } break;
       default: {
          // Expression statements
          if (nodeIsExpression(stmt)) {

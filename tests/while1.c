@@ -1,4 +1,7 @@
 int main() {
-   while (1) {
+   int i = 0;
+   while (i != 2) {
+      i += 1;
    }
+   return i == 2;
 }

@@ -17,6 +17,7 @@ X(Ast_MUL)              // children: left, right
 X(Ast_DIV)              // children: left, right
 X(Ast_LOGICAL_AND)      // children: left, right
 X(Ast_EQUALS)           // children: left, right
+X(Ast_NOT_EQUALS)       // children: left, right
 X(Ast_LESS)             // children: left, right
 X(Ast_LEQ)              // children: left, right
 X(Ast_GREATER)          // children: left, right

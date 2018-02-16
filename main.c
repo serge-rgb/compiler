@@ -161,7 +161,7 @@ main(int args_n, char** args) {
                         else if (pid == wait(NULL)) {
                            int status = 0;
                            wait(&status);
-                           if (!(WIFEXITED(status) && 0!=WEXITSTATUS(status))) {
+                           if (!(WIFEXITED(status) && 0 != WEXITSTATUS(status))) {
                               printf("Test failed: %s\n", tests[test_i].fname);
                               break;
                            }

@@ -5,7 +5,7 @@
 if [ `uname` = "Linux" ]; then
    clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f elf64 out.asm && ld out.o
 else  # Assume it's macOS
-   clang -g -Wall -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler -t all
+   clang -g -Wall -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler # && ./compiler -t all
 fi
 
 exit 0

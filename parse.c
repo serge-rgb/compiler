@@ -256,11 +256,68 @@ additiveExpr(Parser* p) {
    return left;
 }
 
+AstNode*
+relationalExpression(Parser* p) {
+   AstNode* left = parseOrBacktrack(additiveExpr, p);
+   if (left) {
+      while (peekPunctuator(p, '<') ||
+             peekPunctuator(p, '>') ||
+             peekPunctuator(p, GEQ) ||
+             peekPunctuator(p, LEQ)) {
+         Token* op = nextToken (p);
+         AstNode* right = relationalExpression(p);
+         if (!right) { parseError("Expected expression after relational operator."); }
+         AstType t = Ast_NONE;
+         // TODO(medium): Ast types should reuse keyword and punctuator values.
+         switch (op->cast.character) {
+            case '<': {
+                t = Ast_LESS;
+            } break;
+            case '>': {
+                t = Ast_GREATER;
+            } break;
+            case GEQ: {
+                t = Ast_GEQ;
+            } break;
+            case LEQ: {
+                t = Ast_LEQ;
+            } break;
+         }
+         left = makeAstNode(p->arena, t, left, right);
+      }
+   }
+   return left;
+}
 
+AstNode*
+equalityExpression(Parser* p) {
+   AstNode* left = parseOrBacktrack(relationalExpression, p);
+   // TODO(long): This left-recursion elimination pattern is repeating a lot.
+   // Would it be a good tradeoff to abstract it away?
+   if (left) {
+      Token* eq = NULL;
+      while ((eq = nextPunctuator(p, EQUALS)) || (eq = nextPunctuator(p, NOT_EQUALS))) {
+         AstNode* right = relationalExpression(p);
+         if (!right) { parseError("Expected expression after equality operator."); }
+
+         left = makeAstNode(p->arena, eq->value == EQUALS? Ast_EQUALS : Ast_NOT_EQUALS, left, right);
+      }
+   }
+
+   return left;
+}
+AstNode*
+andExpression(Parser* p) {
+   return equalityExpression(p);
+}
+AstNode*
+exclusiveOrExpr(Parser* p) {
+   return andExpression(p);
+}
 AstNode*
 inclusiveOrExpr(Parser* p) {
    // TODO(long): Implement bit or.
-   return additiveExpr(p);
+   return exclusiveOrExpr(p);
 }
 
 AstNode*
@@ -324,9 +381,9 @@ conditionalExpr(Parser* p) {
 }
 
 AstNode*
-assignmentExpr(Parser* p) {
+assignmentExpression(Parser* p) {
    AstNode* t = conditionalExpr(p);
-   // TODO(long): unaryExpr assignmentOperator assignmentExpr
+   // TODO(long): unaryExpr assignmentOperator assignmentExpression
    return t;
 }
 
@@ -334,7 +391,7 @@ AstNode*
 argumentExpressionList(Parser* p) {
    AstNode* args = NULL;
    while (true) {
-      AstNode* assignment = assignmentExpr(p);
+      AstNode* assignment = assignmentExpression(p);
       if (!assignment) {
          parseError("Expected argument in expression list");
       }
@@ -352,59 +409,11 @@ argumentExpressionList(Parser* p) {
    return args;
 }
 
-AstNode*
-relationalExpression(Parser* p) {
-   AstNode* left = parseOrBacktrack(additiveExpr, p);
-   if (left) {
-      while (peekPunctuator(p, '<') ||
-             peekPunctuator(p, '>') ||
-             peekPunctuator(p, GEQ) ||
-             peekPunctuator(p, LEQ)) {
-         Token* op = nextToken (p);
-         AstNode* right = relationalExpression(p);
-         if (!right) { parseError("Expected expression after relational operator."); }
-         AstType t = Ast_NONE;
-         // TODO(medium): Ast types should reuse keyword and punctuator values.
-         switch (op->cast.character) {
-            case '<': {
-                t = Ast_LESS;
-            } break;
-            case '>': {
-                t = Ast_GREATER;
-            } break;
-            case GEQ: {
-                t = Ast_GEQ;
-            } break;
-            case LEQ: {
-                t = Ast_LEQ;
-            } break;
-         }
-         left = makeAstNode(p->arena, t, left, right);
-      }
-   }
-   return left;
-}
 
-AstNode*
-equalityExpression(Parser* p) {
-   AstNode* left                   = parseOrBacktrack(relationalExpression, p);
-   // TODO(long): This left-recursion elimination pattern is repeating a lot.
-   // Would it be a good tradeoff to abstract it away?
-   if (left) {
-      while (nextPunctuator(p, EQUALS)) {
-         AstNode* right = relationalExpression(p);
-         if (!right) { parseError("Expected expression after '=='."); }
-         left = makeAstNode(p->arena, Ast_EQUALS, left, right);
-      }
-   }
-
-   return left;
-}
 
 AstNode*
 parseExpression(Parser* p) {
-   // AstNode* t = additiveExpr(p);
-   AstNode* t = equalityExpression(p);
+   AstNode* t = assignmentExpression(p);
    return t;
 }
 
@@ -565,7 +574,7 @@ parseDeclarationList(Parser* p) {
 AstNode*
 parseInitializer(Parser* p) {
    // TODO(long): Initializers.
-   AstNode* node = assignmentExpr(p);
+   AstNode* node = assignmentExpression(p);
    return node;
 }
 
@@ -628,8 +637,6 @@ parseCompoundStatement(Parser* p) {
          if (!*cur) {
             if (nextPunctuator(p, '}')) {
                compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, first_stmt, NULL);
-            } else {
-               parseError("Unrecognized token.");
             }
          }
       } while (*cur);
@@ -643,8 +650,6 @@ parseCompoundStatement(Parser* p) {
 AstNode*
 parseStatement(Parser* p) {
    AstNode* stmt = NULL;
-   // TODO(medium): Parse the different kinds of statements in the correct order.
-   // label
    if ((stmt = parseCompoundStatement(p)) != NULL) {
 
    }
@@ -680,16 +685,19 @@ parseStatement(Parser* p) {
             parseError("Expected ) after while");
          }
          else {
+            // TODO: Parse assignment expression
             AstNode* statement = parseStatement(p);
             if (!statement) {
                parseError("expected statement after while");
             }
             AstNode* declarations = makeAstNode(p->arena, Ast_NONE, 0,0);
             AstNode* control_before = expr;
+            AstNode* after = makeAstNode(p->arena, Ast_NONE, 0,0);
             AstNode* body = statement;
 
             declarations->sibling = control_before;
-            control_before->sibling = body;
+            control_before->sibling = after;
+            after->sibling = body;
             body->sibling = NULL;
 
             stmt = makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
