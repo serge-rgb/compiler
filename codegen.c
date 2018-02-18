@@ -826,7 +826,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             char end_label[1024] = {0}; {
                snprintf(end_label, sizeof(end_label), ".end%d", c->scope->if_count++);
             }
-            b32 after_is_control = (control->type == Ast_NONE);
+            // b32 after_is_control = (control->type == Ast_NONE);
             if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
 
             instructionPrintf(c, 0, "%s:", loop_label);

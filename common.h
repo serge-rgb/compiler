@@ -16,6 +16,7 @@ typedef int64_t i64;
 
 #define true 1
 #define false 0
+#define Zero {0}
 
 #define ASCII_MAX 128
 #define LINE_MAX  256
@@ -40,6 +41,18 @@ typedef int64_t i64;
 #define InvalidCodePath Assert(!"Invalid code path.")
 
 #define ArrayCount(arr) (sizeof((arr)) / sizeof(*(arr)))
+
+#define ArrayErrorDefault(f, l) \
+   fprintf(stderr, "Array overflow in %s:%d\n", f, l); \
+   raise(SIGTRAP);
+
+#define ArrayError(f, l) ArrayErrorDefault(f, l)
+#define ArrayPush(arr, e)                  \
+        if (ArrayCount(arr) > n_##arr) {   \
+           (arr)[n_##arr++] = e;           \
+        } else {                           \
+           ArrayError(__FILE__, __LINE__); \
+        }
 
 #define BreakHere PlatformBreakHere
 

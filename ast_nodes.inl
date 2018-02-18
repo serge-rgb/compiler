@@ -1,9 +1,9 @@
 
 X(Ast_NONE)
 X(Ast_TYPE_SPECIFIER)   // no family. fills ctype member.
-X(Ast_NUMBER)           // no family.
+X(Ast_NUMBER)           // token: number
 X(Ast_IF)               // children: condition, then, else
-X(Ast_ID)               //
+X(Ast_ID)               // token: identifier
 X(Ast_FUNCDEF)          // children: declaration_spec, declarator, comp.statement
 X(Ast_FUNCCALL)         // children: identifier, arg expr list
 X(Ast_PARAMETER)        // children: decl.specifier, declarator
@@ -24,4 +24,5 @@ X(Ast_GREATER)          // children: left, right
 X(Ast_GEQ)              // children: left, right
 X(Ast_LOGICAL_OR)       // children: left, right
 X(Ast_COMPOUND_STMT)    // children: stmt,stmt,stmt,stmt,etc
-X(Ast_ITERATION)        // children: declaration, control before, after (might be control), body
+X(Ast_ITERATION)        // children: declaration, control before, after (might be control), body.
+X(Ast_ASSIGN)           // children: unary expr, assignment expr. token: assignment punctuator

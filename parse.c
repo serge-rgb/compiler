@@ -380,10 +380,43 @@ conditionalExpr(Parser* p) {
    return t;
 }
 
+Token*
+assignmentOperator(Parser* p) {
+   Token* t = NULL;
+   if (false) {}
+   else if ((t = nextPunctuator(p, '='))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_MODULUS))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_BIT_AND))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_MULTIPLY))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_INCREMENT))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_DECREMENT))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_DIVIDE))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_SHIFT_LEFT))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_SHIFT_RIGHT))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_BIT_XOR))) { }
+   else if ((t = nextPunctuator(p, ASSIGN_BIT_OR))) { }
+
+   return t;
+}
+
 AstNode*
 assignmentExpression(Parser* p) {
-   AstNode* t = conditionalExpr(p);
+   AstNode* t = NULL;
    // TODO(long): unaryExpr assignmentOperator assignmentExpression
+   Token* bt = marktrack(p);
+
+   AstNode* unary = NULL;
+   Token* op = NULL;
+   AstNode* assignment = NULL;
+   if ((unary = unaryExpr(p)) && (op = assignmentOperator(p)) &&  (assignment = assignmentExpression(p))) {
+      t = makeAstNode(p->arena, Ast_ASSIGN, unary, assignment);
+      t->tok = op;
+   }
+   else {
+      backtrack(p, bt);
+      t = conditionalExpr(p);
+   }
+
    return t;
 }
 
@@ -470,13 +503,17 @@ parseDeclarationSpecifiers(Parser* p) {
    //   type-specifier
    //   function specifier
    Token* t = nextToken(p);
-   Token* bt = t;
+   // Token* bt = t;
    AstNode* result = NULL;
    Ctype ctype = Type_NONE;
 
-   if (t->type == TType_KEYWORD) {
+#define MaxSpecifiers 1
+   int storage_spec[MaxSpecifiers] = Zero;
+   int n_storage_spec = 0;
+   int type_qualifiers[MaxSpecifiers] = Zero;
+   int n_type_qualifiers = 0;
 
-      result = makeAstNodeWithLineNumber(p->arena, Ast_TYPE_SPECIFIER, NULL, NULL, t->line_number);
+   while (t->type == TType_KEYWORD) {
       int v = t->cast.integer;
       // Storage class specifiers
       if (v == Keyword_typedef ||
@@ -484,21 +521,28 @@ parseDeclarationSpecifiers(Parser* p) {
           v == Keyword_static ||
           v == Keyword_auto ||
           v == Keyword_register) {
-
+         ArrayPush(storage_spec, v);
       }
       // Ctype specifiers
       else if ((ctype = parseCtypeSpecifier(t), ctype)) {
          result->ctype = ctype;
       }
-      else {
-         result = NULL;
-         backtrack(p, bt);
+      else if (v == Keyword_const ||
+               v == Keyword_restrict ||
+               v == Keyword_volatile) {
+         ArrayPush(type_qualifiers, v);
       }
+      else if (v == Keyword_struct ||
+               v == Keyword_union) {
+         assert(!"Not implemented");
+      }
+      t = nextToken(p);
    }
-   else {
-      backtrack(p, bt);
-   }
+   /* else { */
+   /*    backtrack(p, bt); */
+   /* } */
 
+   result = makeAstNodeWithLineNumber(p->arena, Ast_TYPE_SPECIFIER, NULL, NULL, t->line_number);
    return result;
 }
 
