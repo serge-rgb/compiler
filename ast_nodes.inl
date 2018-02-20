@@ -1,6 +1,6 @@
 
 X(Ast_NONE)
-X(Ast_TYPE_SPECIFIER)   // no family. fills ctype member.
+X(Ast_DECLARATION_SPECIFIER)   // no family. fills ctype member.
 X(Ast_NUMBER)           // token: number
 X(Ast_IF)               // children: condition, then, else
 X(Ast_ID)               // token: identifier

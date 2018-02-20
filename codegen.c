@@ -682,7 +682,20 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
          }
          else {
-            codegenError("PORT ( expression )");
+            switch(node->type) {
+               case Ast_LESS:
+               case Ast_LEQ:
+               case Ast_GREATER:
+               case Ast_GEQ:
+               case Ast_NOT_EQUALS:
+               case Ast_EQUALS: {
+                  Assert (!"keep going here: implement comparison expressions");
+               } break;
+               default: {
+
+                  codegenError("PORT ( expression )");
+               } break;
+            }
          }
       }
    }
@@ -700,6 +713,7 @@ emitCondition(Codegen* c, AstNode* cond, char* then, char* els) {
       case Ast_LEQ:
       case Ast_GREATER:
       case Ast_GEQ:
+      case Ast_NOT_EQUALS:
       case Ast_EQUALS: {
          AstNode* left = cond->child;
          AstNode* right = cond->child->sibling;
@@ -749,9 +763,9 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       } break;
       case Ast_DECLARATION: {
          AstNode* ast_type = stmt->child;
-         AstNode* ast_id = ast_type->sibling;
+         AstNode* ast_id = ast_type->sibling->child;
          char* id_str = ast_id->tok->cast.string;
-         AstNode* rhs = ast_id->sibling;
+         AstNode* rhs = ast_type->sibling->sibling;
 
          Assert (symGet(&c->scope->symbol_table, id_str) == NULL);
          int bits = 8 * numBytesForType(ast_type->ctype);
@@ -907,7 +921,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             AstNode* param_declarator = param_type_spec->sibling;
             char* id_str = param_declarator->tok->cast.string;
 
-            Assert (param_type_spec && param_type_spec->type == Ast_TYPE_SPECIFIER);
+            Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
             Assert (param_declarator && param_declarator->type == Ast_ID);
 
             targetPopParameter(c, n_param++, Target_STACK);

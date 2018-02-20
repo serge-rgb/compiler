@@ -402,7 +402,6 @@ assignmentOperator(Parser* p) {
 AstNode*
 assignmentExpression(Parser* p) {
    AstNode* t = NULL;
-   // TODO(long): unaryExpr assignmentOperator assignmentExpression
    Token* bt = marktrack(p);
 
    AstNode* unary = NULL;
@@ -502,10 +501,10 @@ parseDeclarationSpecifiers(Parser* p) {
    //   storage-class-specifier
    //   type-specifier
    //   function specifier
-   Token* t = nextToken(p);
    // Token* bt = t;
    AstNode* result = NULL;
    Ctype ctype = Type_NONE;
+   i32 line_number = p->token->line_number;
 
 #define MaxSpecifiers 1
    int storage_spec[MaxSpecifiers] = Zero;
@@ -513,7 +512,8 @@ parseDeclarationSpecifiers(Parser* p) {
    int type_qualifiers[MaxSpecifiers] = Zero;
    int n_type_qualifiers = 0;
 
-   while (t->type == TType_KEYWORD) {
+   while (p->token->type == TType_KEYWORD) {
+      Token* t = nextToken(p);
       int v = t->cast.integer;
       // Storage class specifiers
       if (v == Keyword_typedef ||
@@ -525,7 +525,6 @@ parseDeclarationSpecifiers(Parser* p) {
       }
       // Ctype specifiers
       else if ((ctype = parseCtypeSpecifier(t), ctype)) {
-         result->ctype = ctype;
       }
       else if (v == Keyword_const ||
                v == Keyword_restrict ||
@@ -534,15 +533,18 @@ parseDeclarationSpecifiers(Parser* p) {
       }
       else if (v == Keyword_struct ||
                v == Keyword_union) {
-         assert(!"Not implemented");
+         Assert(!"Not implemented");
       }
-      t = nextToken(p);
+      else {
+         backtrack(p, t);
+         break;
+      }
    }
-   /* else { */
-   /*    backtrack(p, bt); */
-   /* } */
+   if (ctype != Type_NONE) {
+      result = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, line_number);
+      result->ctype = ctype;
+   }
 
-   result = makeAstNodeWithLineNumber(p->arena, Ast_TYPE_SPECIFIER, NULL, NULL, t->line_number);
    return result;
 }
 
