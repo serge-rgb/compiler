@@ -26,7 +26,7 @@ nodeIsExpression(AstNode* node) {
        node->type == Ast_EQUALS || node->type == Ast_LESS ||
        node->type == Ast_GREATER || node->type == Ast_LEQ ||
        node->type == Ast_GEQ || node->type == Ast_NOT_EQUALS ||
-       node->type == Ast_FUNCCALL ||
+       node->type == Ast_FUNCCALL || node->type == Ast_ASSIGN_EXPR ||
        node->type == Ast_NUMBER || node->type == Ast_ID) {
       isExpr = true;
    }

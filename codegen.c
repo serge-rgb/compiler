@@ -450,6 +450,23 @@ stackPop(Codegen* c, RegisterEnum reg) {
    }
 }
 
+#if 0
+void
+stackGet(Codegen *c, RegisterEnum reg) {
+   StackValue s = c->stack[c->n_stack - 1];
+   switch (s.type) {
+      case Stack_QWORD: {
+         instructionReg(c, 0, "pop %s", 64, reg);
+         c->stack_offset -= 8;
+      } break;
+      case Stack_OFFSET: {
+         c->stack_offset -= s.offset;
+         instructionPrintf(c, 0, "add rsp, %d", s.offset);
+      }
+   }
+}
+#endif
+
 void
 pushScope(Codegen* c) {
    // TODO(medium): Different kinds of scope (6.2.1)
@@ -628,6 +645,57 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             *expr_type = entry->expr_type;
          }
       }
+      // Assignment expressions
+      else if (node->type == Ast_ASSIGN_EXPR) {
+         AstNode* lhs = node->child;
+         AstNode* rhs = lhs->sibling;
+         Token* op = node->tok;
+
+         SymEntry* entry = findSymbol(c, lhs->tok->cast.string);
+         i32 rsp_relative = c->stack_offset - entry->offset;
+         if (!entry) {
+            codegenError("Use of undeclared identifier");
+         }
+         else {
+            int bits = entry->expr_type.bits;
+            ExprType rhs_type = Zero;
+            codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
+            switch (bits) {
+               case 32: {
+                  instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", registerString(c, &g_registers[Reg_RBX], bits), rsp_relative);
+                  switch (op->value) {
+                     case ASSIGN_INCREMENT: {
+                        instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
+                     }break;
+                     default: {
+                        Assert(!"not impl");
+                     }
+                  }
+               } break;
+               case 8: {
+                  Assert(!"IMPL");
+               } break;
+               default: {
+                  Assert(!"IMPL");
+               } break;
+            }
+
+            switch (bits) {
+               case 32: {
+                  instructionPrintf(c, node->line_number, "mov DWORD [ rsp + %d ], %s", rsp_relative, registerString(c, &g_registers[Reg_RBX], bits));
+               } break;
+               case 8: {
+               } break;
+               default: {
+                  Assert(!"IMPL");
+               } break;
+            }
+            if (target == Target_ACCUM) {
+               instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", registerString(c, &g_registers[Reg_RAX], bits), rsp_relative);
+            }
+         }
+      }
+      // Binary operators
       else {
          AstNode* child1 = child0->sibling;
          if (node->type == Ast_ADD ||
@@ -705,7 +773,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 }
 
 void
-emitCondition(Codegen* c, AstNode* cond, char* then, char* els) {
+emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
    ExprType expr_type = {0};
    // codegenEmit(c, cond, &expr_type, Target_ACCUM);
    switch (cond->type) {
@@ -732,7 +800,8 @@ emitCondition(Codegen* c, AstNode* cond, char* then, char* els) {
             case Ast_LEQ: { instructionPrintf(c, 0, "jle %s", then); } break;
             case Ast_GREATER: { instructionPrintf(c, 0, "jg %s", then); } break;
             case Ast_GEQ: { instructionPrintf(c, 0, "jge %s", then); } break;
-            default: break;
+            case Ast_NOT_EQUALS: { instructionPrintf(c, 0, "jne %s", then); } break;
+            default: Assert(!"not impl"); break;
          }
          instructionPrintf(c, 0, "jmp %s", els);
       } break;
@@ -767,22 +836,13 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          char* id_str = ast_id->tok->cast.string;
          AstNode* rhs = ast_type->sibling->sibling;
 
-         Assert (symGet(&c->scope->symbol_table, id_str) == NULL);
+         if (symGet(&c->scope->symbol_table, id_str) != NULL) {
+            codegenError("Symbol redeclared in scope");
+         }
          int bits = 8 * numBytesForType(ast_type->ctype);
 
+
          stackPushOffset(c, bits/8);
-
-         SymEntry entry = {
-            .expr_type = (ExprType) {
-               .bits = bits,
-               .ctype = ast_type->ctype
-            },
-            .offset = c->stack_offset
-         };
-
-         // Push ESP this number of bytes, but store the current offset.
-         // Save this to sym table.
-         symInsert(&c->scope->symbol_table, id_str, entry);
 
          if (isLiteral(rhs)) {
             // TODO: Non-integer values.
@@ -805,6 +865,18 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             codegenEmit(c, rhs, &type, Target_ACCUM );
             instructionReg(c, rhs->line_number, "mov QWORD [ rsp ], %s", 64, Reg_RAX);
          }
+         SymEntry entry = {
+            .expr_type = (ExprType) {
+               .bits = bits,
+               .ctype = ast_type->ctype
+            },
+            .offset = c->stack_offset
+         };
+
+         // Push ESP this number of bytes, but store the current offset.
+         // Save this to sym table.
+         symInsert(&c->scope->symbol_table, id_str, entry);
+
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
@@ -814,7 +886,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          char else_label[1024] = {0};
          snprintf(then_label, 1024, ".then%d", c->scope->if_count);
          snprintf(else_label, 1024, ".else%d", c->scope->if_count++);
-         emitCondition(c, cond, then_label, else_label);
+         emitConditionalJump(c, cond, then_label, else_label);
          instructionPrintf(c, then ? then->line_number : 0, "%s:", then_label);
          if (then) {
             codegenEmit(c, then, NULL, Target_NONE);
@@ -835,20 +907,23 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          AstNode* body = after->sibling;
          pushScope(c); {
             char loop_label[1024] = {0}; {
-               snprintf(loop_label, sizeof(loop_label), ".body%d", c->scope->if_count);
+               snprintf(loop_label, sizeof(loop_label), ".loop%d", c->scope->if_count);
+            }
+            char body_label[1024] = {0}; {
+               snprintf(body_label, sizeof(loop_label), ".body%d", c->scope->if_count);
             }
             char end_label[1024] = {0}; {
                snprintf(end_label, sizeof(end_label), ".end%d", c->scope->if_count++);
             }
-            // b32 after_is_control = (control->type == Ast_NONE);
+            b32 after_is_control = (control->type == Ast_NONE);
             if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
 
             instructionPrintf(c, 0, "%s:", loop_label);
-            if (control->type != Ast_NONE) {
-               emitStatement(c, control, Target_ACCUM);
-               instructionReg(c, 0, "test %s, %s", 64, Reg_RAX, Reg_RAX);
-               instructionPrintf(c, 0, "jz %s", end_label);
+            if (!after_is_control) {
+               emitConditionalJump(c, control, body_label, end_label);
             }
+
+            instructionPrintf(c, 0, "%s:", body_label);
             if (body->type != Ast_NONE) {
                emitStatement(c, body, Target_ACCUM);
             }

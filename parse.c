@@ -408,7 +408,7 @@ assignmentExpression(Parser* p) {
    Token* op = NULL;
    AstNode* assignment = NULL;
    if ((unary = unaryExpr(p)) && (op = assignmentOperator(p)) &&  (assignment = assignmentExpression(p))) {
-      t = makeAstNode(p->arena, Ast_ASSIGN, unary, assignment);
+      t = makeAstNode(p->arena, Ast_ASSIGN_EXPR, unary, assignment);
       t->tok = op;
    }
    else {

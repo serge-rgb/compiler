@@ -25,4 +25,4 @@ X(Ast_GEQ)              // children: left, right
 X(Ast_LOGICAL_OR)       // children: left, right
 X(Ast_COMPOUND_STMT)    // children: stmt,stmt,stmt,stmt,etc
 X(Ast_ITERATION)        // children: declaration, control before, after (might be control), body.
-X(Ast_ASSIGN)           // children: unary expr, assignment expr. token: assignment punctuator
+X(Ast_ASSIGN_EXPR)      // children: unary expr, assignment expr. token: assignment punctuator
