@@ -102,9 +102,9 @@
 #define HashmapError(msg) Assert(!(msg))
 #endif
 
-#define Generic(name)            GenericEx(name, HashmapPrefix)
-#define GenericEx(name, pref)    GenericExEx(name, pref)
-#define GenericExEx(name, pref)  pref ## name
+#define Generic(name)            GenericEx(HashmapPrefix, name)
+#define GenericEx(pref, name)    GenericExEx(pref, name)
+#define GenericExEx(pref, name)  pref ## name
 
 
 typedef struct Generic(HashmapKeyVal_s) Generic(HashmapKeyVal);
