@@ -21,7 +21,7 @@ newNode(Arena* a) {
 }
 
 void
-parseError(char* msg, ...) {
+parseError(Parser* p, char* msg, ...) {
    va_list args;
    va_start(args, msg);
    char buffer[LINE_MAX] = {0};
@@ -88,7 +88,7 @@ nextPunctuator(Parser* p, int c) {
 void
 expectPunctuator(Parser* p, int punctuator) {
    if (!nextPunctuator(p, punctuator)) {
-      parseError("%s: %d Expected '%c'", p->file_name, p->token->line_number, punctuator);
+      parseError(p, "%s: %d Expected '%c'", p->file_name, p->token->line_number, punctuator);
    }
 }
 
@@ -162,7 +162,7 @@ postfixExpr(Parser* p) {
                left = makeAstNode(p->arena, Ast_FUNCCALL, right, params);
             }
             else {
-               parseError("Expected ) in function call.");
+               parseError(p, "Expected ) in function call.");
             }
          }
       }
@@ -229,7 +229,7 @@ multiplicativeExpr(Parser* p) {
             int   node_type = optok->cast.character == '*' ? Ast_MUL : Ast_DIV;
             left            = makeAstNode(p->arena, node_type, left, right);
          } else {
-            parseError("Expected expression after '*'");
+            parseError(p, "Expected expression after '*'");
          }
       }
    }
@@ -249,7 +249,7 @@ additiveExpr(Parser* p) {
             int   node_type = optok->cast.character == '+' ? Ast_ADD : Ast_SUB;
             left            = makeAstNode(p->arena, node_type, left, right);
          } else {
-            parseError("Expected expression after '+'");
+            parseError(p, "Expected expression after '+'");
          }
       }
    }
@@ -266,7 +266,7 @@ relationalExpression(Parser* p) {
              peekPunctuator(p, LEQ)) {
          Token* op = nextToken (p);
          AstNode* right = relationalExpression(p);
-         if (!right) { parseError("Expected expression after relational operator."); }
+         if (!right) { parseError(p, "Expected expression after relational operator."); }
          AstType t = Ast_NONE;
          // TODO: Ast types should reuse keyword and punctuator values.
          switch (op->cast.character) {
@@ -298,7 +298,7 @@ equalityExpression(Parser* p) {
       Token* eq = NULL;
       while ((eq = nextPunctuator(p, EQUALS)) || (eq = nextPunctuator(p, NOT_EQUALS))) {
          AstNode* right = relationalExpression(p);
-         if (!right) { parseError("Expected expression after equality operator."); }
+         if (!right) { parseError(p, "Expected expression after equality operator."); }
 
          left = makeAstNode(p->arena, eq->value == EQUALS? Ast_EQUALS : Ast_NOT_EQUALS, left, right);
       }
@@ -327,7 +327,7 @@ logicalAndExpr(Parser* p) {
       while (peekPunctuator(p, LOGICAL_AND)) {
          nextToken(p);          // Pop the logical and.
          AstNode* right      = inclusiveOrExpr(p);
-         if (!right) { parseError("Expected expression after `&&`."); }
+         if (!right) { parseError(p, "Expected expression after `&&`."); }
          left                = makeAstNode(p->arena, Ast_LOGICAL_AND, left, right);
       }
    }
@@ -341,7 +341,7 @@ logicalOrExpr(Parser* p) {
       while (peekPunctuator(p, LOGICAL_OR)) {
          nextToken(p);          // Pop the logical or
          AstNode* right      = logicalAndExpr(p);
-         if (!right) { parseError("Expected expression after `||`"); }
+         if (!right) { parseError(p, "Expected expression after `||`"); }
          int      node_type  = Ast_LOGICAL_OR;
          left                = makeAstNode(p->arena, node_type, left, right);
       }
@@ -356,7 +356,7 @@ conditionalExpr(Parser* p) {
    if (nextPunctuator(p, '?')) {
       AstNode* then_expr = parseExpression(p);
       if (!then_expr) {
-         parseError("Expected expression after ? token.");
+         parseError(p, "Expected expression after ? token.");
       }
       else {
          bt = marktrack(p);
@@ -366,7 +366,7 @@ conditionalExpr(Parser* p) {
          else {
             AstNode* else_expr = parseExpression(p);
             if (!else_expr) {
-               parseError("Expected expression after `:`");
+               parseError(p, "Expected expression after `:`");
             }
             else {
                // Yay.
@@ -425,7 +425,7 @@ argumentExpressionList(Parser* p) {
    while (true) {
       AstNode* assignment = assignmentExpression(p);
       if (!assignment) {
-         parseError("Expected argument in expression list");
+         parseError(p, "Expected argument in expression list");
       }
       else {
          assignment->sibling = args;
@@ -586,10 +586,10 @@ parseDeclarator(Parser* p) {
    AstNode* r = NULL;
    Token* t;
    if (nextPunctuator(p, '(')) {
-      parseError("Function declarators not supported yet");
+      parseError(p, "Function declarators not supported yet");
    }
    else if (nextPunctuator(p, '*')) {
-      parseError("pointer declarators not supported yet");
+      parseError(p, "pointer declarators not supported yet");
    }
    else if ((t = nextToken(p)) && (t->type == TType_ID)) {
 
@@ -601,13 +601,13 @@ parseDeclarator(Parser* p) {
             id->sibling = params;
          }
          if (!nextPunctuator(p, ')')) {
-            parseError("Expected ) in declarator");
+            parseError(p, "Expected ) in declarator");
          }
       }
       r = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATOR, id, NULL, t->line_number);
    }
    else {
-      parseError("unhandled error");
+      parseError(p, "unhandled error");
    }
    return r;
 }
@@ -716,25 +716,27 @@ parseStatement(Parser* p) {
                then->sibling = els;
             }
          } else {
-            parseError("Expected else clause after if.");
+            parseError(p, "Expected else clause after if.");
          }
       }
    }
    // === Iteration ===
    else if (nextKeyword(p, Keyword_while)) {
-      if (nextPunctuator(p, '(')) {
+      if (!nextPunctuator(p, '(')) {
+         parseError(p, "Expected ( after while.");
+      } else {
          AstNode* expr = parseExpression(p);
          if (!expr) {
-            parseError("expected expression inside parens");
+            parseError(p, "expected expression inside parens");
          }
          if (!nextPunctuator(p, ')')) {
-            parseError("Expected ) after while");
+            parseError(p, "Expected ).");
          }
          else {
             // TODO: Parse assignment expression
             AstNode* statement = parseStatement(p);
             if (!statement) {
-               parseError("expected statement after while");
+               parseError(p, "expected statement after while");
             }
             AstNode* declarations = makeAstNode(p->arena, Ast_NONE, 0,0);
             AstNode* control_before = expr;
@@ -751,7 +753,30 @@ parseStatement(Parser* p) {
       }
    }
    else if (nextKeyword(p, Keyword_for)) {
-      NotImplemented("For loop");
+      // Break;
+      if (!nextPunctuator(p, '(')) {
+         parseError(p, "Expected ( after while.");
+      }
+      else {
+         AstNode* declaration = parseDeclaration(p);
+         if (!declaration && !nextPunctuator(p, ';')) {
+            parseError(p, "Expected ; after declaration clause.");
+         }
+         AstNode* control = parseExpression(p);
+         if (!nextPunctuator(p, ';')) {
+            parseError(p, "Expected ; after control expression.");
+         }
+         AstNode* after = parseExpression(p);
+         if (!nextPunctuator(p, ')')) {
+            parseError(p, "Expected ')'.");
+         }
+         AstNode* body = parseStatement(p);
+
+         declaration->sibling = control;
+         control->sibling = after;
+         after->sibling = body;
+         stmt = makeAstNode(p->arena, Ast_ITERATION, declaration, NULL);
+      }
    }
    return stmt;
 }

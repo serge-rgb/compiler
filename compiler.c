@@ -18,9 +18,6 @@ exit 0
 
 // ----
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include "std.h"
 #include "common.h"
 
