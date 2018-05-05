@@ -14,6 +14,13 @@ typedef struct Parser_s {
 // A function that takes a Parser and returns an AstNode*
 typedef AstNode* ParseFunction(Parser*);
 
+void
+noneIfNull(AstNode** n, Arena* a) {
+   if (!*n) {
+      *n = makeAstNode(a, Ast_NONE, NULL, NULL);
+   }
+}
+
 AstNode*
 newNode(Arena* a) {
    AstNode* r = AllocType(a, AstNode);
@@ -771,6 +778,14 @@ parseStatement(Parser* p) {
             parseError(p, "Expected ')'.");
          }
          AstNode* body = parseStatement(p);
+
+         if (!body) {
+            parseError(p, "Expected body after for(..)");
+         }
+
+         noneIfNull(&declaration, p->arena);
+         noneIfNull(&control, p->arena);
+         noneIfNull(&after, p->arena);
 
          declaration->sibling = control;
          control->sibling = after;

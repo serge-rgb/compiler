@@ -1,6 +1,6 @@
 int main() {
    int r = 0;
-   for (int i = 0; i < 100; i += 1)
+   for (;;)
    {
       r += 1;
    }
