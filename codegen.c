@@ -121,6 +121,7 @@ typedef struct Codegen_s {
 
    u64         stack_offset;
    u64         n_stack;
+   // TODO: Stretchy buffer stack value
    StackValue  stack[1024];
 } Codegen;
 
