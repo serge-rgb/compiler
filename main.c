@@ -134,8 +134,8 @@ main(int args_n, char** args) {
                   struct Pair tests [] =  {
                      /* {"tests/basic.c", "tests/out.basic"}, */
                      /* {"tests/test.c", "tests/out.test"}, */
-                     /* {"tests/for_1.c", "tests/out.for_1"}, */
-                     {"tests/while1.c", "tests/out.while1"},
+                     {"tests/for_1.c", "tests/out.for_1"},
+                     /* {"tests/while1.c", "tests/out.while1"}, */
                   };
 
                   for (int test_i = 0; test_i < ArrayCount(tests); ++test_i) {

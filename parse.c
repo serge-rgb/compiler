@@ -148,7 +148,7 @@ postfixExpr(Parser* p) {
       AstNode* right = NULL;
 
       if (nextPunctuator(p, '[')) {
-         Assert(!"NOT IMPL");
+         NotImplemented("Array postfix expression");
       }
       else if (nextPunctuator(p, '(')) {
          if (nextPunctuator(p, ')')) {
@@ -167,16 +167,16 @@ postfixExpr(Parser* p) {
          }
       }
       else if (nextPunctuator(p, '.')) {
-         Assert(!"NOT IMPL");
+         NotImplemented("Dot postfix expression");
       }
       else if (nextPunctuator(p, ARROW)) {
-         Assert(!"NOT IMPL");
+         NotImplemented("Arrow postfix expression");
       }
       else if (nextPunctuator(p, INCREMENT)) {
-         Assert(!"NOT IMPL");
+         NotImplemented("Increment postfix expression");
       }
       else if (nextPunctuator(p, DECREMENT)) {
-         Assert(!"NOT IMPL");
+         NotImplemented("Decrement postfix expression");
       }
       if (!right) {
          break;
@@ -488,7 +488,7 @@ parseCtypeSpecifier(Token* t) {
 
          } //break;
          case Keyword__Imaginary: {
-            Assert(!"Ctype specifier not implemented.");
+            NotImplemented("Type Specifier.");
          } //break;
       }
    }
@@ -533,7 +533,7 @@ parseDeclarationSpecifiers(Parser* p) {
       }
       else if (v == Keyword_struct ||
                v == Keyword_union) {
-         Assert(!"Not implemented");
+         NotImplemented("Struct / union specifier");
       }
       else {
          backtrack(p, t);
@@ -749,6 +749,9 @@ parseStatement(Parser* p) {
             stmt = makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
          }
       }
+   }
+   else if (nextKeyword(p, Keyword_for)) {
+      NotImplemented("For loop");
    }
    return stmt;
 }

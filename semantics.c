@@ -43,7 +43,7 @@ numBytesForType(Ctype ctype) {
          return 1;
       } break;
       default: {
-         Assert(!"Don't know the size of this type.");
+         NotImplemented("Handle different size of types");
       }
    }
    return 4;

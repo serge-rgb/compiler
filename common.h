@@ -56,6 +56,11 @@ typedef int64_t i64;
 
 #define Break PlatformBreak
 
+#define NotImplemented(message) \
+        printf("Not Implemented! -- [%s]\n", message); \
+        Assert(!message);
+
+
 typedef enum ErrorCode_s {
     SUCCESS = 0,
 

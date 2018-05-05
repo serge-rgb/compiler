@@ -514,7 +514,7 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
       instructionReg(c, 0, "mov %s, %s", type.bits, r, Reg_RAX);
    }
    else {
-      Assert(!"Need to implement params on Windows.");
+      NotImplemented("Need to implement params on Windows.");
    }
 }
 
@@ -550,7 +550,7 @@ targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
       }
    }
    else {
-      Assert (!"Implement parameter pop in Windows.");
+      NotImplemented("Implement parameter pop in Windows.");
    }
 }
 
@@ -625,7 +625,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                size_str = "BYTE";
             } break;
             default: {
-               Assert(!"Can't handle this size.");
+               NotImplemented("Can't handle this size.");
             } break;
          }
          if (entry->expr_type.bits <= 16) {
@@ -668,15 +668,15 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                         instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
                      }break;
                      default: {
-                        Assert(!"not impl");
+                        NotImplemented("Different assignment expressions");
                      }
                   }
                } break;
                case 8: {
-                  Assert(!"IMPL");
+                  NotImplemented("Assignment expr.");
                } break;
                default: {
-                  Assert(!"IMPL");
+                  NotImplemented("Assignment expr.");
                } break;
             }
 
@@ -687,7 +687,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                case 8: {
                } break;
                default: {
-                  Assert(!"IMPL");
+                  NotImplemented("Assignment expr.");
                } break;
             }
             if (target == Target_ACCUM) {
@@ -792,7 +792,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
       }
    }
    else {
-      Assert (!"Not an expression");
+      InvalidCodePath;
    }
 }
 
@@ -815,7 +815,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
          codegenEmit(c, left, &left_type, Target_ACCUM);
          stackPop(c, Reg_RBX);
          if (left_type.bits != right_type.bits) {
-            Assert(!"promotion!");
+            NotImplemented("Promotion rules");
          }
          instructionReg(c, cond->line_number, "cmp %s, %s", left_type.bits, Reg_RAX, Reg_RBX);
          switch(cond->type) {
@@ -825,7 +825,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
             case Ast_GREATER: { instructionPrintf(c, 0, "jg %s", then); } break;
             case Ast_GEQ: { instructionPrintf(c, 0, "jge %s", then); } break;
             case Ast_NOT_EQUALS: { instructionPrintf(c, 0, "jne %s", then); } break;
-            default: Assert(!"not impl"); break;
+            default: InvalidCodePath; break;
          }
          instructionPrintf(c, 0, "jmp %s", els);
       } break;
@@ -880,7 +880,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
                   instructionPrintf(c, stmt->line_number, "mov BYTE [ rsp ], 0x%x", value);
                } break;
                default: {
-                  Assert(!"IMPL");
+                  NotImplemented("Declaration size");
                } break;
             }
          }
@@ -1079,7 +1079,7 @@ codegenTranslationUnit(Codegen* c, AstNode* node) {
          codegenEmit(c, node, NULL, Target_NONE);
       }
       else {
-         Assert (!"Implement top level declarations.");
+         NotImplemented ("Top level declarations.");
       }
 
       node = node->sibling;
