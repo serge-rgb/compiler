@@ -54,7 +54,7 @@ typedef int64_t i64;
            ArrayError(__FILE__, __LINE__); \
         }
 
-#define BreakHere PlatformBreakHere
+#define Break PlatformBreak
 
 typedef enum ErrorCode_s {
     SUCCESS = 0,

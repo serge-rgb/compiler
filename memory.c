@@ -68,7 +68,7 @@ void
 deallocate(Arena* a) {
    u8* block = a->block;
    if (!block) {
-      BreakHere;
+      Break;
       fprintf(stderr, "WARNING: deallocating an arena with NULL block. (Double free?)\n");
    }
 

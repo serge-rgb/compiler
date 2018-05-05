@@ -27,7 +27,7 @@ parseError(char* msg, ...) {
    char buffer[LINE_MAX] = {0};
    vsnprintf(buffer, LINE_MAX, msg, args);
 
-   BreakHere;
+   Break;
 
    fprintf(stderr, "Syntax error: %s\n", buffer);
    va_end(args);

@@ -757,10 +757,34 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                case Ast_GEQ:
                case Ast_NOT_EQUALS:
                case Ast_EQUALS: {
-                  Assert (!"keep going here: implement comparison expressions");
+                  AstNode* left = node->child;
+                  AstNode* right = node->child->sibling;
+                  ExprType left_type = {0};
+                  ExprType right_type = {0};
+                  codegenEmit(c, right, &right_type, Target_STACK);
+                  codegenEmit(c, left, &left_type, Target_ACCUM);
+                  stackPop(c, Reg_RBX);
+
+                  u64 line = left->line_number;
+                  instructionReg(c, line, "cmp %s, %s", left_type.bits, Reg_RAX, Reg_RBX);
+
+                  char* instr;
+                  switch(node->type) {
+                     case Ast_EQUALS: { instr = "sete %s"; } break;
+                     case Ast_LESS: { instr = "setl %s"; } break;
+                     case Ast_LEQ: { instr = "setle %s"; } break;
+                     case Ast_GREATER: { instr = "setg %s"; } break;
+                     case Ast_GEQ: { instr = "setge %s"; } break;
+                     case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
+                     default: { InvalidCodePath; } break;
+                  }
+                  instructionReg(c, line, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
+
+                  if (target == Target_STACK) {
+                     stackPushReg(c, Reg_RAX);
+                  }
                } break;
                default: {
-
                   codegenError("PORT ( expression )");
                } break;
             }
@@ -905,34 +929,32 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          AstNode* control = decl->sibling;
          AstNode* after = control->sibling;
          AstNode* body = after->sibling;
-         pushScope(c); {
-            char loop_label[1024] = {0}; {
-               snprintf(loop_label, sizeof(loop_label), ".loop%d", c->scope->if_count);
-            }
-            char body_label[1024] = {0}; {
-               snprintf(body_label, sizeof(loop_label), ".body%d", c->scope->if_count);
-            }
-            char end_label[1024] = {0}; {
-               snprintf(end_label, sizeof(end_label), ".end%d", c->scope->if_count++);
-            }
-            b32 after_is_control = (control->type == Ast_NONE);
-            if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
+         char loop_label[1024] = {0}; {
+            snprintf(loop_label, sizeof(loop_label), ".loop%d", c->scope->if_count);
+         }
+         char body_label[1024] = {0}; {
+            snprintf(body_label, sizeof(loop_label), ".body%d", c->scope->if_count);
+         }
+         char end_label[1024] = {0}; {
+            snprintf(end_label, sizeof(end_label), ".end%d", c->scope->if_count++);
+         }
+         b32 after_is_control = (control->type == Ast_NONE);
+         if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
 
-            instructionPrintf(c, 0, "%s:", loop_label);
-            if (!after_is_control) {
-               emitConditionalJump(c, control, body_label, end_label);
-            }
+         instructionPrintf(c, 0, "%s:", loop_label);
+         if (!after_is_control) {
+            emitConditionalJump(c, control, body_label, end_label);
+         }
 
-            instructionPrintf(c, 0, "%s:", body_label);
-            if (body->type != Ast_NONE) {
-               emitStatement(c, body, Target_ACCUM);
-            }
-            if (after->type != Ast_NONE) {
-               emitStatement(c, after, Target_ACCUM);
-            }
-            instructionPrintf(c, 0, "jmp %s", loop_label);
-            instructionPrintf(c, 0, "%s:", end_label);
-         } popScope(c);
+         instructionPrintf(c, 0, "%s:", body_label);
+         if (body->type != Ast_NONE) {
+            emitStatement(c, body, Target_ACCUM);
+         }
+         if (after->type != Ast_NONE) {
+            emitStatement(c, after, Target_ACCUM);
+         }
+         instructionPrintf(c, 0, "jmp %s", loop_label);
+         instructionPrintf(c, 0, "%s:", end_label);
       } break;
       default: {
          // Expression statements

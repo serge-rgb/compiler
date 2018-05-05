@@ -1,19 +1,16 @@
 scc
 ===================
 
-This is a compiler for a strict superset of the C language. Specifically, C11.
-The goal of this project is to create a simple compiler that fully supports C11
-but that also adds new features.
+This is a compiler for a strict superset of the C language.
+
 
 
 List of features.
 -----------------
 
+- All of C11
 - Very short compile times
-
-All of C11 plus:
-
-- Namespaces and a module system
+- A module system
 - Structs with optimal layout (auto struct Foo {  };  )
 - Native SIMD types a la Intel ISPC
 - Reflection (compiler-provided type info)
@@ -24,11 +21,9 @@ All of C11 plus:
 - C++ auto
 - else after while
 - declarations inside if
-- defer
 - Variable-sized array (does C11 already have this?)
 
 Maybe... :
 - "Fat" pointers (lang support for pointers + lengths)
 - New preprocessor
 - Type dispatch
-- Operator overloading

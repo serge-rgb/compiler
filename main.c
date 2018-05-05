@@ -29,19 +29,7 @@ compileTranslationUnit(char* file_name, char* outfile) {
       codegen.file_name = file_name;
       codegen.html = &html;
       codegen.arena = &tmp_parser_arena;
-#if defined(__APPLE__)
-   #if defined(__MACH__)
-      codegen.config |= Config_TARGET_MACOS;
-   #else
-      #error APPLE target not mac OS
-   #endif
-#elif defined(__linux__)
-      codegen.config |= Config_TARGET_LINUX;
-#elif defined(_WIN32)
-      codegen.config |= Config_TARGET_WIN;
-#else
-   #error Cannot determine target
-#endif
+      codegen.config |= PlatformDefaultTarget;
 
       AstNode* tree = parseTranslationUnit(&p);
       if (tree) {
@@ -161,7 +149,7 @@ main(int args_n, char** args) {
                         else if (pid == wait(NULL)) {
                            int status = 0;
                            wait(&status);
-                           if (!(WIFEXITED(status) && 0 != WEXITSTATUS(status))) {
+                           if (!(WIFEXITED(status) && 1 != WEXITSTATUS(status))) {
                               printf("Test failed: %s\n", tests[test_i].fname);
                               break;
                            }

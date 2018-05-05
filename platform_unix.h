@@ -21,4 +21,5 @@ extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format
 
 #define PlatformAssert(expr) do { if (!(expr)) { __builtin_trap(); } } while(0)
 #define PlatformPrintString(...) snprintf(__VA_ARGS__)
-#define PlatformBreakHere __asm ("int $3")
+#define PlatformBreak __asm ("int $3")
+

@@ -1,5 +1,4 @@
 #if 0
-
 # This file builds and runs itself.
 
 if [ `uname` = "Linux" ]; then
@@ -26,9 +25,15 @@ exit 0
 #include "common.h"
 
 #if defined(_WIN32)
-#include "platform_windows.h"
+   #include "platform_windows.h"
 #else
-#include "platform_unix.h"
+   #include "platform_unix.h"
+
+   #if defined(__APPLE__) && defined(__MACH__)
+      #include "platform_macos.h"
+   #elif defined(__linux__)
+      #include "platform_linux.h"
+   #endif
 #endif
 
 #include "memory.c"
