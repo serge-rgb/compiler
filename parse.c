@@ -126,7 +126,7 @@ primaryExpr(Parser* p) {
       t->type = Ast_ID;
       t->tok  = tok;
    }
-   // TODO(long): other constants, string literals
+   // TODO: other constants, string literals
    else {
    }
    if (t) {
@@ -213,7 +213,7 @@ castExpr(Parser* p) {
 }
 
 /**
- * TODO(medium): Write documentation about the way we handle left recursion in the C grammar.
+ * TODO: Write documentation about the way we handle left recursion in the C grammar.
  **/
 
 AstNode*
@@ -268,7 +268,7 @@ relationalExpression(Parser* p) {
          AstNode* right = relationalExpression(p);
          if (!right) { parseError("Expected expression after relational operator."); }
          AstType t = Ast_NONE;
-         // TODO(medium): Ast types should reuse keyword and punctuator values.
+         // TODO: Ast types should reuse keyword and punctuator values.
          switch (op->cast.character) {
             case '<': {
                 t = Ast_LESS;
@@ -292,7 +292,7 @@ relationalExpression(Parser* p) {
 AstNode*
 equalityExpression(Parser* p) {
    AstNode* left = parseOrBacktrack(relationalExpression, p);
-   // TODO(long): This left-recursion elimination pattern is repeating a lot.
+   // TODO: This left-recursion elimination pattern is repeating a lot.
    // Would it be a good tradeoff to abstract it away?
    if (left) {
       Token* eq = NULL;
@@ -316,7 +316,7 @@ exclusiveOrExpr(Parser* p) {
 }
 AstNode*
 inclusiveOrExpr(Parser* p) {
-   // TODO(long): Implement bit or.
+   // TODO: Implement bit or.
    return exclusiveOrExpr(p);
 }
 
@@ -619,7 +619,7 @@ parseDeclarationList(Parser* p) {
 
 AstNode*
 parseInitializer(Parser* p) {
-   // TODO(long): Initializers.
+   // TODO: Initializers.
    AstNode* node = assignmentExpression(p);
    return node;
 }
@@ -704,7 +704,7 @@ parseStatement(Parser* p) {
    }
    else if (nextKeyword(p, Keyword_if)) {
       if (nextPunctuator(p, '(')) {
-         // TODO(long): There should be checking of `if` conditions.
+         // TODO: There should be checking of `if` conditions.
          // For instance, emit a warning when using = instead of ==.
          AstNode* cond = parseExpression(p);
          expectPunctuator(p, ')');

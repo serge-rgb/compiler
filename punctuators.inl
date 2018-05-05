@@ -25,5 +25,5 @@ X(>>, SHIFT_RIGHT)
 X(^=, ASSIGN_BIT_XOR)
 X(|=, ASSIGN_BIT_OR)
 
-// TODO(medium): Add the special punctuators.
+// TODO: Add the special punctuators.
 // <: :> <% %> %: %:%:

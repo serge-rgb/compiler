@@ -59,14 +59,14 @@ struct Token_s {
 };
 
 typedef struct FileStream_s {
-   // TODO(medium): Use a buffer to minimize calls to fwrite and friends.
+   // TODO: Use a buffer to minimize calls to fwrite and friends.
    FILE* fd;
    u64 line_number;
 } FileStream;
 
 b32
 fileStreamInit(FileStream* fs, char* fname) {
-   // TODO(long): Handle different types of file encodings. (See C spec)
+   // TODO: Handle different types of file encodings. (See C spec)
    FILE* fd = fopen(fname, "rb");
    b32 result = false;
    if (fd) {
@@ -156,7 +156,7 @@ isPunctuator(FileStream* fs) {
       result = c;
    }
 
-   // TODO(short): Implement 2-char look-ahead in FileStream.
+   // TODO: Implement 2-char look-ahead in FileStream.
 
    // Now check for multi-char punctuators.
    char c1, c2;
@@ -250,14 +250,14 @@ void
 identifyToken(Buffer* b, Token* out) {
    i32 kw = -1;
 
-   // TODO(medium): - There is a specified ordering to parsing. Keywords come
+   // TODO: - There is a specified ordering to parsing. Keywords come
    // first, then identifiers... Set the correct order, or prove that
    // this is equivalent.
 
    // If it starts with a digit, it's numerical.
    if (isDigit(*b->current)) {
       out->type = TType_NUMBER;
-      // TODO(long): Different kinds of numbers..
+      // TODO: Different kinds of numbers..
    }
    else if ((kw = identifyKeyword(b), kw != -1)) {
       out->type = TType_KEYWORD | kw;
@@ -293,7 +293,7 @@ getToken(Arena* a, FileStream* fs) {
    }
    else if (fileStreamPeek(fs) == '\"') {
       // We are inside a string. Parse until we get the end of the string.
-      // TODO(long): Escape characters.
+      // TODO: Escape characters.
       t.type = TType_STRING_LITERAL;
       Buffer token_buffer = {0};
       fseek(fs->fd, 1, SEEK_CUR);
@@ -308,12 +308,12 @@ getToken(Arena* a, FileStream* fs) {
       char* str = getString(token_buffer.current);
       t.cast.string = str;
    }
-   // TODO(long): Operators
-   // TODO(long): Constants
+   // TODO: Operators
+   // TODO: Constants
    // The rest are keywords and identifiers.
    else {
       Buffer token_buffer = {0};
-      // TODO(short): Stretchy-buffer for tokens...
+      // TODO: Stretchy-buffer for tokens...
       char tmptoken[128] = {0};
       token_buffer.current = tmptoken;
       token_buffer.end = tmptoken;
@@ -361,7 +361,7 @@ tokenPrint(Token* token) {
          printf("KEYWORD %s", g_keywords[token->value]);
       } break;
       case TType_NUMBER: {
-         // TODO(long): Support floating point..
+         // TODO: Support floating point..
          printf("NUMBER: %i", (int)token->value);
       } break;
       case TType_ID: {

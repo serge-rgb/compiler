@@ -127,7 +127,7 @@ typedef struct Codegen_s {
 
 static
 RegisterValue g_registers[] = {
-   // TODO(large):  It's time to write a real register allocator.
+   // TODO:  It's time to write a real register allocator.
    // This array is wrong. Some 32 and 64-bit registers are aliased to two 8
    // bit registers, which the current "solution" does not handle. We can do
    // another shitty solution which can handle the multi-register aliasing or
@@ -236,7 +236,7 @@ setupVolatility(Codegen* c) {
    else if (c->config & Config_TARGET_WIN) {
       static int volatile_regs_win64[] = {
          Reg_RAX, Reg_RCX, Reg_RDX, Reg_R8, Reg_R9, Reg_R10, Reg_R11
-                 // TODO(medium): Floating point registers volatility.
+                 // TODO: Floating point registers volatility.
       };
       volatile_regs = volatile_regs_win64;
    }
@@ -470,7 +470,7 @@ stackGet(Codegen *c, RegisterEnum reg) {
 
 void
 pushScope(Codegen* c) {
-   // TODO(medium): Different kinds of scope (6.2.1)
+   // TODO
    Scope* prev_scope = c->scope;
    c->scope = allocate(c->arena, sizeof(*c->scope));
    ArenaBootstrap(c->scope, arena);
@@ -730,7 +730,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                }
                //
                // If one of them is floating point... do floating point conversion.
-               // TODO(long): Implement floating point conversion rules.
+               // TODO: Implement floating point conversion rules.
             }
 
             if (expr_type) {
@@ -1040,9 +1040,9 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       //i64 stack = c->scope->stack_size;
 
-      // TODO(short): Align the stack again.
+      // TODO: Align the stack again.
       // stack = AlignPow2(stack, 16);
-      // TODO(short): On mac OS, the stack needs to be aligned to 32 or 64 byte boundaries when m256 or m512 values are passed on the stack.
+      // TODO: On mac OS, the stack needs to be aligned to 32 or 64 byte boundaries when m256 or m512 values are passed on the stack.
 
       instructionPrintf(c, 0, ".func_end:");
 
