@@ -79,33 +79,38 @@ main(int args_n, char** args) {
             snprintf(obj_file, PATH_MAX, "%s.o", outfile);
             pid_t pid = fork();
             printf("Running nasm\n");
+            int nasm_status = 0;
             if (pid == 0) {
                char* nasm_args[] = { "nasm", "-f", "macho64", asm_file };
                printargs(nasm_args, ArrayCount(nasm_args));
                execve("/usr/local/bin/nasm", nasm_args, NULL);
             }
-            else if (pid == wait(NULL)) {
-               printf("Running ld\n");
-               char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", outfile };
-               pid = fork();
-               if (pid == 0) {
-                  printargs(ld_args, ArrayCount(ld_args));
-                  execve("/usr/bin/ld", ld_args, NULL);
-               }
-               else if (pid == wait(NULL)) {
-                  printf("Running %s\n", outfile);
-                  char* out_args[] = { outfile };
-                  if (fork() == 0) {
-                     execve(outfile, out_args, NULL);
+            else if (pid == wait(&nasm_status)) {
+               if (WIFEXITED(nasm_status) && WEXITSTATUS(nasm_status) == 0) {
+                  printf("Running ld\n");
+                  char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", outfile };
+                  pid = fork();
+                  if (pid == 0) {
+                     printargs(ld_args, ArrayCount(ld_args));
+                     execve("/usr/bin/ld", ld_args, NULL);
                   }
-                  int status = 0;
-                  wait(&status);
-                  if (WIFEXITED(status)) {
-                     printf("Returned status: %d\n", WEXITSTATUS(status));
+                  else if (pid == wait(NULL)) {
+                     printf("Running %s\n", outfile);
+                     char* out_args[] = { outfile };
+                     if (fork() == 0) {
+                        execve(outfile, out_args, NULL);
+                     }
+                     int status = 0;
+                     wait(&status);
+                     if (WIFEXITED(status)) {
+                        printf("Returned status: %d\n", WEXITSTATUS(status));
+                     }
+                     else {
+                        printf("Program exited incorrectly.");
+                     }
                   }
-                  else {
-                     printf("Program exited incorrectly.");
-                  }
+               } else {
+                  fprintf(stderr, "nasm failed\n");
                }
             }
          } else {
@@ -134,7 +139,8 @@ main(int args_n, char** args) {
                   struct Pair tests [] =  {
                      /* {"tests/basic.c", "tests/out.basic"}, */
                      /* {"tests/test.c", "tests/out.test"}, */
-                     {"tests/for_1.c", "tests/out.for_1"},
+                     /* {"tests/for_1.c", "tests/out.for_1"}, */
+                     {"tests/for_2.c", "tests/out.for_2"},
                      /* {"tests/while1.c", "tests/out.while1"}, */
                   };
 

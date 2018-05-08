@@ -856,15 +856,16 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
       } break;
       case Ast_DECLARATION: {
-         AstNode* ast_type = stmt->child;
-         AstNode* ast_id = ast_type->sibling->child;
+         AstNode* specifier = stmt->child;
+         AstNode* declarator = specifier->sibling;
+         AstNode* ast_id = declarator->child;
          char* id_str = ast_id->tok->cast.string;
-         AstNode* rhs = ast_type->sibling->sibling;
+         AstNode* rhs = declarator->sibling;
 
          if (symGet(&c->scope->symbol_table, id_str) != NULL) {
             codegenError("Symbol redeclared in scope");
          }
-         int bits = 8 * numBytesForType(ast_type->ctype);
+         int bits = 8 * numBytesForType(specifier->ctype);
 
 
          stackPushOffset(c, bits/8);
@@ -885,15 +886,18 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
                } break;
             }
          }
-         else /* right-hand-side is not a literal*/ {
+         else if (rhs->type != Ast_NONE)/* right-hand-side is not a literal*/ {
             ExprType type = {};
             codegenEmit(c, rhs, &type, Target_ACCUM );
             instructionReg(c, rhs->line_number, "mov QWORD [ rsp ], %s", 64, Reg_RAX);
          }
+         else {
+            // TODO: scc initializes to zero by default.
+         }
          SymEntry entry = {
             .expr_type = (ExprType) {
                .bits = bits,
-               .ctype = ast_type->ctype
+               .ctype = specifier->ctype
             },
             .offset = c->stack_offset
          };
@@ -926,18 +930,20 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
       } break;
       case Ast_ITERATION: {
+         int loop_id = c->scope->if_count++;
+         pushScope(c);
          AstNode* decl = stmt->child;
          AstNode* control = decl->sibling;
          AstNode* after = control->sibling;
          AstNode* body = after->sibling;
          char loop_label[1024] = {0}; {
-            snprintf(loop_label, sizeof(loop_label), ".loop%d", c->scope->if_count);
+            snprintf(loop_label, sizeof(loop_label), ".loop%d", loop_id);
          }
          char body_label[1024] = {0}; {
-            snprintf(body_label, sizeof(loop_label), ".body%d", c->scope->if_count);
+            snprintf(body_label, sizeof(loop_label), ".body%d", loop_id);
          }
          char end_label[1024] = {0}; {
-            snprintf(end_label, sizeof(end_label), ".end%d", c->scope->if_count++);
+            snprintf(end_label, sizeof(end_label), ".end%d", loop_id);
          }
          b32 after_is_control = (control->type == Ast_NONE);
          if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
@@ -956,6 +962,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
          instructionPrintf(c, 0, "jmp %s", loop_label);
          instructionPrintf(c, 0, "%s:", end_label);
+         popScope(c);
       } break;
       default: {
          // Expression statements

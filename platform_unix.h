@@ -19,7 +19,10 @@ extern int    snprintf( char * buffer, unsigned long bufsz, const char * format,
 extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format, va_list vlist );
 
 
-#define PlatformAssert(expr) do { if (!(expr)) { __builtin_trap(); } } while(0)
+#define PlatformAssert(expr) do { if (!(expr)) { \
+                                                printf("Assertion failed: %s", #expr);\
+                                                __builtin_trap(); } } while(0)
+
 #define PlatformPrintString(...) snprintf(__VA_ARGS__)
 #define PlatformBreak __asm ("int $3")
 

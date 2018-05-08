@@ -15,7 +15,7 @@ typedef struct Parser_s {
 typedef AstNode* ParseFunction(Parser*);
 
 void
-noneIfNull(AstNode** n, Arena* a) {
+noneIfNull(Arena* a, AstNode** n) {
    if (!*n) {
       *n = makeAstNode(a, Ast_NONE, NULL, NULL);
    }
@@ -33,10 +33,10 @@ parseError(Parser* p, char* msg, ...) {
    va_start(args, msg);
    char buffer[LINE_MAX] = {0};
    vsnprintf(buffer, LINE_MAX, msg, args);
+   fprintf(stderr, "Syntax error: %s\n", buffer);
 
    Break;
 
-   fprintf(stderr, "Syntax error: %s\n", buffer);
    va_end(args);
    exit(1);
 }
@@ -649,6 +649,8 @@ parseDeclaration(Parser* p) {
       expectPunctuator(p, ';');
 
       result = makeAstNode(p->arena, Ast_DECLARATION, specifiers, declarator);
+
+      noneIfNull(p->arena, &initializer);
       declarator->sibling = initializer;
    }
    return result;
@@ -659,11 +661,16 @@ parseDeclaration(Parser* p) {
 AstNode*
 parseJumpStatement(Parser* p) {
    AstNode* stmt = NULL;
+   Token* bt = marktrack(p);
    Token* t = nextToken(p);
+   // TODO: decide on a codestyle for enum values...
    if (t->type == TType_KEYWORD && t->value == Keyword_return) {
       AstNode* expr = parseOrBacktrack(parseExpression, p);
       stmt = makeAstNode(p->arena, Ast_RETURN, expr, NULL);
       expectPunctuator(p, ';');
+   }
+   else {
+      backtrack(p, bt);
    }
    return stmt;
 }
@@ -701,14 +708,27 @@ parseCompoundStatement(Parser* p) {
 }
 
 AstNode*
+parseExpressionStatement(Parser* p) {
+   Token* bt = marktrack(p);
+   AstNode* stmt =  NULL;
+   if ((stmt = parseExpression(p))) {
+      if (!nextPunctuator(p, ';')) {
+         backtrack(p, bt);
+         stmt = NULL;
+      }
+   }
+   return stmt;
+}
+
+AstNode*
 parseStatement(Parser* p) {
    AstNode* stmt = NULL;
-   if ((stmt = parseCompoundStatement(p)) != NULL) {
-
+   if (nextPunctuator(p, ';')) {
+      noneIfNull(p->arena, &stmt);
    }
-   else if (((stmt = parseOrBacktrack(parseExpression, p)) != NULL && nextPunctuator(p, ';')) ||
-            (stmt = parseOrBacktrack(parseJumpStatement, p)) != NULL) {
-   }
+   else if ((stmt = parseCompoundStatement(p))) { }
+   else if ((stmt = parseExpressionStatement(p))) { }
+   else if ((stmt = parseJumpStatement(p))) {}
    else if (nextKeyword(p, Keyword_if)) {
       if (nextPunctuator(p, '(')) {
          // TODO: There should be checking of `if` conditions.
@@ -783,9 +803,9 @@ parseStatement(Parser* p) {
             parseError(p, "Expected body after for(..)");
          }
 
-         noneIfNull(&declaration, p->arena);
-         noneIfNull(&control, p->arena);
-         noneIfNull(&after, p->arena);
+         noneIfNull(p->arena, &declaration);
+         noneIfNull(p->arena, &control);
+         noneIfNull(p->arena, &after);
 
          declaration->sibling = control;
          control->sibling = after;
