@@ -823,6 +823,8 @@ parseFunctionDefinition(Parser* p) {
    AstNode* declaration_specifier = NULL;
    AstNode* declarator = NULL;
 
+   Token* bt = marktrack(p);
+
    if ((declaration_specifier = parseDeclarationSpecifiers(p)) != NULL &&
        (declarator = parseDeclarator(p)) != NULL) {
 
@@ -830,12 +832,17 @@ parseFunctionDefinition(Parser* p) {
 
       parseOrBacktrack(parseDeclarationList, p);
       AstNode* stmts = parseCompoundStatement(p);
-      declarator->sibling = stmts;
 
-      result = funcdef;
+      if (!stmts) {
+         backtrack(p, bt);
+      }
+      else {
+         declarator->sibling = stmts;
+
+         result = funcdef;
+      }
    }
    return result;
-
 }
 
 AstNode*

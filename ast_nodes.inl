@@ -8,8 +8,7 @@ X(Ast_FUNCDEF)          // children: declaration_spec, declarator, comp.statemen
 X(Ast_FUNCCALL)         // children: identifier, arg expr list
 X(Ast_PARAMETER)        // children: decl.specifier, declarator
 X(Ast_DECLARATION)      // children: decl.specifier, declarator, initializer
-X(Ast_DECLARATOR)       // children: identifier,  depends
-                                                // param-list
+X(Ast_DECLARATOR)       // children: identifier,  [param-list]
 X(Ast_RETURN)           // children: expression
 X(Ast_ADD)              // children: left, right
 X(Ast_SUB)              // children: left, right

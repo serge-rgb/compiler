@@ -565,6 +565,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          AstNode* func = node->child;
          char* label = func->tok->cast.string;
 
+         SymEntry* sym = findSymbol(c, label);
+         if (!sym) {
+            codegenError("Call to undefined function. %s", label);
+         }
+
          AstNode* params = func->sibling;
          // Put the parameters in registers and/or the stack.
          u64 n_param = 0;
@@ -579,6 +584,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
+
+         *expr_type = sym->expr_type;
       }
       else if (node->type == Ast_NUMBER) {
          int bits = 32;
@@ -999,12 +1006,24 @@ emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
-   AstNode* type        = node->child;
-   AstNode* declarator  = type->sibling;
+   AstNode* specifier        = node->child;
+   AstNode* declarator  = specifier->sibling;
    AstNode* compound    = declarator->sibling;
 
-   if (type && declarator && compound) {
+   if (specifier && declarator && compound) {
       char *func_name = declarator->child->tok->cast.string;
+
+      SymEntry* entry = findSymbol(c, func_name);
+      if (!entry) {
+         symInsert(&c->scope->symbol_table,
+                   func_name,
+                   (SymEntry) {
+                   // TODO: Specifying # of bits is rendundant..
+                     .expr_type = { 8*numBytesForType(specifier->ctype), specifier->ctype},
+                     .offset = 0,
+                   });
+      }
+
       instructionPrintf(c, node->line_number, "global %s", func_name);
       instructionPrintf(c, node->line_number, "%s:", func_name);
       instructionPrintf(c, node->line_number, "push rbp");
@@ -1024,10 +1043,10 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
             AstNode* param_declarator = param_type_spec->sibling;
-            char* id_str = param_declarator->tok->cast.string;
+            char* id_str = param_declarator->child->tok->cast.string;
 
             Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
-            Assert (param_declarator && param_declarator->type == Ast_ID);
+            Assert (param_declarator && param_declarator->child->type == Ast_ID);
 
             targetPopParameter(c, n_param++, Target_STACK);
             int bits = (int)(8 * numBytesForType(param_type_spec->ctype));
@@ -1082,6 +1101,7 @@ emitFunctionCall(Codegen* c, AstNode* node) {
 
 void
 codegenTranslationUnit(Codegen* c, AstNode* node) {
+   pushScope(c);
    while (node) {
       if (node->type == Ast_FUNCDEF) {
          codegenEmit(c, node, NULL, Target_NONE);
@@ -1092,6 +1112,7 @@ codegenTranslationUnit(Codegen* c, AstNode* node) {
 
       node = node->sibling;
    }
+   popScope(c);
 }
 
 void
