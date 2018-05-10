@@ -23,7 +23,7 @@ struct AstNode_s {
       Ctype    ctype;
    };
    AstNode* child;
-   AstNode* sibling;
+   AstNode* sibling;  // TODO: Rename to `next`
 
    u64      line_number;
 };

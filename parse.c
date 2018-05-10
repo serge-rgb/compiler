@@ -180,11 +180,12 @@ postfixExpr(Parser* p) {
          NotImplemented("Arrow postfix expression");
       }
       else if (nextPunctuator(p, INCREMENT)) {
-         NotImplemented("Increment postfix expression");
+         left = makeAstNode(p->arena, Ast_POSTFIX_INC, left, 0);
       }
       else if (nextPunctuator(p, DECREMENT)) {
-         NotImplemented("Decrement postfix expression");
+         left = makeAstNode(p->arena, Ast_POSTFIX_DEC, left, 0);
       }
+
       if (!right) {
          break;
       }

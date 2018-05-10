@@ -123,6 +123,9 @@ typedef struct Codegen_s {
    u64         n_stack;
    // TODO: Stretchy buffer stack value
    StackValue  stack[1024];
+
+   // Constants
+   AstNode* one;
 } Codegen;
 
 static
@@ -285,13 +288,15 @@ registerString(Codegen* c, RegisterValue* r, int bits) {
          snprintf(res, 128, "0x%x", (int)r->immediate_value);
       } break;
       case RegisterValueType_STACK: {
+         u64 rsp_relative = c->stack_offset - r->offset;
+
          res = allocate(c->scope->arena, 128);
          if (bits == 8)
-            snprintf(res, 128, "BYTE [ rsp + 0x%x ]", (int)r->offset);
+            snprintf(res, 128, "BYTE [ rsp + 0x%x ]", (int)rsp_relative);
          else if (bits == 32)
-            snprintf(res, 128, "DWORD [ rsp + 0x%x ]", (int)r->offset);
+            snprintf(res, 128, "DWORD [ rsp + 0x%x ]", (int)rsp_relative);
          else if (bits == 64)
-            snprintf(res, 128, "QWORD [ rsp + 0x%x ]", (int)r->offset);
+            snprintf(res, 128, "QWORD [ rsp + 0x%x ]", (int)rsp_relative);
       } break;
       default: {
          // WTF
@@ -341,6 +346,12 @@ codegenInit(Codegen* c, char* outfile) {
    fwrite(prelude, 1, strlen(prelude), g_asm);
 
    setupVolatility(c);
+
+   // Constants
+   c->one = makeAstNode(c->arena, Ast_NUMBER, 0,0);
+   Token* one_tok = AllocType(c->arena, Token);
+   one_tok->value = 1;
+   c->one->tok = one_tok;
 }
 
 char*
@@ -434,6 +445,20 @@ stackPushOffset(Codegen* c, u64 bytes) {
    instructionPrintf(c, 0, "sub rsp, %d", bytes);
    c->stack_offset += bytes;
    c->stack[c->n_stack++] = (StackValue) { .type = Stack_OFFSET, .offset = bytes };
+}
+
+RegisterValue
+locationFromId(Codegen* c, char* id) {
+   SymEntry* entry = findSymbol(c, id);
+   if (!entry) {
+      codegenError("Use of undeclared identifier %s", id);
+   }
+   RegisterValue var =
+   {
+      .type = RegisterValueType_STACK,
+      .offset = entry->offset,
+   };
+   return var;
 }
 
 void
@@ -555,6 +580,55 @@ targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
    }
 }
 
+void
+emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type, AstNode* left, AstNode* right, EmitTarget target) {
+   ExprType type_left = {0};
+   ExprType type_right = {0};
+
+   codegenEmit(c, right, &type_right, Target_STACK);
+   codegenEmit(c, left, &type_left, Target_ACCUM);
+
+   if ( !isArithmeticType(type_left.ctype) ) {
+      codegenError("Left operator in binary expression is not arithmetic type.");
+   }
+   else if ( !isArithmeticType(type_right.ctype) ) {
+      codegenError("Left operator in expression is not arithmetic type.");
+   }
+
+   stackPop(c, Reg_RBX);
+
+   if (type_left.bits != type_right.bits ||
+       type_left.ctype != type_right.ctype) {
+      // If both are integer types, then apply integer promotion rules.
+      if (isIntegerType(type_left.ctype) && isIntegerType(type_right.ctype)) {
+         ExprType* smaller = type_left.bits < type_right.bits ? &type_left  : &type_right;
+         ExprType* bigger  = type_left.bits < type_right.bits ? &type_right : &type_left;
+
+
+         smaller->bits = bigger->bits;
+      }
+      //
+      // If one of them is floating point... do floating point conversion.
+      // TODO: Implement floating point conversion rules.
+   }
+
+   if (expr_type) {
+      *expr_type = type_left;
+   }
+
+   int bits = type_left.bits;
+   switch (type) {
+      case Ast_ADD: { instructionReg(c, 0, "add %s, %s", bits, Reg_RAX, Reg_RBX); } break;
+      case Ast_SUB: { instructionReg(c, 0, "sub %s, %s", bits, Reg_RAX, Reg_RBX); } break;
+      case Ast_MUL: { instructionReg(c, 0, "imul %s", bits, Reg_RBX); } break;
+      case Ast_DIV: { instructionReg(c, 0, "idiv %s", bits, Reg_RBX); } break;
+      default: break;
+   }
+
+   if (target == Target_STACK) {
+      stackPushReg(c, Reg_RAX);
+   }
+}
 
 void
 emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
@@ -703,6 +777,30 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
          }
       }
+      else if (node->type == Ast_POSTFIX_INC ||
+               node->type == Ast_POSTFIX_DEC) {
+         AstNode* expr = node->child;
+         ExprType local_expr_type = {};
+         emitExpression(c, expr, &local_expr_type, Target_STACK);
+         emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
+
+         Assert(expr->type == Ast_ID);  // TODO: Treat *everything* as pointers!
+         RegisterValue var = locationFromId(c, expr->tok->cast.string);
+         // Save accum value in storage for var.
+         instructionPrintf(c, node->line_number, "mov %s, %s",
+                           registerString(c, &var, local_expr_type.bits),
+                           registerString(c, &g_registers[Reg_RAX], local_expr_type.bits));
+         if (target == Target_STACK) {
+            // Result is already on the stack.
+         }
+         else if (target == Target_ACCUM) {
+            // Return old value.
+            stackPop(c, Reg_RAX);
+         }
+         if (expr_type) {
+            *expr_type = local_expr_type;
+         }
+      }
       // Binary operators
       else {
          AstNode* child1 = child0->sibling;
@@ -710,92 +808,46 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
              node->type == Ast_SUB ||
              node->type == Ast_MUL ||
              node->type == Ast_DIV) {
-            ExprType type_left = {0};
-            ExprType type_right = {0};
 
-            codegenEmit(c, child1, &type_right, Target_STACK);
-            codegenEmit(c, child0, &type_left, Target_ACCUM);
 
-            if ( !isArithmeticType(type_left.ctype) ) {
-               codegenError("Left operator in binary expression is not arithmetic type.");
-            }
-            else if ( !isArithmeticType(type_right.ctype) ) {
-               codegenError("Left operator in expression is not arithmetic type.");
-            }
+            emitArithBinaryExpr(c, node->type, expr_type, child0, child1, target);
 
+         }
+         else if (node->type == Ast_LESS ||
+                  node->type == Ast_LEQ ||
+                  node->type == Ast_GREATER ||
+                  node->type == Ast_GEQ ||
+                  node->type == Ast_NOT_EQUALS ||
+                  node->type == Ast_EQUALS) {
+            AstNode* left = node->child;
+            AstNode* right = node->child->sibling;
+            ExprType left_type = {0};
+            ExprType right_type = {0};
+            codegenEmit(c, right, &right_type, Target_STACK);
+            codegenEmit(c, left, &left_type, Target_ACCUM);
             stackPop(c, Reg_RBX);
 
-            if (type_left.bits != type_right.bits ||
-                type_left.ctype != type_right.ctype) {
-               // If both are integer types, then apply integer promotion rules.
-               if (isIntegerType(type_left.ctype) && isIntegerType(type_right.ctype)) {
-                  ExprType* smaller = type_left.bits < type_right.bits ? &type_left  : &type_right;
-                  ExprType* bigger  = type_left.bits < type_right.bits ? &type_right : &type_left;
+            u64 line = left->line_number;
+            instructionReg(c, line, "cmp %s, %s", left_type.bits, Reg_RAX, Reg_RBX);
 
-
-                  smaller->bits = bigger->bits;
-               }
-               //
-               // If one of them is floating point... do floating point conversion.
-               // TODO: Implement floating point conversion rules.
+            char* instr;
+            switch(node->type) {
+               case Ast_EQUALS: { instr = "sete %s"; } break;
+               case Ast_LESS: { instr = "setl %s"; } break;
+               case Ast_LEQ: { instr = "setle %s"; } break;
+               case Ast_GREATER: { instr = "setg %s"; } break;
+               case Ast_GEQ: { instr = "setge %s"; } break;
+               case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
+               default: { InvalidCodePath; } break;
             }
-
-            if (expr_type) {
-               *expr_type = type_left;
-            }
-
-            int bits = type_left.bits;
-            switch (node->type) {
-               case Ast_ADD: { instructionReg(c, 0, "add %s, %s", bits, Reg_RAX, Reg_RBX); } break;
-               case Ast_SUB: { instructionReg(c, 0, "sub %s, %s", bits, Reg_RAX, Reg_RBX); } break;
-               case Ast_MUL: { instructionReg(c, 0, "imul %s", bits, Reg_RBX); } break;
-               case Ast_DIV: { instructionReg(c, 0, "idiv %s", bits, Reg_RBX); } break;
-               default: break;
-            }
+            instructionReg(c, line, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
 
             if (target == Target_STACK) {
                stackPushReg(c, Reg_RAX);
             }
          }
          else {
-            switch(node->type) {
-               case Ast_LESS:
-               case Ast_LEQ:
-               case Ast_GREATER:
-               case Ast_GEQ:
-               case Ast_NOT_EQUALS:
-               case Ast_EQUALS: {
-                  AstNode* left = node->child;
-                  AstNode* right = node->child->sibling;
-                  ExprType left_type = {0};
-                  ExprType right_type = {0};
-                  codegenEmit(c, right, &right_type, Target_STACK);
-                  codegenEmit(c, left, &left_type, Target_ACCUM);
-                  stackPop(c, Reg_RBX);
-
-                  u64 line = left->line_number;
-                  instructionReg(c, line, "cmp %s, %s", left_type.bits, Reg_RAX, Reg_RBX);
-
-                  char* instr;
-                  switch(node->type) {
-                     case Ast_EQUALS: { instr = "sete %s"; } break;
-                     case Ast_LESS: { instr = "setl %s"; } break;
-                     case Ast_LEQ: { instr = "setle %s"; } break;
-                     case Ast_GREATER: { instr = "setg %s"; } break;
-                     case Ast_GEQ: { instr = "setge %s"; } break;
-                     case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
-                     default: { InvalidCodePath; } break;
-                  }
-                  instructionReg(c, line, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
-
-                  if (target == Target_STACK) {
-                     stackPushReg(c, Reg_RAX);
-                  }
-               } break;
-               default: {
-                  codegenError("PORT ( expression )");
-               } break;
-            }
+            NotImplemented("Missing codegen for expression AST node.");
          }
       }
    }
@@ -977,7 +1029,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             emitExpression(c, stmt, NULL, target);
          }
          else {
-            Assert(!"This type of statement is not handled.");
+            NotImplemented("Missing codegen for AST statement node.");
          }
       } break;
    }

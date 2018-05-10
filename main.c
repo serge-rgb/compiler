@@ -144,8 +144,8 @@ main(int args_n, char** args) {
                      /* {"tests/basic.c", "tests/out.basic"}, */
                      /* {"tests/test.c", "tests/out.test"}, */
                      /* {"tests/for_1.c", "tests/out.for_1"}, */
-                     /* {"tests/for_2.c", "tests/out.for_2"}, */
-                     {"tests/param_1.c", "tests/out.param_1"},
+                     {"tests/for_2.c", "tests/out.for_2"},
+                     /* {"tests/param_1.c", "tests/out.param_1"}, */
                      /* {"tests/while1.c", "tests/out.while1"}, */
                   };
 

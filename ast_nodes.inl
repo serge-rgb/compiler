@@ -4,6 +4,8 @@ X(Ast_DECLARATION_SPECIFIER)   // no family. fills ctype member.
 X(Ast_NUMBER)           // token: number
 X(Ast_IF)               // children: condition, then, else
 X(Ast_ID)               // token: identifier
+X(Ast_POSTFIX_INC)      // children: expr
+X(Ast_POSTFIX_DEC)      // children: expr
 X(Ast_FUNCDEF)          // children: declaration_spec, declarator, comp.statement
 X(Ast_FUNCCALL)         // children: identifier, arg expr list
 X(Ast_PARAMETER)        // children: decl.specifier, declarator
