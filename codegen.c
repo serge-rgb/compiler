@@ -1,10 +1,10 @@
 
 static FILE* g_asm;
-typedef enum RegisterValueType_n {
-   RegisterValueType_REGISTER,
-   RegisterValueType_IMMEDIATE,
-   RegisterValueType_STACK,
-} RegisterValueType;
+typedef enum LocationType_n {
+   LocationType_REGISTER,
+   LocationType_IMMEDIATE,
+   LocationType_STACK,
+} LocationType;
 
 
 typedef enum EmitTarget_n {
@@ -15,8 +15,8 @@ typedef enum EmitTarget_n {
    Target_STACK,
 } EmitTarget;
 
-typedef struct RegisterValue_s {
-   RegisterValueType type;
+typedef struct Location_s {
+   LocationType type;
    union {
       // REGISTER
       struct {
@@ -35,7 +35,7 @@ typedef struct RegisterValue_s {
       };
    };
 
-} RegisterValue;
+} Location;
 
 
 // Must be the same as g_registers.
@@ -129,7 +129,7 @@ typedef struct Codegen_s {
 } Codegen;
 
 static
-RegisterValue g_registers[] = {
+Location g_registers[] = {
    // TODO:  It's time to write a real register allocator.
    // This array is wrong. Some 32 and 64-bit registers are aliased to two 8
    // bit registers, which the current "solution" does not handle. We can do
@@ -265,10 +265,10 @@ codegenError(char* msg, ...) {
 
 
 char*
-registerString(Codegen* c, RegisterValue* r, int bits) {
+locationString(Codegen* c, Location* r, int bits) {
    char *res = NULL;
    switch(r->type) {
-      case RegisterValueType_REGISTER: {
+      case LocationType_REGISTER: {
          if (bits == 64) {
             res = r->reg;
          }
@@ -283,11 +283,11 @@ registerString(Codegen* c, RegisterValue* r, int bits) {
          }
       }
       break;
-      case RegisterValueType_IMMEDIATE: {
+      case LocationType_IMMEDIATE: {
          res = allocate(c->scope->arena, 128);
          snprintf(res, 128, "0x%x", (int)r->immediate_value);
       } break;
-      case RegisterValueType_STACK: {
+      case LocationType_STACK: {
          u64 rsp_relative = c->stack_offset - r->offset;
 
          res = allocate(c->scope->arena, 128);
@@ -414,12 +414,12 @@ instructionReg(Codegen* c, u64 line_number, char* asm_line, int bits, ...) {
       } break;
       case 1: {
          instructionPrintf(c, line_number, asm_line,
-                           registerString(c, &g_registers[regs[0]], bits));
+                           locationString(c, &g_registers[regs[0]], bits));
       } break;
       case 2: {
          instructionPrintf(c, line_number, asm_line,
-                           registerString(c, &g_registers[regs[0]], bits),
-                           registerString(c, &g_registers[regs[1]], bits));
+                           locationString(c, &g_registers[regs[0]], bits),
+                           locationString(c, &g_registers[regs[1]], bits));
       } break;
 
    }
@@ -428,7 +428,7 @@ instructionReg(Codegen* c, u64 line_number, char* asm_line, int bits, ...) {
 
 void
 stackPushReg(Codegen* c, RegisterEnum reg) {
-   instructionPrintf(c, 0, "push %s", registerString(c, &g_registers[reg], 64));
+   instructionPrintf(c, 0, "push %s", locationString(c, &g_registers[reg], 64));
    c->stack_offset += 8;
    c->stack[c->n_stack++] = (StackValue){ .type = Stack_QWORD };
 }
@@ -447,15 +447,15 @@ stackPushOffset(Codegen* c, u64 bytes) {
    c->stack[c->n_stack++] = (StackValue) { .type = Stack_OFFSET, .offset = bytes };
 }
 
-RegisterValue
+Location
 locationFromId(Codegen* c, char* id) {
    SymEntry* entry = findSymbol(c, id);
    if (!entry) {
       codegenError("Use of undeclared identifier %s", id);
    }
-   RegisterValue var =
+   Location var =
    {
-      .type = RegisterValueType_STACK,
+      .type = LocationType_STACK,
       .offset = entry->offset,
    };
    return var;
@@ -581,7 +581,8 @@ targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
 }
 
 void
-emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type, AstNode* left, AstNode* right, EmitTarget target) {
+emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
+                    AstNode* left, AstNode* right, EmitTarget target) {
    ExprType type_left = {0};
    ExprType type_right = {0};
 
@@ -669,7 +670,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   c,
                   node->line_number,
                   "mov %s, %d",
-                  registerString(c, &g_registers[Reg_RAX], bits),
+                  locationString(c, &g_registers[Reg_RAX], bits),
                   node->tok->cast.integer);
             } break;
             case Target_STACK: {
@@ -712,11 +713,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
          if (entry->expr_type.bits <= 16) {
             instructionPrintf(c, 0, "xor %s, %s",
-                              registerString(c, &g_registers[Reg_RAX], 64),
-                              registerString(c, &g_registers[Reg_RAX], 64));
+                              locationString(c, &g_registers[Reg_RAX], 64),
+                              locationString(c, &g_registers[Reg_RAX], 64));
          }
          instructionPrintf(c, 0, "mov %s, %s [ rsp + %d ]",
-                           registerString(c, &g_registers[Reg_RAX], entry->expr_type.bits),
+                           locationString(c, &g_registers[Reg_RAX], entry->expr_type.bits),
                            size_str,
                            rsp_relative);
          if (target == Target_STACK) {
@@ -744,7 +745,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
             switch (bits) {
                case 32: {
-                  instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", registerString(c, &g_registers[Reg_RBX], bits), rsp_relative);
+                  instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", locationString(c, &g_registers[Reg_RBX], bits), rsp_relative);
                   switch (op->value) {
                      case ASSIGN_INCREMENT: {
                         instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
@@ -764,7 +765,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             switch (bits) {
                case 32: {
-                  instructionPrintf(c, node->line_number, "mov DWORD [ rsp + %d ], %s", rsp_relative, registerString(c, &g_registers[Reg_RBX], bits));
+                  instructionPrintf(c, node->line_number, "mov DWORD [ rsp + %d ], %s", rsp_relative, locationString(c, &g_registers[Reg_RBX], bits));
                } break;
                case 8: {
                } break;
@@ -773,7 +774,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                } break;
             }
             if (target == Target_ACCUM) {
-               instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", registerString(c, &g_registers[Reg_RAX], bits), rsp_relative);
+               instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", locationString(c, &g_registers[Reg_RAX], bits), rsp_relative);
             }
          }
       }
@@ -785,11 +786,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
 
          Assert(expr->type == Ast_ID);  // TODO: Treat *everything* as pointers!
-         RegisterValue var = locationFromId(c, expr->tok->cast.string);
+         Location var = locationFromId(c, expr->tok->cast.string);
          // Save accum value in storage for var.
          instructionPrintf(c, node->line_number, "mov %s, %s",
-                           registerString(c, &var, local_expr_type.bits),
-                           registerString(c, &g_registers[Reg_RAX], local_expr_type.bits));
+                           locationString(c, &var, local_expr_type.bits),
+                           locationString(c, &g_registers[Reg_RAX], local_expr_type.bits));
          if (target == Target_STACK) {
             // Result is already on the stack.
          }
