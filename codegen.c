@@ -688,12 +688,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
       }
       else if (node->type == Ast_ID) {
          SymEntry* entry = findSymbol(c, node->tok->cast.string);
+         Location loc = locationFromId(c, node->tok->cast.string);
 
          if (!entry) {
             codegenError("Use of undeclared identifier %s", node->tok->cast.string);
          }
-
-         u64 rsp_relative = c->stack_offset - entry->offset;
 
          char* size_str = NULL;
 
@@ -716,10 +715,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                               locationString(c, &g_registers[Reg_RAX], 64),
                               locationString(c, &g_registers[Reg_RAX], 64));
          }
-         instructionPrintf(c, 0, "mov %s, %s [ rsp + %d ]",
+
+         instructionPrintf(c, 0, "mov %s, %s",
                            locationString(c, &g_registers[Reg_RAX], entry->expr_type.bits),
-                           size_str,
-                           rsp_relative);
+                           locationString(c, &loc, entry->expr_type.bits));
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
@@ -735,7 +734,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          Token* op = node->tok;
 
          SymEntry* entry = findSymbol(c, lhs->tok->cast.string);
-         i32 rsp_relative = c->stack_offset - entry->offset;
+         Location loc = locationFromId(c, lhs->tok->cast.string);
          if (!entry) {
             codegenError("Use of undeclared identifier");
          }
@@ -745,7 +744,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
             switch (bits) {
                case 32: {
-                  instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", locationString(c, &g_registers[Reg_RBX], bits), rsp_relative);
+                  instructionPrintf(c, node->line_number, "mov %s, %s",
+                                    locationString(c, &g_registers[Reg_RBX], bits),
+                                    locationString(c, &loc, bits));
                   switch (op->value) {
                      case ASSIGN_INCREMENT: {
                         instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
@@ -765,7 +766,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             switch (bits) {
                case 32: {
-                  instructionPrintf(c, node->line_number, "mov DWORD [ rsp + %d ], %s", rsp_relative, locationString(c, &g_registers[Reg_RBX], bits));
+                  instructionPrintf(c, node->line_number, "mov %s, %s",
+                                    locationString(c, &loc, bits),
+                                    locationString(c, &g_registers[Reg_RBX], bits));
                } break;
                case 8: {
                } break;
@@ -774,7 +777,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                } break;
             }
             if (target == Target_ACCUM) {
-               instructionPrintf(c, node->line_number, "mov %s, DWORD [ rsp + %d ]", locationString(c, &g_registers[Reg_RAX], bits), rsp_relative);
+               instructionPrintf(c, node->line_number, "mov %s, %s",
+                                 locationString(c, &g_registers[Reg_RAX], bits),
+                                 locationString(c, &loc, bits));
             }
          }
       }
