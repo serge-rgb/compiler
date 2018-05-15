@@ -1,10 +1,5 @@
 
 static FILE* g_asm;
-typedef enum LocationType_n {
-   LocationType_REGISTER,
-   LocationType_IMMEDIATE,
-   LocationType_STACK,
-} LocationType;
 
 
 typedef enum EmitTarget_n {
@@ -16,7 +11,11 @@ typedef enum EmitTarget_n {
 } EmitTarget;
 
 typedef struct Location_s {
-   LocationType type;
+   int type; enum {
+      LocationType_IMMEDIATE,  // Default, not an lvalue.
+      LocationType_REGISTER,
+      LocationType_STACK,
+   };
    union {
       // REGISTER
       struct {
@@ -59,8 +58,9 @@ typedef enum RegisterEnum_n {
 } RegisterEnum;
 
 typedef struct ExprType_s {
-   int   bits;
-   Ctype ctype;
+   int      bits;
+   Ctype    ctype;
+   Location location;
 } ExprType;
 
 typedef struct SymEntry_s {
@@ -130,73 +130,61 @@ typedef struct Codegen_s {
 
 static
 Location g_registers[] = {
-   // TODO:  It's time to write a real register allocator.
-   // This array is wrong. Some 32 and 64-bit registers are aliased to two 8
-   // bit registers, which the current "solution" does not handle. We can do
-   // another shitty solution which can handle the multi-register aliasing or
-   // we can start doing a proper register allocator.
    {
-      .reg    = "rax",
-      .reg_32 = "eax",
-      .reg_8  = "al",
+      .type = LocationType_REGISTER,
+      .reg    = "rax", .reg_32 = "eax", .reg_8  = "al",
    },
    {
-      .reg    = "rbx",
-      .reg_32 = "ebx",
-      .reg_8  = "bl",
+      .type = LocationType_REGISTER,
+      .reg    = "rbx", .reg_32 = "ebx", .reg_8  = "bl",
    },
    {
-      .reg    = "rcx",
-      .reg_32 = "ecx",
-      .reg_8  = "cl",
+      .type = LocationType_REGISTER,
+      .reg    = "rcx", .reg_32 = "ecx", .reg_8  = "cl",
    },
    {
-      .reg    = "rdx",
-      .reg_32 = "edx",
-      .reg_8  = "dl",
+      .type = LocationType_REGISTER,
+      .reg    = "rdx", .reg_32 = "edx", .reg_8  = "dl",
    },
    {
-      .reg    = "rsi",
-      .reg_32 = "esi",
-      .reg_8 = "ah",
+      .type = LocationType_REGISTER,
+      .reg    = "rsi", .reg_32 = "esi", .reg_8 = "ah",
    },
    {
-      .reg    = "rdi",
-      .reg_32 = "edi",
-      .reg_8 = "bh"
+      .type = LocationType_REGISTER,
+      .reg    = "rdi", .reg_32 = "edi", .reg_8 = "bh"
    },
    {
-      .reg    = "r8",
-      .reg_32 = "r8d",
-      .reg_8 = "ch",
+      .type = LocationType_REGISTER,
+      .reg    = "r8", .reg_32 = "r8d", .reg_8 = "ch",
    },
    {
-      .reg    = "r9",
-      .reg_32 = "r9d",
+      .type = LocationType_REGISTER,
+      .reg    = "r9", .reg_32 = "r9d",
    },
    {
-      .reg    = "r10",
-      .reg_32 = "r10d",
+      .type = LocationType_REGISTER,
+      .reg    = "r10", .reg_32 = "r10d",
    },
    {
-      .reg    = "r11",
-      .reg_32 = "r11d",
+      .type = LocationType_REGISTER,
+      .reg    = "r11", .reg_32 = "r11d",
    },
    {
-      .reg    = "r12",
-      .reg_32 = "r12d",
+      .type = LocationType_REGISTER,
+      .reg    = "r12", .reg_32 = "r12d",
    },
    {
-      .reg    = "r13",
-      .reg_32 = "r13d",
+      .type = LocationType_REGISTER,
+      .reg    = "r13", .reg_32 = "r13d",
    },
    {
-      .reg    = "r14",
-      .reg_32 = "r14d",
+      .type = LocationType_REGISTER,
+      .reg    = "r14", .reg_32 = "r14d",
    },
    {
-      .reg    = "r15",
-      .reg_32 = "r15d",
+      .type = LocationType_REGISTER,
+      .reg    = "r15", .reg_32 = "r15d",
    },
 
 };
@@ -290,13 +278,16 @@ locationString(Codegen* c, Location* r, int bits) {
       case LocationType_STACK: {
          u64 rsp_relative = c->stack_offset - r->offset;
 
-         res = allocate(c->scope->arena, 128);
+#define ResultSize 64
+         res = allocate(c->scope->arena, ResultSize);
          if (bits == 8)
-            snprintf(res, 128, "BYTE [ rsp + 0x%x ]", (int)rsp_relative);
+            snprintf(res, ResultSize, "BYTE [ rsp + 0x%x ]", (int)rsp_relative);
+         else if (bits == 16)
+            snprintf(res, ResultSize, "WORD [ rsp + 0x%x ]", (int)rsp_relative);
          else if (bits == 32)
-            snprintf(res, 128, "DWORD [ rsp + 0x%x ]", (int)rsp_relative);
+            snprintf(res, ResultSize, "DWORD [ rsp + 0x%x ]", (int)rsp_relative);
          else if (bits == 64)
-            snprintf(res, 128, "QWORD [ rsp + 0x%x ]", (int)rsp_relative);
+            snprintf(res, ResultSize, "QWORD [ rsp + 0x%x ]", (int)rsp_relative);
       } break;
       default: {
          // WTF
@@ -308,7 +299,7 @@ locationString(Codegen* c, Location* r, int bits) {
 }
 
 int
-codegenPointerSize(Codegen* c) {
+pointerSizeBytes(Codegen* c) {
    return 8;  // 8 bytes.
 }
 
@@ -453,8 +444,7 @@ locationFromId(Codegen* c, char* id) {
    if (!entry) {
       codegenError("Use of undeclared identifier %s", id);
    }
-   Location var =
-   {
+   Location var = {
       .type = LocationType_STACK,
       .offset = entry->offset,
    };
@@ -687,8 +677,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
       }
       else if (node->type == Ast_ID) {
-         SymEntry* entry = findSymbol(c, node->tok->cast.string);
-         Location loc = locationFromId(c, node->tok->cast.string);
+         char* id_str = node->tok->cast.string;
+         SymEntry* entry = findSymbol(c, id_str);
+         Location loc = locationFromId(c, id_str);
 
          if (!entry) {
             codegenError("Use of undeclared identifier %s", node->tok->cast.string);
@@ -725,6 +716,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          if (expr_type) {
             *expr_type = entry->expr_type;
+            expr_type->location = loc;
          }
       }
       // Assignment expressions
@@ -733,54 +725,31 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          AstNode* rhs = lhs->sibling;
          Token* op = node->tok;
 
-         SymEntry* entry = findSymbol(c, lhs->tok->cast.string);
-         Location loc = locationFromId(c, lhs->tok->cast.string);
-         if (!entry) {
-            codegenError("Use of undeclared identifier");
+         ExprType lhs_type = Zero;
+         codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
+         int bits = lhs_type.bits;
+         ExprType rhs_type = Zero;
+         codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
+         instructionPrintf(c, node->line_number, "mov %s, %s",
+                           locationString(c, &g_registers[Reg_RBX], bits),
+                           locationString(c, &lhs_type.location, bits));
+         switch (op->value) {
+            case ASSIGN_INCREMENT: {
+               instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
+            }break;
+            default: {
+               NotImplemented("Different assignment expressions");
+            }
          }
-         else {
-            int bits = entry->expr_type.bits;
-            ExprType rhs_type = Zero;
-            codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
-            switch (bits) {
-               case 32: {
-                  instructionPrintf(c, node->line_number, "mov %s, %s",
-                                    locationString(c, &g_registers[Reg_RBX], bits),
-                                    locationString(c, &loc, bits));
-                  switch (op->value) {
-                     case ASSIGN_INCREMENT: {
-                        instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
-                     }break;
-                     default: {
-                        NotImplemented("Different assignment expressions");
-                     }
-                  }
-               } break;
-               case 8: {
-                  NotImplemented("Assignment expr.");
-               } break;
-               default: {
-                  NotImplemented("Assignment expr.");
-               } break;
-            }
 
-            switch (bits) {
-               case 32: {
-                  instructionPrintf(c, node->line_number, "mov %s, %s",
-                                    locationString(c, &loc, bits),
-                                    locationString(c, &g_registers[Reg_RBX], bits));
-               } break;
-               case 8: {
-               } break;
-               default: {
-                  NotImplemented("Assignment expr.");
-               } break;
-            }
-            if (target == Target_ACCUM) {
-               instructionPrintf(c, node->line_number, "mov %s, %s",
-                                 locationString(c, &g_registers[Reg_RAX], bits),
-                                 locationString(c, &loc, bits));
-            }
+         instructionPrintf(c, node->line_number, "mov %s, %s",
+                           locationString(c, &lhs_type.location, bits),
+                           locationString(c, &g_registers[Reg_RBX], bits));
+
+         if (target == Target_ACCUM) {
+            instructionPrintf(c, node->line_number, "mov %s, %s",
+                              locationString(c, &g_registers[Reg_RAX], bits),
+                              locationString(c, &lhs_type.location, bits));
          }
       }
       else if (node->type == Ast_POSTFIX_INC ||
@@ -788,11 +757,13 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          AstNode* expr = node->child;
          ExprType local_expr_type = {};
          emitExpression(c, expr, &local_expr_type, Target_STACK);
+         if (local_expr_type.location.type == LocationType_IMMEDIATE) {
+            codegenError("Attempting to increment an rvalue.");
+         }
          emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
 
-         Assert(expr->type == Ast_ID);  // TODO: Treat *everything* as pointers!
-         Location var = locationFromId(c, expr->tok->cast.string);
-         // Save accum value in storage for var.
+         Location var = local_expr_type.location;
+
          instructionPrintf(c, node->line_number, "mov %s, %s",
                            locationString(c, &var, local_expr_type.bits),
                            locationString(c, &g_registers[Reg_RAX], local_expr_type.bits));
@@ -805,6 +776,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
          if (expr_type) {
             *expr_type = local_expr_type;
+
          }
       }
       // Binary operators

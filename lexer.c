@@ -59,7 +59,6 @@ struct Token_s {
 };
 
 typedef struct FileStream_s {
-   // TODO: Use a buffer to minimize calls to fwrite and friends.
    FILE* fd;
    u64 line_number;
 } FileStream;
