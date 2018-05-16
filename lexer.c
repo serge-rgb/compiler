@@ -88,6 +88,12 @@ fileStreamHasContent(FileStream* fs) {
    return result;
 }
 
+void
+lexerError(char* msg) {
+   fprintf(stderr, "Syntax error: %s\n", msg);
+   exit(1);
+}
+
 char
 fileStreamRead(FileStream* fs) {
    char result = 0;
@@ -97,7 +103,7 @@ fileStreamRead(FileStream* fs) {
       fs->line_number += (result == '\n');
    }
    else {
-      Assert(!"We need to read from the file and fill the buffer again.");
+      lexerError("Trying to read past end of file.");
    }
    return result;
 }
@@ -111,6 +117,13 @@ fileStreamPeek(FileStream* fs) {
    return result;
 }
 
+b32
+fileStreamPeek2(FileStream* fs, char out[2]) {
+   size_t read = fread(out, sizeof(char), 2, fs->fd);
+   fseek(fs->fd, -(int)read, SEEK_CUR);
+   return read == 2;
+}
+
 void fileStreamClose(FileStream* fs) {
    if (fs->fd) {
       fclose(fs->fd);
@@ -120,12 +133,6 @@ void fileStreamClose(FileStream* fs) {
    }
 }
 
-
-void
-lexerError(char* msg) {
-   fprintf(stderr, "Syntax error: %s\n", msg);
-   exit(1);
-}
 
 b32
 isWhitespace(char c) {
@@ -272,8 +279,19 @@ getToken(Arena* a, FileStream* fs) {
    Token t = {0};
    skipWhitespace(fs);
    int punctuator_token;  // Initialized in 'if' condition.
+   char comment[3] = Zero;
    if (!fileStreamHasContent(fs)) {
       return t;
+   }
+   else if (fileStreamPeek2(fs, comment) && !strcmp(comment, "/*")) {
+      while (fileStreamPeek2(fs, comment) && strcmp(comment, "*/")) {
+         fileStreamRead(fs);
+      }
+      for (int i = 0; i < 2; ++i)
+         fileStreamRead(fs);
+   }
+   else if (fileStreamPeek2(fs, comment) && !strcmp(comment, "//")) {
+      while (fileStreamRead(fs) != '\n') {}  // TODO: Robust EOL handling.
    }
    else if ((punctuator_token = isPunctuator(fs)) != 0) {
       t.type = TType_PUNCTUATOR;

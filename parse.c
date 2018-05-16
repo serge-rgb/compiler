@@ -664,7 +664,6 @@ parseJumpStatement(Parser* p) {
    AstNode* stmt = NULL;
    Token* bt = marktrack(p);
    Token* t = nextToken(p);
-   // TODO: decide on a codestyle for enum values...
    if (t->type == TType_KEYWORD && t->value == Keyword_return) {
       AstNode* expr = parseOrBacktrack(parseExpression, p);
       stmt = makeAstNode(p->arena, Ast_RETURN, expr, NULL);
@@ -761,7 +760,6 @@ parseStatement(Parser* p) {
             parseError(p, "Expected ).");
          }
          else {
-            // TODO: Parse assignment expression
             AstNode* statement = parseStatement(p);
             if (!statement) {
                parseError(p, "expected statement after while");

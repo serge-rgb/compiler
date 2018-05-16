@@ -1048,7 +1048,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          symInsert(&c->scope->symbol_table,
                    func_name,
                    (SymEntry) {
-                   // TODO: Specifying # of bits is rendundant..
                      .expr_type = { 8*numBytesForType(specifier->ctype), specifier->ctype},
                      .offset = 0,
                    });
