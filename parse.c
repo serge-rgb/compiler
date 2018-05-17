@@ -459,9 +459,9 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
-Ctype
+Type
 parseCtypeSpecifier(Token* t) {
-   Ctype result = Type_NONE;
+   Type result = {.type=Type_NONE};
    b32 is_type_spec =
            t->value == Keyword_int ||
            t->value == Keyword_char ||
@@ -475,14 +475,14 @@ parseCtypeSpecifier(Token* t) {
    if (is_type_spec) {
       switch (t->value) {
          case Keyword_int: {
-            result = Type_INT;
+            result.type = Type_INT;
          } break;
          case Keyword_char: {
-            result = Type_CHAR;
+            result.type = Type_CHAR;
          } break;
          case Keyword_float: {
-
-         } //break;
+            result.type = Type_FLOAT;
+         } break;
          case Keyword_long: {
 
          } //break;
@@ -511,7 +511,7 @@ parseDeclarationSpecifiers(Parser* p) {
    //   function specifier
    // Token* bt = t;
    AstNode* result = NULL;
-   Ctype ctype = Type_NONE;
+   Type ctype = { .type = Type_NONE };
    i32 line_number = p->token->line_number;
 
 #define MaxSpecifiers 1
@@ -531,8 +531,8 @@ parseDeclarationSpecifiers(Parser* p) {
           v == Keyword_register) {
          ArrayPush(storage_spec, v);
       }
-      // Ctype specifiers
-      else if ((ctype = parseCtypeSpecifier(t), ctype)) {
+      // Type specifiers
+      else if ((ctype = parseCtypeSpecifier(t), ctype.type)) {
       }
       else if (v == Keyword_const ||
                v == Keyword_restrict ||
@@ -548,7 +548,7 @@ parseDeclarationSpecifiers(Parser* p) {
          break;
       }
    }
-   if (ctype != Type_NONE) {
+   if (ctype.type != Type_NONE) {
       result = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, line_number);
       result->ctype = ctype;
    }
@@ -832,6 +832,10 @@ parseFunctionDefinition(Parser* p) {
       parseOrBacktrack(parseDeclarationList, p);
       AstNode* stmts = parseCompoundStatement(p);
 
+      Type type = {
+         .n_params =  // TODO: Keep going here. Grab params from declarator
+         .return_ = &declaration_specifier,
+      }
       if (!stmts) {
          backtrack(p, bt);
       }

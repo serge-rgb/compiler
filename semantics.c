@@ -1,18 +1,18 @@
 #include "ctypes.h"
 
 b32
-isArithmeticType(Ctype ctype) {
-   if (ctype == Type_INT ||
-       ctype == Type_CHAR) {
+isArithmeticType(Type ctype) {
+   if (ctype.type == Type_INT ||
+       ctype.type == Type_CHAR) {
       return true;
    }
    return false;
 }
 
 b32
-isIntegerType(Ctype ctype) {
-   if (ctype == Type_INT ||
-       ctype == Type_CHAR) {
+isIntegerType(Type ctype) {
+   if (ctype.type == Type_INT ||
+       ctype.type == Type_CHAR) {
       return true;
    }
    return false;
@@ -34,14 +34,22 @@ nodeIsExpression(AstNode* node) {
    return isExpr;
 }
 
+int
+pointerSizeBytes() {
+   return 8;
+}
+
 u64
-numBytesForType(Ctype ctype) {
-   switch (ctype) {
+numBytesForType(Type ctype) {
+   switch (ctype.type) {
       case Type_INT: {
          return 4;
       } break;
       case Type_CHAR: {
          return 1;
+      } break;
+      case Type_FUNC: {
+         return pointerSizeBytes();
       } break;
       default: {
          NotImplemented("Handle different size of types");

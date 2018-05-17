@@ -59,7 +59,7 @@ typedef enum RegisterEnum_n {
 
 typedef struct ExprType_s {
    int      bits;
-   Ctype    ctype;
+   Type     ctype;
    Location location;
 } ExprType;
 
@@ -296,11 +296,6 @@ locationString(Codegen* c, Location* r, int bits) {
    }
    Assert(res);
    return res;
-}
-
-int
-pointerSizeBytes(Codegen* c) {
-   return 8;  // 8 bytes.
 }
 
 void
@@ -589,7 +584,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    stackPop(c, Reg_RBX);
 
    if (type_left.bits != type_right.bits ||
-       type_left.ctype != type_right.ctype) {
+       type_left.ctype.type != type_right.ctype.type) {
       // If both are integer types, then apply integer promotion rules.
       if (isIntegerType(type_left.ctype) && isIntegerType(type_right.ctype)) {
          ExprType* smaller = type_left.bits < type_right.bits ? &type_left  : &type_right;
@@ -673,7 +668,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
          if (expr_type) {
             expr_type->bits = bits;
-            expr_type->ctype = Type_INT;
+            expr_type->ctype.type = Type_INT;
          }
       }
       else if (node->type == Ast_ID) {
@@ -904,7 +899,6 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
          int bits = 8 * numBytesForType(specifier->ctype);
 
-
          stackPushOffset(c, bits/8);
 
          if (isLiteral(rhs)) {
@@ -1048,7 +1042,11 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          symInsert(&c->scope->symbol_table,
                    func_name,
                    (SymEntry) {
-                     .expr_type = { 8*numBytesForType(specifier->ctype), specifier->ctype},
+                     .expr_type = {
+                        .bits = 8*numBytesForType(specifier->ctype),
+                        .ctype = specifier->ctype,
+                        .location = Zero, // TODO: location for functions
+                     },
                      .offset = 0,
                    });
       }

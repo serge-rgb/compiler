@@ -20,7 +20,7 @@ struct AstNode_s {
       // When the node corresponds to a token.
       Token*   tok;
       // Otherwise..
-      Ctype    ctype;
+      Type    ctype;
    };
    AstNode* child;
    AstNode* sibling;  // TODO: Rename to `next`
