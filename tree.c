@@ -13,20 +13,19 @@ char* g_ast_type_string[] = {
 #undef X
 };
 
-typedef struct AstNode_s AstNode;
-struct AstNode_s {
+struct AstNode {
    AstType  type;
    union {
       // When the node corresponds to a token.
       Token*   tok;
       // Otherwise..
-      Type    ctype;
+      Ctype    ctype;
    };
-   AstNode* child;
-   AstNode* sibling;  // TODO: Rename to `next`
+   struct AstNode* child;
+   struct AstNode* next;  // TODO: Rename to `next`
 
    u64      line_number;
-};
+} typedef AstNode;
 
 typedef struct AstMul_s {
    AstNode* left;
@@ -42,8 +41,8 @@ makeAstNodeWithLineNumber(Arena* a, AstType type, AstNode* left, AstNode* right,
    n->child = left;
    if (left) {
       if (right) {
-         Assert(left->sibling == NULL);
-         left->sibling = right;
+         Assert(left->next == NULL);
+         left->next = right;
       }
    }
 

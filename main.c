@@ -146,9 +146,9 @@ main(int args_n, char** args) {
                      /* {"tests/for_1.c", "tests/out.for_1"}, */
                      /* {"tests/for_2.c", "tests/out.for_2"}, */
                      /* {"tests/param_1.c", "tests/out.param_1"}, */
+                     {"tests/param_2.c", "tests/out.param_2"},
                      /* {"tests/while1.c", "tests/out.while1"}, */
                      /* {"tests/comment.c", "tests/out.comment"}, */
-                     {"tests/a.c", "tests/out.a"},
                   };
 
                   for (int test_i = 0; test_i < ArrayCount(tests); ++test_i) {

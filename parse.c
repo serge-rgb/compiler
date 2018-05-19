@@ -133,8 +133,13 @@ primaryExpr(Parser* p) {
       t->type = Ast_ID;
       t->tok  = tok;
    }
-   // TODO: other constants, string literals
-   else {
+   else if (tok->type == TType_STRING_LITERAL) {
+      NotImplemented("String literal");
+   } else if (tok->type == TType_KEYWORD ||
+              tok->type == TType_PUNCTUATOR) {
+      // Don't do anything
+   } else {
+      NotImplemented("Token primary expression");
    }
    if (t) {
       t->line_number = tok->line_number;
@@ -415,7 +420,9 @@ assignmentExpression(Parser* p) {
    AstNode* unary = NULL;
    Token* op = NULL;
    AstNode* assignment = NULL;
-   if ((unary = unaryExpr(p)) && (op = assignmentOperator(p)) &&  (assignment = assignmentExpression(p))) {
+   if ((unary = unaryExpr(p))
+       && (op = assignmentOperator(p))
+       && (assignment = assignmentExpression(p))) {
       t = makeAstNode(p->arena, Ast_ASSIGN_EXPR, unary, assignment);
       t->tok = op;
    }
@@ -436,7 +443,7 @@ argumentExpressionList(Parser* p) {
          parseError(p, "Expected argument in expression list");
       }
       else {
-         assignment->sibling = args;
+         assignment->next = args;
          args = assignment;
          if (peekPunctuator(p, ',')) {
             nextToken(p);
@@ -459,9 +466,9 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
-Type
-parseCtypeSpecifier(Token* t) {
-   Type result = {.type=Type_NONE};
+Ctype
+parseTypeSpecifier(Token* t) {
+   Ctype result = {.type=Type_NONE};
    b32 is_type_spec =
            t->value == Keyword_int ||
            t->value == Keyword_char ||
@@ -476,12 +483,15 @@ parseCtypeSpecifier(Token* t) {
       switch (t->value) {
          case Keyword_int: {
             result.type = Type_INT;
+            result.bits = 32;
          } break;
          case Keyword_char: {
             result.type = Type_CHAR;
+            result.bits = 8;
          } break;
          case Keyword_float: {
             result.type = Type_FLOAT;
+            result.bits = 32;
          } break;
          case Keyword_long: {
 
@@ -511,7 +521,7 @@ parseDeclarationSpecifiers(Parser* p) {
    //   function specifier
    // Token* bt = t;
    AstNode* result = NULL;
-   Type ctype = { .type = Type_NONE };
+   Ctype ctype = { .type = Type_NONE };
    i32 line_number = p->token->line_number;
 
 #define MaxSpecifiers 1
@@ -532,7 +542,7 @@ parseDeclarationSpecifiers(Parser* p) {
          ArrayPush(storage_spec, v);
       }
       // Type specifiers
-      else if ((ctype = parseCtypeSpecifier(t), ctype.type)) {
+      else if ((ctype = parseTypeSpecifier(t), ctype.type)) {
       }
       else if (v == Keyword_const ||
                v == Keyword_restrict ||
@@ -570,7 +580,7 @@ parameterTypeList(Parser* p) {
          AstNode* declarator = parseOrBacktrack(parseDeclarator, p);
          if (declarator) {
             AstNode* new = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
-            new->sibling = result;
+            new->next = result;
             result = new;
 
             if (peekPunctuator(p, ',')) {
@@ -606,7 +616,7 @@ parseDeclarator(Parser* p) {
       if (nextPunctuator(p, '(')) {
          AstNode* params = parseOrBacktrack(parameterTypeList, p);
          if (params) {
-            id->sibling = params;
+            id->next = params;
          }
          if (!nextPunctuator(p, ')')) {
             parseError(p, "Expected ) in declarator");
@@ -652,7 +662,7 @@ parseDeclaration(Parser* p) {
       result = makeAstNode(p->arena, Ast_DECLARATION, specifiers, declarator);
 
       noneIfNull(p->arena, &initializer);
-      declarator->sibling = initializer;
+      declarator->next = initializer;
    }
    return result;
 }
@@ -688,7 +698,7 @@ parseCompoundStatement(Parser* p) {
       AstNode** cur = &first_stmt;
       do {
          if (*cur) {
-            cur = &(*cur)->sibling;
+            cur = &(*cur)->next;
          }
          *cur = parseOrBacktrack(parseDeclaration, p);
          if (!*cur) {
@@ -709,12 +719,10 @@ parseCompoundStatement(Parser* p) {
 
 AstNode*
 parseExpressionStatement(Parser* p) {
-   Token* bt = marktrack(p);
    AstNode* stmt =  NULL;
    if ((stmt = parseExpression(p))) {
       if (!nextPunctuator(p, ';')) {
-         backtrack(p, bt);
-         stmt = NULL;
+         parseError(p, "Expected ';' after expression.");
       }
    }
    return stmt;
@@ -740,7 +748,7 @@ parseStatement(Parser* p) {
             stmt = makeAstNode(p->arena, Ast_IF, cond, then);
             if (nextKeyword(p, Keyword_else)) {
                AstNode* els = parseStatement(p);
-               then->sibling = els;
+               then->next = els;
             }
          } else {
             parseError(p, "Expected else clause after if.");
@@ -769,10 +777,10 @@ parseStatement(Parser* p) {
             AstNode* after = makeAstNode(p->arena, Ast_NONE, 0,0);
             AstNode* body = statement;
 
-            declarations->sibling = control_before;
-            control_before->sibling = after;
-            after->sibling = body;
-            body->sibling = NULL;
+            declarations->next = control_before;
+            control_before->next = after;
+            after->next = body;
+            body->next = NULL;
 
             stmt = makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
          }
@@ -806,9 +814,9 @@ parseStatement(Parser* p) {
          noneIfNull(p->arena, &control);
          noneIfNull(p->arena, &after);
 
-         declaration->sibling = control;
-         control->sibling = after;
-         after->sibling = body;
+         declaration->next = control;
+         control->next = after;
+         after->next = body;
          stmt = makeAstNode(p->arena, Ast_ITERATION, declaration, NULL);
       }
    }
@@ -832,17 +840,21 @@ parseFunctionDefinition(Parser* p) {
       parseOrBacktrack(parseDeclarationList, p);
       AstNode* stmts = parseCompoundStatement(p);
 
-      Type type = {
-         .n_params =  // TODO: Keep going here. Grab params from declarator
-         .return_ = &declaration_specifier,
-      }
       if (!stmts) {
          backtrack(p, bt);
       }
       else {
-         declarator->sibling = stmts;
+         declarator->next = stmts;
 
          result = funcdef;
+
+         Ctype type = {
+            .type = Type_FUNC,
+            .bits = pointerSizeBits(),
+            .node = result
+         };
+
+         result->ctype = type;
       }
    }
    return result;
@@ -863,7 +875,7 @@ parseTranslationUnit(Parser* p) {
    while (true) {
       *cur = parseFunctionDefinition(p);
       if (*cur) {
-         cur = &((*cur)->sibling);
+         cur = &((*cur)->next);
       } else {
          break;
       }

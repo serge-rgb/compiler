@@ -58,14 +58,13 @@ typedef enum RegisterEnum_n {
 } RegisterEnum;
 
 typedef struct ExprType_s {
-   int      bits;
-   Type     ctype;
+   Ctype     ctype;
    Location location;
 } ExprType;
 
 typedef struct SymEntry_s {
-   ExprType expr_type;
-   u64 offset;
+   ExprType etype;
+   u64 offset;  // TODO: maybe this should be a location?
 } SymEntry;
 
 #define HashmapName     SymTable
@@ -522,7 +521,7 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
             r = Reg_R9;
          } break;
       }
-      instructionReg(c, 0, "mov %s, %s", type.bits, r, Reg_RAX);
+      instructionReg(c, 0, "mov %s, %s", type.ctype.bits, r, Reg_RAX);
    }
    else {
       NotImplemented("Need to implement params on Windows.");
@@ -568,30 +567,30 @@ targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
 void
 emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
                     AstNode* left, AstNode* right, EmitTarget target) {
-   ExprType type_left = {0};
-   ExprType type_right = {0};
+   ExprType tleft = {0};
+   ExprType tright = {0};
 
-   codegenEmit(c, right, &type_right, Target_STACK);
-   codegenEmit(c, left, &type_left, Target_ACCUM);
+   codegenEmit(c, right, &tright, Target_STACK);
+   codegenEmit(c, left, &tleft, Target_ACCUM);
 
-   if ( !isArithmeticType(type_left.ctype) ) {
+   if ( !isArithmeticType(tleft.ctype) ) {
       codegenError("Left operator in binary expression is not arithmetic type.");
    }
-   else if ( !isArithmeticType(type_right.ctype) ) {
+   else if ( !isArithmeticType(tright.ctype) ) {
       codegenError("Left operator in expression is not arithmetic type.");
    }
 
    stackPop(c, Reg_RBX);
 
-   if (type_left.bits != type_right.bits ||
-       type_left.ctype.type != type_right.ctype.type) {
+   if (tleft.ctype.bits != tright.ctype.bits ||
+       tleft.ctype.type != tright.ctype.type) {
       // If both are integer types, then apply integer promotion rules.
-      if (isIntegerType(type_left.ctype) && isIntegerType(type_right.ctype)) {
-         ExprType* smaller = type_left.bits < type_right.bits ? &type_left  : &type_right;
-         ExprType* bigger  = type_left.bits < type_right.bits ? &type_right : &type_left;
+      if (isIntegerType(tleft.ctype) && isIntegerType(tright.ctype)) {
+         ExprType* smaller = tleft.ctype.bits < tright.ctype.bits ? &tleft  : &tright;
+         ExprType* bigger  = tleft.ctype.bits < tright.ctype.bits ? &tright : &tleft;
 
 
-         smaller->bits = bigger->bits;
+         smaller->ctype.bits = bigger->ctype.bits;
       }
       //
       // If one of them is floating point... do floating point conversion.
@@ -599,10 +598,10 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 
    if (expr_type) {
-      *expr_type = type_left;
+      *expr_type = tleft;
    }
 
-   int bits = type_left.bits;
+   int bits = tleft.ctype.bits;
    switch (type) {
       case Ast_ADD: { instructionReg(c, 0, "add %s, %s", bits, Reg_RAX, Reg_RBX); } break;
       case Ast_SUB: { instructionReg(c, 0, "sub %s, %s", bits, Reg_RAX, Reg_RBX); } break;
@@ -629,15 +628,25 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          if (!sym) {
             codegenError("Call to undefined function. %s", label);
          }
+         Ctype* type = &sym->etype.ctype;
+         if (type->type != Type_FUNC) {
+            codegenError("%s is not a function.", label);
+         }
 
-         AstNode* params = func->sibling;
+         AstNode* params = func->next;
          // Put the parameters in registers and/or the stack.
          u64 n_param = 0;
          for (AstNode* param = params;
               param != NULL;
-              param = param->sibling) {
-
+              param = param->next) {
             targetPushParameter(c, n_param++, param);
+         }
+
+         i32 expected_nparam = funcNumParams(sym->etype.ctype.node);
+
+         if (n_param != expected_nparam) {
+            codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
+                         label, expected_nparam, n_param);
          }
 
          instructionPrintf(c, node->line_number, "call %s", label);
@@ -645,7 +654,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             stackPushReg(c, Reg_RAX);
          }
 
-         *expr_type = sym->expr_type;
+         *expr_type = sym->etype;
       }
       else if (node->type == Ast_NUMBER) {
          int bits = 32;
@@ -667,7 +676,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             } break;
          }
          if (expr_type) {
-            expr_type->bits = bits;
+            expr_type->ctype.bits = bits;
             expr_type->ctype.type = Type_INT;
          }
       }
@@ -682,7 +691,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          char* size_str = NULL;
 
-         switch (entry->expr_type.bits) {
+         switch (entry->etype.ctype.bits) {
             case 32: {
                size_str = "DWORD";
             } break;
@@ -696,33 +705,33 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                NotImplemented("Can't handle this size.");
             } break;
          }
-         if (entry->expr_type.bits <= 16) {
+         if (entry->etype.ctype.bits <= 16) {
             instructionPrintf(c, 0, "xor %s, %s",
                               locationString(c, &g_registers[Reg_RAX], 64),
                               locationString(c, &g_registers[Reg_RAX], 64));
          }
 
          instructionPrintf(c, 0, "mov %s, %s",
-                           locationString(c, &g_registers[Reg_RAX], entry->expr_type.bits),
-                           locationString(c, &loc, entry->expr_type.bits));
+                           locationString(c, &g_registers[Reg_RAX], entry->etype.ctype.bits),
+                           locationString(c, &loc, entry->etype.ctype.bits));
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
 
          if (expr_type) {
-            *expr_type = entry->expr_type;
+            *expr_type = entry->etype;
             expr_type->location = loc;
          }
       }
       // Assignment expressions
       else if (node->type == Ast_ASSIGN_EXPR) {
          AstNode* lhs = node->child;
-         AstNode* rhs = lhs->sibling;
+         AstNode* rhs = lhs->next;
          Token* op = node->tok;
 
          ExprType lhs_type = Zero;
          codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
-         int bits = lhs_type.bits;
+         int bits = lhs_type.ctype.bits;
          ExprType rhs_type = Zero;
          codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
          instructionPrintf(c, node->line_number, "mov %s, %s",
@@ -750,18 +759,18 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
       else if (node->type == Ast_POSTFIX_INC ||
                node->type == Ast_POSTFIX_DEC) {
          AstNode* expr = node->child;
-         ExprType local_expr_type = {};
-         emitExpression(c, expr, &local_expr_type, Target_STACK);
-         if (local_expr_type.location.type == LocationType_IMMEDIATE) {
+         ExprType local_etype = {};
+         emitExpression(c, expr, &local_etype, Target_STACK);
+         if (local_etype.location.type == LocationType_IMMEDIATE) {
             codegenError("Attempting to increment an rvalue.");
          }
          emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
 
-         Location var = local_expr_type.location;
+         Location var = local_etype.location;
 
          instructionPrintf(c, node->line_number, "mov %s, %s",
-                           locationString(c, &var, local_expr_type.bits),
-                           locationString(c, &g_registers[Reg_RAX], local_expr_type.bits));
+                           locationString(c, &var, local_etype.ctype.bits),
+                           locationString(c, &g_registers[Reg_RAX], local_etype.ctype.bits));
          if (target == Target_STACK) {
             // Result is already on the stack.
          }
@@ -770,13 +779,13 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             stackPop(c, Reg_RAX);
          }
          if (expr_type) {
-            *expr_type = local_expr_type;
+            *expr_type = local_etype;
 
          }
       }
       // Binary operators
       else {
-         AstNode* child1 = child0->sibling;
+         AstNode* child1 = child0->next;
          if (node->type == Ast_ADD ||
              node->type == Ast_SUB ||
              node->type == Ast_MUL ||
@@ -793,7 +802,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   node->type == Ast_NOT_EQUALS ||
                   node->type == Ast_EQUALS) {
             AstNode* left = node->child;
-            AstNode* right = node->child->sibling;
+            AstNode* right = node->child->next;
             ExprType left_type = {0};
             ExprType right_type = {0};
             codegenEmit(c, right, &right_type, Target_STACK);
@@ -801,7 +810,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             stackPop(c, Reg_RBX);
 
             u64 line = left->line_number;
-            instructionReg(c, line, "cmp %s, %s", left_type.bits, Reg_RAX, Reg_RBX);
+            instructionReg(c, line, "cmp %s, %s", left_type.ctype.bits, Reg_RAX, Reg_RBX);
 
             char* instr;
             switch(node->type) {
@@ -841,16 +850,16 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
       case Ast_NOT_EQUALS:
       case Ast_EQUALS: {
          AstNode* left = cond->child;
-         AstNode* right = cond->child->sibling;
+         AstNode* right = cond->child->next;
          ExprType left_type = {0};
          ExprType right_type = {0};
          codegenEmit(c, right, &right_type, Target_STACK);
          codegenEmit(c, left, &left_type, Target_ACCUM);
          stackPop(c, Reg_RBX);
-         if (left_type.bits != right_type.bits) {
+         if (left_type.ctype.bits != right_type.ctype.bits) {
             NotImplemented("Promotion rules");
          }
-         instructionReg(c, cond->line_number, "cmp %s, %s", left_type.bits, Reg_RAX, Reg_RBX);
+         instructionReg(c, cond->line_number, "cmp %s, %s", left_type.ctype.bits, Reg_RAX, Reg_RBX);
          switch(cond->type) {
             case Ast_EQUALS: { instructionPrintf(c, 0, "je %s", then); } break;
             case Ast_LESS: { instructionPrintf(c, 0, "jl %s", then); } break;
@@ -864,7 +873,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);
-         instructionReg(c, cond->line_number, "cmp %s, %s", expr_type.bits, Reg_RAX, Reg_RBX);
+         instructionReg(c, cond->line_number, "cmp %s, %s", expr_type.ctype.bits, Reg_RAX, Reg_RBX);
          instructionPrintf(c, 0, "jne %s", then);
          instructionPrintf(c, 0, "jmp %s", els);
       } break;
@@ -889,15 +898,15 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       } break;
       case Ast_DECLARATION: {
          AstNode* specifier = stmt->child;
-         AstNode* declarator = specifier->sibling;
+         AstNode* declarator = specifier->next;
          AstNode* ast_id = declarator->child;
          char* id_str = ast_id->tok->cast.string;
-         AstNode* rhs = declarator->sibling;
+         AstNode* rhs = declarator->next;
 
          if (symGet(&c->scope->symbol_table, id_str) != NULL) {
             codegenError("Symbol redeclared in scope");
          }
-         int bits = 8 * numBytesForType(specifier->ctype);
+         int bits = specifier->ctype.bits;
 
          stackPushOffset(c, bits/8);
 
@@ -926,9 +935,9 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             // TODO: scc initializes to zero by default.
          }
          SymEntry entry = {
-            .expr_type = (ExprType) {
-               .bits = bits,
-               .ctype = specifier->ctype
+            .etype = (ExprType) {
+               .ctype = specifier->ctype,
+               .location = Zero // TODO: location!
             },
             .offset = c->stack_offset
          };
@@ -940,8 +949,8 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
-         AstNode* then = cond->sibling;
-         AstNode* els = then ? then->sibling : NULL;
+         AstNode* then = cond->next;
+         AstNode* els = then ? then->next : NULL;
          char then_label[1024] = {0};
          char else_label[1024] = {0};
          snprintf(then_label, 1024, ".then%d", c->scope->if_count);
@@ -964,9 +973,9 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          int loop_id = c->scope->if_count++;
          pushScope(c);
          AstNode* decl = stmt->child;
-         AstNode* control = decl->sibling;
-         AstNode* after = control->sibling;
-         AstNode* body = after->sibling;
+         AstNode* control = decl->next;
+         AstNode* after = control->next;
+         AstNode* body = after->next;
          char loop_label[1024] = {0}; {
             snprintf(loop_label, sizeof(loop_label), ".loop%d", loop_id);
          }
@@ -1019,9 +1028,9 @@ emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
 
    // Emit function call prelude. Push stack
    while (stmt) {
-      b32 is_last = stmt->sibling == NULL;
+      b32 is_last = stmt->next == NULL;
       emitStatement(c, stmt, is_last ? target : Target_NONE);
-      stmt = stmt->sibling;
+      stmt = stmt->next;
    }
 
    popScope(c);
@@ -1031,8 +1040,8 @@ emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
 void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    AstNode* specifier        = node->child;
-   AstNode* declarator  = specifier->sibling;
-   AstNode* compound    = declarator->sibling;
+   AstNode* declarator  = specifier->next;
+   AstNode* compound    = declarator->next;
 
    if (specifier && declarator && compound) {
       char *func_name = declarator->child->tok->cast.string;
@@ -1042,9 +1051,8 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          symInsert(&c->scope->symbol_table,
                    func_name,
                    (SymEntry) {
-                     .expr_type = {
-                        .bits = 8*numBytesForType(specifier->ctype),
-                        .ctype = specifier->ctype,
+                     .etype = {
+                        .ctype = node->ctype,
                         .location = Zero, // TODO: location for functions
                      },
                      .offset = 0,
@@ -1062,29 +1070,28 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       // Push
       pushScope(c);
 
-      AstNode* params = declarator->child->sibling;
+      AstNode* params = declarator->child->next;
       if (params) {
          AstNode* p = params;
          u64 n_param = 0;
          while (p) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
-            AstNode* param_declarator = param_type_spec->sibling;
+            AstNode* param_declarator = param_type_spec->next;
             char* id_str = param_declarator->child->tok->cast.string;
 
             Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
             Assert (param_declarator && param_declarator->child->type == Ast_ID);
 
             targetPopParameter(c, n_param++, Target_STACK);
-            int bits = (int)(8 * numBytesForType(param_type_spec->ctype));
 
             SymEntry entry = {
-               .expr_type = { .bits = bits, .ctype = param_type_spec->ctype },
+               .etype = { .ctype = param_type_spec->ctype },
                .offset = c->stack_offset,
             };
             symInsert(&c->scope->symbol_table, id_str, entry);
 
-            p = p->sibling;
+            p = p->next;
 
          }
       }
@@ -1137,7 +1144,7 @@ codegenTranslationUnit(Codegen* c, AstNode* node) {
          NotImplemented ("Top level declarations.");
       }
 
-      node = node->sibling;
+      node = node->next;
    }
    popScope(c);
 }

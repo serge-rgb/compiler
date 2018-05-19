@@ -10,14 +10,14 @@ typedef enum Keyword_n {
    #undef X
 } Keyword;
 
-typedef enum TType_n {
+typedef enum TokType_n {
    TType_NONE,
    TType_PUNCTUATOR,
    TType_STRING_LITERAL,
    TType_NUMBER,
    TType_ID,
    TType_KEYWORD = 0xF000,
-} TType;
+} TokType;
 
 typedef enum Punctuator_n {
    Punctuator_BEGIN = /*...*/  128,  // ASCII codes are reserved for single-char tokens.
@@ -41,7 +41,7 @@ indexOfPunctuator(Punctuator p) {
 
 typedef struct Token_s Token;
 struct Token_s {
-   TType type;
+   TokType type;
    union {
       u64 value;
       union {

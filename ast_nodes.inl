@@ -1,4 +1,4 @@
-
+// Empty line so that lines in this file correspond to enum values.
 X(Ast_NONE)
 X(Ast_DECLARATION_SPECIFIER)   // no family. fills ctype member.
 X(Ast_NUMBER)           // token: number

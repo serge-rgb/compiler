@@ -1,7 +1,8 @@
 #pragma once
 
 
-struct Type {
+struct AstNode;
+struct Ctype {
    enum {
       Type_NONE = 0,
 
@@ -19,14 +20,7 @@ struct Type {
       Type_FUNC = (1<<4),
    }; int type;
 
-   union {
-      // Type_FUNC
-      struct {
-#define MaxFuncParameters 256
-         u32 n_params;
-         struct Type* params;
-         struct Type* return_;
-      };
-   } ext;
-} typedef Type;
+   int      bits;
+   struct AstNode* node;
+} typedef Ctype;
 

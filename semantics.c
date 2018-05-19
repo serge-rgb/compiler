@@ -1,7 +1,7 @@
 #include "ctypes.h"
 
 b32
-isArithmeticType(Type ctype) {
+isArithmeticType(Ctype ctype) {
    if (ctype.type == Type_INT ||
        ctype.type == Type_CHAR) {
       return true;
@@ -10,7 +10,7 @@ isArithmeticType(Type ctype) {
 }
 
 b32
-isIntegerType(Type ctype) {
+isIntegerType(Ctype ctype) {
    if (ctype.type == Type_INT ||
        ctype.type == Type_CHAR) {
       return true;
@@ -35,12 +35,12 @@ nodeIsExpression(AstNode* node) {
 }
 
 int
-pointerSizeBytes() {
-   return 8;
+pointerSizeBits() {
+   return 64;
 }
 
 u64
-numBytesForType(Type ctype) {
+numBytesForType(Ctype ctype) {
    switch (ctype.type) {
       case Type_INT: {
          return 4;
@@ -49,7 +49,7 @@ numBytesForType(Type ctype) {
          return 1;
       } break;
       case Type_FUNC: {
-         return pointerSizeBytes();
+         return 8*pointerSizeBits();
       } break;
       default: {
          NotImplemented("Handle different size of types");
@@ -67,4 +67,28 @@ isLiteral(AstNode* node) {
       result = true;
    }
    return result;
+}
+
+AstNode*
+funcDeclarationSpecifier(AstNode* node) {
+  Assert (node->type == Ast_FUNCDEF);
+  return node->child;
+}
+
+AstNode*
+funcDeclarator(AstNode* node) {
+  Assert (node->type == Ast_FUNCDEF);
+  return node->child->next;
+}
+
+i32
+funcNumParams(AstNode* node) {
+  Assert (node->type == Ast_FUNCDEF);
+  i32 nparam = 0;
+  for(AstNode* param = funcDeclarator(node)->child->next;
+      param != NULL;
+      param = param->next) {
+     ++nparam;
+  }
+  return nparam;
 }
