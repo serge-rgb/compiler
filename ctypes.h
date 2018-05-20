@@ -18,9 +18,35 @@ struct Ctype {
 
       // Function
       Type_FUNC = (1<<4),
+      // TODO finish function
+
+      Type_STRUCT = (1<<5),
+      // TODO union
+      // TODO pointer
+      // TODO array
+      // TODO atomic
    }; int type;
 
+
+   enum {
+      Qual_CONST    = (1<<0),
+      Qual_RESTRICT = (1<<1),
+      Qual_VOLATILE = (1<<2),
+   }; int qualifiers;
    int      bits;
-   struct AstNode* node;
+
+   union {
+   struct CtypeStruct {
+
+   } struct_;
+
+   struct CtypeFunc {
+      struct AstNode* node; // TODO: refactor?
+   } func;
+
+      // CtypeStruct struct_;
+      // CtypeFunc func;
+   };
 } typedef Ctype;
+
 

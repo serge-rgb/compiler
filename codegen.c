@@ -58,7 +58,7 @@ typedef enum RegisterEnum_n {
 } RegisterEnum;
 
 typedef struct ExprType_s {
-   Ctype     ctype;
+   Ctype    c;
    Location location;
 } ExprType;
 
@@ -521,7 +521,7 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
             r = Reg_R9;
          } break;
       }
-      instructionReg(c, 0, "mov %s, %s", type.ctype.bits, r, Reg_RAX);
+      instructionReg(c, 0, "mov %s, %s", type.c.bits, r, Reg_RAX);
    }
    else {
       NotImplemented("Need to implement params on Windows.");
@@ -573,24 +573,24 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    codegenEmit(c, right, &tright, Target_STACK);
    codegenEmit(c, left, &tleft, Target_ACCUM);
 
-   if ( !isArithmeticType(tleft.ctype) ) {
+   if ( !isArithmeticType(tleft.c) ) {
       codegenError("Left operator in binary expression is not arithmetic type.");
    }
-   else if ( !isArithmeticType(tright.ctype) ) {
+   else if ( !isArithmeticType(tright.c) ) {
       codegenError("Left operator in expression is not arithmetic type.");
    }
 
    stackPop(c, Reg_RBX);
 
-   if (tleft.ctype.bits != tright.ctype.bits ||
-       tleft.ctype.type != tright.ctype.type) {
+   if (tleft.c.bits != tright.c.bits ||
+       tleft.c.type != tright.c.type) {
       // If both are integer types, then apply integer promotion rules.
-      if (isIntegerType(tleft.ctype) && isIntegerType(tright.ctype)) {
-         ExprType* smaller = tleft.ctype.bits < tright.ctype.bits ? &tleft  : &tright;
-         ExprType* bigger  = tleft.ctype.bits < tright.ctype.bits ? &tright : &tleft;
+      if (isIntegerType(tleft.c) && isIntegerType(tright.c)) {
+         ExprType* smaller = tleft.c.bits < tright.c.bits ? &tleft  : &tright;
+         ExprType* bigger  = tleft.c.bits < tright.c.bits ? &tright : &tleft;
 
 
-         smaller->ctype.bits = bigger->ctype.bits;
+         smaller->c.bits = bigger->c.bits;
       }
       //
       // If one of them is floating point... do floating point conversion.
@@ -601,7 +601,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
       *expr_type = tleft;
    }
 
-   int bits = tleft.ctype.bits;
+   int bits = tleft.c.bits;
    switch (type) {
       case Ast_ADD: { instructionReg(c, 0, "add %s, %s", bits, Reg_RAX, Reg_RBX); } break;
       case Ast_SUB: { instructionReg(c, 0, "sub %s, %s", bits, Reg_RAX, Reg_RBX); } break;
@@ -628,7 +628,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          if (!sym) {
             codegenError("Call to undefined function. %s", label);
          }
-         Ctype* type = &sym->etype.ctype;
+         Ctype* type = &sym->etype.c;
          if (type->type != Type_FUNC) {
             codegenError("%s is not a function.", label);
          }
@@ -642,7 +642,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             targetPushParameter(c, n_param++, param);
          }
 
-         i32 expected_nparam = funcNumParams(sym->etype.ctype.node);
+         i32 expected_nparam = funcNumParams(sym->etype.c.func.node);
 
          if (n_param != expected_nparam) {
             codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
@@ -676,8 +676,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             } break;
          }
          if (expr_type) {
-            expr_type->ctype.bits = bits;
-            expr_type->ctype.type = Type_INT;
+            expr_type->c.bits = bits;
+            expr_type->c.type = Type_INT;
          }
       }
       else if (node->type == Ast_ID) {
@@ -691,7 +691,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          char* size_str = NULL;
 
-         switch (entry->etype.ctype.bits) {
+         switch (entry->etype.c.bits) {
             case 32: {
                size_str = "DWORD";
             } break;
@@ -705,15 +705,15 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                NotImplemented("Can't handle this size.");
             } break;
          }
-         if (entry->etype.ctype.bits <= 16) {
+         if (entry->etype.c.bits <= 16) {
             instructionPrintf(c, 0, "xor %s, %s",
                               locationString(c, &g_registers[Reg_RAX], 64),
                               locationString(c, &g_registers[Reg_RAX], 64));
          }
 
          instructionPrintf(c, 0, "mov %s, %s",
-                           locationString(c, &g_registers[Reg_RAX], entry->etype.ctype.bits),
-                           locationString(c, &loc, entry->etype.ctype.bits));
+                           locationString(c, &g_registers[Reg_RAX], entry->etype.c.bits),
+                           locationString(c, &loc, entry->etype.c.bits));
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
@@ -731,7 +731,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          ExprType lhs_type = Zero;
          codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
-         int bits = lhs_type.ctype.bits;
+         int bits = lhs_type.c.bits;
          ExprType rhs_type = Zero;
          codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
          instructionPrintf(c, node->line_number, "mov %s, %s",
@@ -769,8 +769,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          Location var = local_etype.location;
 
          instructionPrintf(c, node->line_number, "mov %s, %s",
-                           locationString(c, &var, local_etype.ctype.bits),
-                           locationString(c, &g_registers[Reg_RAX], local_etype.ctype.bits));
+                           locationString(c, &var, local_etype.c.bits),
+                           locationString(c, &g_registers[Reg_RAX], local_etype.c.bits));
          if (target == Target_STACK) {
             // Result is already on the stack.
          }
@@ -810,7 +810,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             stackPop(c, Reg_RBX);
 
             u64 line = left->line_number;
-            instructionReg(c, line, "cmp %s, %s", left_type.ctype.bits, Reg_RAX, Reg_RBX);
+            instructionReg(c, line, "cmp %s, %s", left_type.c.bits, Reg_RAX, Reg_RBX);
 
             char* instr;
             switch(node->type) {
@@ -856,10 +856,10 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
          codegenEmit(c, right, &right_type, Target_STACK);
          codegenEmit(c, left, &left_type, Target_ACCUM);
          stackPop(c, Reg_RBX);
-         if (left_type.ctype.bits != right_type.ctype.bits) {
+         if (left_type.c.bits != right_type.c.bits) {
             NotImplemented("Promotion rules");
          }
-         instructionReg(c, cond->line_number, "cmp %s, %s", left_type.ctype.bits, Reg_RAX, Reg_RBX);
+         instructionReg(c, cond->line_number, "cmp %s, %s", left_type.c.bits, Reg_RAX, Reg_RBX);
          switch(cond->type) {
             case Ast_EQUALS: { instructionPrintf(c, 0, "je %s", then); } break;
             case Ast_LESS: { instructionPrintf(c, 0, "jl %s", then); } break;
@@ -873,7 +873,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);
-         instructionReg(c, cond->line_number, "cmp %s, %s", expr_type.ctype.bits, Reg_RAX, Reg_RBX);
+         instructionReg(c, cond->line_number, "cmp %s, %s", expr_type.c.bits, Reg_RAX, Reg_RBX);
          instructionPrintf(c, 0, "jne %s", then);
          instructionPrintf(c, 0, "jmp %s", els);
       } break;
@@ -936,7 +936,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
          SymEntry entry = {
             .etype = (ExprType) {
-               .ctype = specifier->ctype,
+               .c= specifier->ctype,
                .location = Zero // TODO: location!
             },
             .offset = c->stack_offset
@@ -1052,7 +1052,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
                    func_name,
                    (SymEntry) {
                      .etype = {
-                        .ctype = node->ctype,
+                        .c= node->ctype,
                         .location = Zero, // TODO: location for functions
                      },
                      .offset = 0,
@@ -1086,7 +1086,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             targetPopParameter(c, n_param++, Target_STACK);
 
             SymEntry entry = {
-               .etype = { .ctype = param_type_spec->ctype },
+               .etype = { .c= param_type_spec->ctype },
                .offset = c->stack_offset,
             };
             symInsert(&c->scope->symbol_table, id_str, entry);

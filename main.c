@@ -32,7 +32,10 @@ compileTranslationUnit(char* file_name, char* outfile) {
       codegen.config |= PlatformDefaultTarget;
 
       AstNode* tree = parseTranslationUnit(&p);
-      if (tree) {
+      if (!tree) {
+         parseError(&p, "Could not parse file.");
+      }
+      else {
          codegenInit(&codegen, outfile);
          codegenTranslationUnit(&codegen, tree);
          codegenFinish();
@@ -146,9 +149,10 @@ main(int args_n, char** args) {
                      /* {"tests/for_1.c", "tests/out.for_1"}, */
                      /* {"tests/for_2.c", "tests/out.for_2"}, */
                      /* {"tests/param_1.c", "tests/out.param_1"}, */
-                     {"tests/param_2.c", "tests/out.param_2"},
+                     /* {"tests/param_2.c", "tests/out.param_2"}, */
                      /* {"tests/while1.c", "tests/out.while1"}, */
                      /* {"tests/comment.c", "tests/out.comment"}, */
+                     {"tests/struct.c", "tests/out.struct"},
                   };
 
                   for (int test_i = 0; test_i < ArrayCount(tests); ++test_i) {

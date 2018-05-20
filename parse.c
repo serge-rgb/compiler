@@ -71,6 +71,15 @@ nextToken(Parser* p) {
 }
 
 Token*
+peekKeyword(Parser* p, int keyword) {
+   Token* tok = p->token;
+   if (tok->type == TType_KEYWORD && tok->cast.int32 == keyword) {
+      return tok;
+   }
+   return NULL;
+}
+
+Token*
 nextKeyword(Parser* p, int keyword) {
    Token* tok = nextToken(p);
    if (tok->type == TType_KEYWORD && tok->cast.int32 == keyword) {
@@ -466,50 +475,107 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
-Ctype
-parseTypeSpecifier(Token* t) {
-   Ctype result = {.type=Type_NONE};
-   b32 is_type_spec =
-           t->value == Keyword_int ||
-           t->value == Keyword_char ||
-           t->value == Keyword_float ||
-           t->value == Keyword_long ||
-           t->value == Keyword_short ||
-           t->value == Keyword__Bool ||
-           t->value == Keyword__Complex ||
-           t->value == Keyword__Imaginary
-           ;
-   if (is_type_spec) {
-      switch (t->value) {
-         case Keyword_int: {
-            result.type = Type_INT;
-            result.bits = 32;
-         } break;
-         case Keyword_char: {
-            result.type = Type_CHAR;
-            result.bits = 8;
-         } break;
-         case Keyword_float: {
-            result.type = Type_FLOAT;
-            result.bits = 32;
-         } break;
-         case Keyword_long: {
+void
+parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
+   if (out->type != Type_NONE) {
+      parseError(p, "Cannot have more than one type specifier in declaration.");
+   }
+   switch (t->value) {
+      case Keyword_int: {
+         out->type = Type_INT;
+         out->bits = 32;
+      } break;
+      case Keyword_char: {
+         out->type = Type_CHAR;
+         out->bits = 8;
+      } break;
+      case Keyword_float: {
+         out->type = Type_FLOAT;
+         out->bits = 32;
+      } break;
+      case Keyword_struct: {
+         out->type = Type_STRUCT;
+      } break;
+      case Keyword_long: {
+         out->type = Type_INT;
+         out->bits = 64;
+      } break;
+      case Keyword_short: {
+         out->type = Type_INT;
+         out->bits = 16;
+      } break;
+      case Keyword_union: {
+         NotImplemented("unions");
+      } break;
+      case Keyword__Bool: {
 
-         } //break;
-         case Keyword_short: {
+      } //break;
+      case Keyword__Complex: {
 
-         } //break;
-         case Keyword__Bool: {
+      } //break;
+      case Keyword__Imaginary: {
+         NotImplemented("Type Specifier.");
+      } //break;
+      default: {
+         // Not a type specifier.
+      } break;
+   }
+}
 
-         } //break;
-         case Keyword__Complex: {
 
-         } //break;
-         case Keyword__Imaginary: {
-            NotImplemented("Type Specifier.");
-         } //break;
+int
+parseTypeQualifier(Token* t) {
+   int quals = 0;
+
+   int v = t->cast.integer;
+
+   quals =  (v == Keyword_const) ? Qual_CONST : 0
+          | (v == Keyword_restrict) ? Qual_RESTRICT : 0
+          | (v == Keyword_volatile) ? Qual_VOLATILE : 0;
+
+   return quals;
+}
+
+AstNode*
+parseStructDeclaration(Parser* p) {
+   AstNode* result = NULL;
+   if (peekKeyword(p, Keyword_struct)) {
+      /* int qualifiers = 0; */
+      /* while (true) { */
+      /*    int qual = parseTypeQualifier(p->token); */
+      /*    if (qual) { */
+      /*       qualifiers |= qual; */
+      /*       nextToken(p); */
+      /*    } */
+      /*    else { */
+      /*       break; */
+      /*    } */
+      /* } */
+      Ctype ctype = Zero;
+      parseTypeSpecifier(p, p->token, &ctype);
+      if (ctype.type == Type_STRUCT) {
+         Token* id = nextToken(p);
+         if (id->type != TType_ID) {
+            // TODO: Keep going here. Specifier includes the whole struct.
+            parseError(p, "Expected identifier after 'struct'");
+         }
+         if (!nextPunctuator(p, '{')) {
+            parseError(p, "Expected '{' after struct identifier.");
+         }
+
+         AstNode* declarations = NULL;
+         AstNode* d = NULL;
+         for (AstNode** iter = &declarations;
+              (d = parseStructDeclaration(p));
+              iter = &d->next) {
+            *iter = d;
+         }
+         if (!nextPunctuator(p, '}')) {
+            parseError(p, "Expected '}' after struct declaration list.");
+         }
       }
    }
+
    return result;
 }
 
@@ -527,8 +593,8 @@ parseDeclarationSpecifiers(Parser* p) {
 #define MaxSpecifiers 1
    int storage_spec[MaxSpecifiers] = Zero;
    int n_storage_spec = 0;
-   int type_qualifiers[MaxSpecifiers] = Zero;
-   int n_type_qualifiers = 0;
+   int qualifiers = 0;
+   int qual;
 
    while (p->token->type == TType_KEYWORD) {
       Token* t = nextToken(p);
@@ -542,16 +608,10 @@ parseDeclarationSpecifiers(Parser* p) {
          ArrayPush(storage_spec, v);
       }
       // Type specifiers
-      else if ((ctype = parseTypeSpecifier(t), ctype.type)) {
+      else if ((parseTypeSpecifier(p, t, &ctype), ctype.type)) {
       }
-      else if (v == Keyword_const ||
-               v == Keyword_restrict ||
-               v == Keyword_volatile) {
-         ArrayPush(type_qualifiers, v);
-      }
-      else if (v == Keyword_struct ||
-               v == Keyword_union) {
-         NotImplemented("Struct / union specifier");
+      else if ((qual = parseTypeQualifier(t))) {
+         qualifiers |= qual;
       }
       else {
          backtrack(p, t);
@@ -851,7 +911,7 @@ parseFunctionDefinition(Parser* p) {
          Ctype type = {
             .type = Type_FUNC,
             .bits = pointerSizeBits(),
-            .node = result
+            .func = (struct CtypeFunc){ .node = result  },
          };
 
          result->ctype = type;
@@ -873,8 +933,8 @@ parseTranslationUnit(Parser* p) {
    AstNode* result = NULL;
    AstNode** cur = &result;
    while (true) {
-      *cur = parseFunctionDefinition(p);
-      if (*cur) {
+      if (   (*cur = parseFunctionDefinition(p))
+          || (*cur = parseStructDeclaration(p))) {
          cur = &((*cur)->next);
       } else {
          break;

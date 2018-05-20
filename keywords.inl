@@ -1,3 +1,4 @@
+// First line to match enum value and lines
 X(auto)
 X(break)
 X(case)
