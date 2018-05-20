@@ -1,10 +1,7 @@
-struct foo {
-   char bar;
-};
 
-int main()
-{
+int
+main() {
+   struct foo { };
    struct foo foo;
-   foo.bar = 42;
-   return foo.bar == 42;
+   return 1;
 }

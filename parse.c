@@ -475,6 +475,11 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
+AstNode*
+parseStructDeclarationList(Parser* p) {
+   return 0;
+}
+
 void
 parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
    if (out->type != Type_NONE) {
@@ -494,7 +499,24 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
          out->bits = 32;
       } break;
       case Keyword_struct: {
+         AstNode* decl_list = NULL;
          out->type = Type_STRUCT;
+         Token* id = nextToken(p);
+         if (id->type != TType_ID) {
+            expectPunctuator(p, '{');
+            decl_list = parseStructDeclarationList(p);
+            noneIfNull(p->arena, &decl_list);
+            expectPunctuator(p, '}');
+         } else {
+            out->struct_.tag = id->cast.string;
+            if (nextPunctuator(p, '{')) {
+               decl_list = parseStructDeclarationList(p);
+               noneIfNull(p->arena, &decl_list);
+               expectPunctuator(p, '}');
+            }
+         }
+         // TODO: keep going here
+         out->struct_.decl_list = (char*)decl_list;
       } break;
       case Keyword_long: {
          out->type = Type_INT;
@@ -534,49 +556,6 @@ parseTypeQualifier(Token* t) {
           | (v == Keyword_volatile) ? Qual_VOLATILE : 0;
 
    return quals;
-}
-
-AstNode*
-parseStructDeclaration(Parser* p) {
-   AstNode* result = NULL;
-   if (peekKeyword(p, Keyword_struct)) {
-      /* int qualifiers = 0; */
-      /* while (true) { */
-      /*    int qual = parseTypeQualifier(p->token); */
-      /*    if (qual) { */
-      /*       qualifiers |= qual; */
-      /*       nextToken(p); */
-      /*    } */
-      /*    else { */
-      /*       break; */
-      /*    } */
-      /* } */
-      Ctype ctype = Zero;
-      parseTypeSpecifier(p, p->token, &ctype);
-      if (ctype.type == Type_STRUCT) {
-         Token* id = nextToken(p);
-         if (id->type != TType_ID) {
-            // TODO: Keep going here. Specifier includes the whole struct.
-            parseError(p, "Expected identifier after 'struct'");
-         }
-         if (!nextPunctuator(p, '{')) {
-            parseError(p, "Expected '{' after struct identifier.");
-         }
-
-         AstNode* declarations = NULL;
-         AstNode* d = NULL;
-         for (AstNode** iter = &declarations;
-              (d = parseStructDeclaration(p));
-              iter = &d->next) {
-            *iter = d;
-         }
-         if (!nextPunctuator(p, '}')) {
-            parseError(p, "Expected '}' after struct declaration list.");
-         }
-      }
-   }
-
-   return result;
 }
 
 AstNode*
@@ -663,6 +642,7 @@ AstNode*
 parseDeclarator(Parser* p) {
    AstNode* r = NULL;
    Token* t;
+   Token* bt = marktrack(p);
    if (nextPunctuator(p, '(')) {
       parseError(p, "Function declarators not supported yet");
    }
@@ -685,7 +665,7 @@ parseDeclarator(Parser* p) {
       r = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATOR, id, NULL, t->line_number);
    }
    else {
-      parseError(p, "unhandled error");
+      backtrack(p, bt);
    }
    return r;
 }
@@ -708,21 +688,25 @@ parseDeclaration(Parser* p) {
    AstNode* specifiers = parseDeclarationSpecifiers(p);
    if (specifiers) {
       AstNode* declarator = parseDeclarator(p);
-      AstNode* initializer = NULL;
 
-      Token* bt = marktrack(p);
-      if (nextPunctuator(p, '=')) {
-         initializer = parseInitializer(p);
+      if (declarator) {
+         AstNode* initializer = NULL;
+
+         Token* bt = marktrack(p);
+         if (nextPunctuator(p, '=')) {
+            initializer = parseInitializer(p);
+         }
+         else {
+            backtrack(p, bt);
+         }
+         noneIfNull(p->arena, &initializer);
+         declarator->next = initializer;
       }
-      else {
-         backtrack(p, bt);
-      }
+
       expectPunctuator(p, ';');
 
+      noneIfNull(p->arena, &declarator);
       result = makeAstNode(p->arena, Ast_DECLARATION, specifiers, declarator);
-
-      noneIfNull(p->arena, &initializer);
-      declarator->next = initializer;
    }
    return result;
 }
@@ -917,6 +901,9 @@ parseFunctionDefinition(Parser* p) {
          result->ctype = type;
       }
    }
+   else {
+      backtrack(p, bt);
+   }
    return result;
 }
 
@@ -933,8 +920,8 @@ parseTranslationUnit(Parser* p) {
    AstNode* result = NULL;
    AstNode** cur = &result;
    while (true) {
-      if (   (*cur = parseFunctionDefinition(p))
-          || (*cur = parseStructDeclaration(p))) {
+      if (   (*cur = parseFunctionDefinition(p))) {
+          // || (*cur = parseDeclaration(p))) {     // TODO: Top level declarations.
          cur = &((*cur)->next);
       } else {
          break;

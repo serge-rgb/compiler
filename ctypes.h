@@ -36,13 +36,14 @@ struct Ctype {
    int      bits;
 
    union {
-   struct CtypeStruct {
+      struct CtypeStruct {
+         char* tag;
+         char* decl_list;  // TODO: impl
+      } struct_;
 
-   } struct_;
-
-   struct CtypeFunc {
-      struct AstNode* node; // TODO: refactor?
-   } func;
+      struct CtypeFunc {
+         struct AstNode* node; // TODO: refactor?
+      } func;
 
       // CtypeStruct struct_;
       // CtypeFunc func;
