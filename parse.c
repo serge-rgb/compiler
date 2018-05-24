@@ -4,12 +4,12 @@ typedef struct RegisterValue_s RegisterValue;
 
 
 #define CTYPE_HASHMAP_SIZE 128
-typedef struct Parser_s {
+struct Parser {
    Token* token;  // The next token to parse.
    Arena* arena;
    AstNode* tree;
    char* file_name;
-} Parser;
+} typedef Parser;
 
 // A function that takes a Parser and returns an AstNode*
 typedef AstNode* ParseFunction(Parser*);
@@ -475,9 +475,55 @@ parseExpression(Parser* p) {
 
 // ==== Declarations ====
 
+void parseTypeSpecifier(Parser* p, Token* t, Ctype* out);
+AstNode* parseDeclarator(Parser* p);
+
 AstNode*
 parseStructDeclarationList(Parser* p) {
-   return 0;
+   AstNode* decls = NULL;
+   AstNode** decls_iter = &decls;
+   // Parse struct declarations
+   while (true) {
+      // Parse a list of type specifiers
+      AstNode* specs = NULL;
+      AstNode** iter = &specs;
+      while (true) {
+         Ctype ctype = Zero;
+         parseTypeSpecifier(p, p->token, &ctype);
+         if (ctype.type == Type_NONE) {
+            break;
+         }
+         nextToken(p);
+         AstNode* spec = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, p->token->line_number);
+         (*iter) = spec;
+         iter = &spec->next;
+      }
+      if (!specs) {
+         goto end;
+      }
+      // Parse struct declarator list
+      AstNode* decl = NULL;
+      AstNode** decl_iter = &decl;
+      while (true) {
+         *decl_iter = parseDeclarator(p);
+         // TODO: Bit field colon in struct declarator.
+         if (!*decl_iter) {
+            break;
+         }
+         decl_iter = &(*decl_iter)->next;
+      }
+      if (!decl) {
+         parseError(p, "Expected declarator in struct declaration.");
+      }
+
+      expectPunctuator(p, ';');
+
+      *decls_iter = makeAstNode(p->arena, Ast_DECLARATION, specs, decl);
+      decls_iter = &(*decls_iter)->next;
+   }
+end:
+
+   return decls;
 }
 
 void
@@ -515,8 +561,7 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
                expectPunctuator(p, '}');
             }
          }
-         // TODO: keep going here
-         out->struct_.decl_list = (char*)decl_list;
+         out->struct_.decls = decl_list;
       } break;
       case Keyword_long: {
          out->type = Type_INT;
@@ -605,9 +650,6 @@ parseDeclarationSpecifiers(Parser* p) {
    return result;
 }
 
-// Forward declaration to fix circular dependency with parseDeclarator
-AstNode* parseDeclarator(Parser* p);
-
 AstNode*
 parameterTypeList(Parser* p) {
    AstNode* result = NULL;
@@ -686,18 +728,15 @@ AstNode*
 parseDeclaration(Parser* p) {
    AstNode* result = NULL;
    AstNode* specifiers = parseDeclarationSpecifiers(p);
+   // TODO: Declaration lists
    if (specifiers) {
       AstNode* declarator = parseDeclarator(p);
 
       if (declarator) {
          AstNode* initializer = NULL;
 
-         Token* bt = marktrack(p);
          if (nextPunctuator(p, '=')) {
             initializer = parseInitializer(p);
-         }
-         else {
-            backtrack(p, bt);
          }
          noneIfNull(p->arena, &initializer);
          declarator->next = initializer;

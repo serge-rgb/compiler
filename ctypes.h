@@ -38,7 +38,7 @@ struct Ctype {
    union {
       struct CtypeStruct {
          char* tag;
-         char* decl_list;  // TODO: impl
+         struct AstNode* decls;
       } struct_;
 
       struct CtypeFunc {

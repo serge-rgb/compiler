@@ -20,10 +20,11 @@ List of features.
 - Array bounds checking whenever possible.
 - C++ auto
 - else after while
-- declarations inside if
 - Variable-sized array (does C11 already have this?)
 
 Maybe... :
+- lax type compatibility rules for anonymous structs
+- declarations inside if
 - "Fat" pointers (lang support for pointers + lengths)
 - New preprocessor
 - Type dispatch

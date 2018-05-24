@@ -898,6 +898,88 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
 void emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target);
 
 void
+emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
+   AstNode* specifier = node->child;
+   AstNode* declarator = specifier->next;
+   AstNode* rhs = declarator->next;
+
+   int bits = specifier->ctype.bits;
+
+   if (specifier->ctype.type == Type_STRUCT) {
+      char* tag_str = specifier->ctype.struct_.tag;
+      AstNode* decls = specifier->ctype.struct_.decls;
+      // TODO: Anonymous structs
+      if (tag_str) {
+         if (findTag(c, tag_str)) {
+            codegenError("Struct identifier redeclared: %s");
+         }
+
+         SymEntry entry = {
+            .etype = (ExprType) {
+               .c = specifier->ctype,
+               .location = Zero,
+            },
+            .offset = 0,
+         };
+         symInsert(&c->scope->tag_table, tag_str, entry);
+      }
+      for (AstNode* decl = decls;
+           decl;
+           decl = decl->next) {
+         AstNode* spec = decl->child;
+         AstNode* declarator = spec->next;
+
+         printf("Decl name: %s\n", declarator->child->tok->cast.string);
+         Break; // TODO: Keep going here. Add struct layout.
+      }
+   }
+
+   if (declarator->type != Ast_NONE) {
+      AstNode* ast_id = declarator->child;
+      char* id_str = ast_id->tok->cast.string;
+      if (symGet(&c->scope->symbol_table, id_str) != NULL) {
+         codegenError("Symbol redeclared in scope");
+      }
+      // TODO: top level declarations
+      stackPushOffset(c, bits/8);
+
+      if (isLiteral(rhs)) {
+         // TODO: Non-integer values.
+         int value = rhs->tok->value;
+
+         switch (bits) {
+            case 32: {
+               instructionPrintf(c, node->line_number, "mov DWORD [ rsp ], 0x%x", value);
+            } break;
+            case 8: {
+               instructionPrintf(c, node->line_number, "mov BYTE [ rsp ], 0x%x", value);
+            } break;
+            default: {
+               NotImplemented("Declaration size");
+            } break;
+         }
+      }
+      else if (rhs->type != Ast_NONE)/* right-hand-side is not a literal*/ {
+         ExprType type = {};
+         codegenEmit(c, rhs, &type, Target_ACCUM );
+         instructionReg(c, rhs->line_number, "mov QWORD [ rsp ], %s", 64, Reg_RAX);
+      }
+      else {
+         // TODO: scc initializes to zero by default.
+      }
+      SymEntry entry = {
+         .etype = (ExprType) {
+            .c = specifier->ctype,
+            .location = Zero // TODO: location!
+         },
+         .offset = c->stack_offset
+      };
+
+      symInsert(&c->scope->symbol_table, id_str, entry);
+   }
+}
+
+void
 emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
    switch (stmt->type) {
       case Ast_COMPOUND_STMT : {
@@ -911,74 +993,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
       } break;
       case Ast_DECLARATION: {
-         AstNode* specifier = stmt->child;
-         AstNode* declarator = specifier->next;
-         AstNode* rhs = declarator->next;
-
-         int bits = specifier->ctype.bits;
-
-         if (specifier->ctype.type == Type_STRUCT) {
-            char* tag_str = specifier->ctype.struct_.tag;
-            char* decl_list = specifier->ctype.struct_.decl_list;
-            if (tag_str && decl_list) {
-               if (findTag(c, tag_str)) {
-                  codegenError("Struct identifier redeclared: %s");
-               }
-
-               SymEntry entry = {
-                  .etype = (ExprType) {
-                     .c = specifier->ctype,
-                     .location = Zero,
-                  },
-                  .offset = 0,
-               };
-               symInsert(&c->scope->tag_table, tag_str, entry);
-            }
-         }
-
-         if (declarator->type != Ast_NONE) {
-            AstNode* ast_id = declarator->child;
-            char* id_str = ast_id->tok->cast.string;
-            if (symGet(&c->scope->symbol_table, id_str) != NULL) {
-               codegenError("Symbol redeclared in scope");
-            }
-            // TODO: top level declarations
-            stackPushOffset(c, bits/8);
-
-            if (isLiteral(rhs)) {
-               // TODO: Non-integer values.
-               int value = rhs->tok->value;
-
-               switch (bits) {
-                  case 32: {
-                     instructionPrintf(c, stmt->line_number, "mov DWORD [ rsp ], 0x%x", value);
-                  } break;
-                  case 8: {
-                     instructionPrintf(c, stmt->line_number, "mov BYTE [ rsp ], 0x%x", value);
-                  } break;
-                  default: {
-                     NotImplemented("Declaration size");
-                  } break;
-               }
-            }
-            else if (rhs->type != Ast_NONE)/* right-hand-side is not a literal*/ {
-               ExprType type = {};
-               codegenEmit(c, rhs, &type, Target_ACCUM );
-               instructionReg(c, rhs->line_number, "mov QWORD [ rsp ], %s", 64, Reg_RAX);
-            }
-            else {
-               // TODO: scc initializes to zero by default.
-            }
-            SymEntry entry = {
-               .etype = (ExprType) {
-                  .c = specifier->ctype,
-                  .location = Zero // TODO: location!
-               },
-               .offset = c->stack_offset
-            };
-
-            symInsert(&c->scope->symbol_table, id_str, entry);
-         }
+         emitDeclaration(c, stmt, target);
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->child;
