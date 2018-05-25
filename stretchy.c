@@ -33,4 +33,5 @@ bufMaybeResize(void** ptr, sz count, sz size) {
          (ptr)[--bufHdr(ptr)->used])
 
 #define _bufErrIfZero(ptr) \
-        (*(volatile u8*)0 = 0)
+        (bufCount(ptr) > 0  ? \
+         0 : (*(volatile u8*)0 = 0))
