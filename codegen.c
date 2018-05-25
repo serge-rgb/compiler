@@ -11,11 +11,11 @@ typedef enum EmitTarget_n {
 } EmitTarget;
 
 typedef struct Location_s {
-   int type; enum {
-      LocationType_IMMEDIATE,  // Default, not an lvalue.
-      LocationType_REGISTER,
-      LocationType_STACK,
-   };
+   enum {
+      Location_IMMEDIATE,  // Default, not an lvalue.
+      Location_REGISTER,
+      Location_STACK,
+   }; int type;
    union {
       // REGISTER
       struct {
@@ -62,15 +62,11 @@ typedef struct ExprType_s {
    Location location;
 } ExprType;
 
-typedef struct SymEntry_s {
-   ExprType etype;
-   u64 offset;  // TODO: maybe this should be a location?
-} SymEntry;
 
 #define HashmapName     SymTable
 #define HashmapPrefix   sym
 #define HashmapKey      char*
-#define HashmapValue    SymEntry
+#define HashmapValue    ExprType
 #define HashFunction    hashStrPtr
 #define KeyCompareFunc  compareStringKey
 #include "hashmap.inl"
@@ -132,59 +128,59 @@ typedef struct Codegen_s {
 static
 Location g_registers[] = {
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "rax", .reg_32 = "eax", .reg_8  = "al",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "rbx", .reg_32 = "ebx", .reg_8  = "bl",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "rcx", .reg_32 = "ecx", .reg_8  = "cl",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "rdx", .reg_32 = "edx", .reg_8  = "dl",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "rsi", .reg_32 = "esi", .reg_8 = "ah",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "rdi", .reg_32 = "edi", .reg_8 = "bh"
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r8", .reg_32 = "r8d", .reg_8 = "ch",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r9", .reg_32 = "r9d",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r10", .reg_32 = "r10d",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r11", .reg_32 = "r11d",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r12", .reg_32 = "r12d",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r13", .reg_32 = "r13d",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r14", .reg_32 = "r14d",
    },
    {
-      .type = LocationType_REGISTER,
+      .type = Location_REGISTER,
       .reg    = "r15", .reg_32 = "r15d",
    },
 
@@ -193,9 +189,9 @@ Location g_registers[] = {
 // Forward declaration for recursive calls.
 void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
 
-SymEntry*
+ExprType*
 findTag(Codegen* c, char* name) {
-   SymEntry* entry = NULL;
+   ExprType* entry = NULL;
    Scope* scope = c->scope;
    while (scope) {
       entry = symGet(&scope->tag_table, name);
@@ -206,9 +202,9 @@ findTag(Codegen* c, char* name) {
    return entry;
 }
 
-SymEntry*
+ExprType*
 findSymbol(Codegen* c, char* name) {
-   SymEntry* entry = NULL;
+   ExprType* entry = NULL;
    Scope* scope = c->scope;
    while (scope) {
       entry = symGet(&scope->symbol_table, name);
@@ -269,7 +265,7 @@ char*
 locationString(Codegen* c, Location* r, int bits) {
    char *res = NULL;
    switch(r->type) {
-      case LocationType_REGISTER: {
+      case Location_REGISTER: {
          if (bits == 64) {
             res = r->reg;
          }
@@ -284,11 +280,11 @@ locationString(Codegen* c, Location* r, int bits) {
          }
       }
       break;
-      case LocationType_IMMEDIATE: {
+      case Location_IMMEDIATE: {
          res = allocate(c->scope->arena, 128);
          snprintf(res, 128, "0x%x", (int)r->immediate_value);
       } break;
-      case LocationType_STACK: {
+      case Location_STACK: {
          u64 rsp_relative = c->stack_offset - r->offset;
 
 #define ResultSize 64
@@ -449,14 +445,11 @@ stackPushOffset(Codegen* c, u64 bytes) {
 
 Location
 locationFromId(Codegen* c, char* id) {
-   SymEntry* entry = findSymbol(c, id);
+   ExprType* entry = findSymbol(c, id);
    if (!entry) {
       codegenError("Use of undeclared identifier %s", id);
    }
-   Location var = {
-      .type = LocationType_STACK,
-      .offset = entry->offset,
-   };
+   Location var = entry->location;
    return var;
 }
 
@@ -639,11 +632,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          AstNode* func = node->child;
          char* label = func->tok->cast.string;
 
-         SymEntry* sym = findSymbol(c, label);
+         ExprType* sym = findSymbol(c, label);
          if (!sym) {
             codegenError("Call to undefined function. %s", label);
          }
-         Ctype* type = &sym->etype.c;
+         Ctype* type = &sym->c;
          if (type->type != Type_FUNC) {
             codegenError("%s is not a function.", label);
          }
@@ -657,7 +650,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             targetPushParameter(c, n_param++, param);
          }
 
-         i32 expected_nparam = funcNumParams(sym->etype.c.func.node);
+         i32 expected_nparam = funcNumParams(sym->c.func.node);
 
          if (n_param != expected_nparam) {
             codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
@@ -669,7 +662,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             stackPushReg(c, Reg_RAX);
          }
 
-         *expr_type = sym->etype;
+         *expr_type = *sym;
       }
       else if (node->type == Ast_NUMBER) {
          int bits = 32;
@@ -697,7 +690,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
       }
       else if (node->type == Ast_ID) {
          char* id_str = node->tok->cast.string;
-         SymEntry* entry = findSymbol(c, id_str);
+         ExprType* entry = findSymbol(c, id_str);
          Location loc = locationFromId(c, id_str);
 
          if (!entry) {
@@ -706,7 +699,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          char* size_str = NULL;
 
-         switch (entry->etype.c.bits) {
+         switch (entry->c.bits) {
             case 32: {
                size_str = "DWORD";
             } break;
@@ -720,22 +713,21 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                NotImplemented("Can't handle this size.");
             } break;
          }
-         if (entry->etype.c.bits <= 16) {
+         if (entry->c.bits <= 16) {
             instructionPrintf(c, 0, "xor %s, %s",
                               locationString(c, &g_registers[Reg_RAX], 64),
                               locationString(c, &g_registers[Reg_RAX], 64));
          }
 
          instructionPrintf(c, 0, "mov %s, %s",
-                           locationString(c, &g_registers[Reg_RAX], entry->etype.c.bits),
-                           locationString(c, &loc, entry->etype.c.bits));
+                           locationString(c, &g_registers[Reg_RAX], entry->c.bits),
+                           locationString(c, &loc, entry->c.bits));
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
 
          if (expr_type) {
-            *expr_type = entry->etype;
-            expr_type->location = loc;
+            *expr_type = *entry;
          }
       }
       // Assignment expressions
@@ -776,7 +768,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          AstNode* expr = node->child;
          ExprType local_etype = {};
          emitExpression(c, expr, &local_etype, Target_STACK);
-         if (local_etype.location.type == LocationType_IMMEDIATE) {
+         if (local_etype.location.type == Location_IMMEDIATE) {
             codegenError("Attempting to increment an rvalue.");
          }
          emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
@@ -916,12 +908,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             codegenError("Struct identifier redeclared: %s");
          }
 
-         SymEntry entry = {
-            .etype = (ExprType) {
-               .c = specifier->ctype,
-               .location = Zero,
-            },
-            .offset = 0,
+         ExprType entry = {
+            .c = specifier->ctype,
+            // TODO: tag table should have different entry.
+            .location = { .type = Location_STACK, .offset = 0 /*struct tag does not have a place*/ },
          };
 
          Assert(bits == 0);
@@ -935,20 +925,20 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
             char* member_id = declarator->child->tok->cast.string;
             struct StructMember member = { member_id, bits };
-            bufPush(entry.etype.c.struct_.members, member);
+            bufPush(entry.c.struct_.members, member);
 
             bits += spec->ctype.bits;
          }
-         entry.etype.c.bits = bits;
+         entry.c.bits = bits;
          symInsert(&c->scope->tag_table, tag_str, entry);
       }
       if (tag_str && declarator->type != Ast_NONE) {
          /* char* id = declarator->child->tok->cast.string; */
-         SymEntry* entry = Zero;
+         ExprType* entry = Zero;
          if (!(entry = findTag(c, tag_str))) {
             codegenError("Use of undeclared struct name %s", tag_str);
          }
-         bits = entry->etype.c.bits;
+         bits = entry->c.bits;
       }
    }
 
@@ -985,12 +975,9 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else {
          // TODO: scc initializes to zero by default.
       }
-      SymEntry entry = {
-         .etype = (ExprType) {
-            .c = specifier->ctype,
-            .location = Zero // TODO: location!
-         },
-         .offset = c->stack_offset
+      ExprType entry = {
+         .c = specifier->ctype,
+         .location = { .type = Location_STACK, .offset = c->stack_offset },
       };
 
       symInsert(&c->scope->symbol_table, id_str, entry);
@@ -1112,18 +1099,15 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    if (specifier && declarator && compound) {
       char *func_name = declarator->child->tok->cast.string;
 
-      SymEntry* entry = findSymbol(c, func_name);
+      ExprType* entry = findSymbol(c, func_name);
       if (entry) {
          codegenError("Redefining function %s", func_name);
       } else {
          symInsert(&c->scope->symbol_table,
                    func_name,
-                   (SymEntry) {
-                     .etype = {
-                        .c= node->ctype,
-                        .location = Zero, // TODO: location for functions
-                     },
-                     .offset = 0,
+                   (ExprType) {
+                      .c= node->ctype,
+                      .location = { .type = Location_STACK, .offset = 0 }, // TODO: location for functions
                    });
       }
 
@@ -1153,9 +1137,9 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
             targetPopParameter(c, n_param++, Target_STACK);
 
-            SymEntry entry = {
-               .etype = { .c= param_type_spec->ctype },
-               .offset = c->stack_offset,
+            ExprType entry = {
+               .c = param_type_spec->ctype,
+               .location = { .type = Location_STACK, .offset = c->stack_offset },
             };
             symInsert(&c->scope->symbol_table, id_str, entry);
 
