@@ -22,5 +22,15 @@ bufMaybeResize(void** ptr, sz count, sz size) {
    }
 }
 
-#define bufCount(ptr) ((buf) ? bufHdr(ptr)->count : 0)
-#define bufPush(ptr, e) (bufMaybeResize((void**)&ptr, 1, sizeof(e)), (ptr)[bufHdr(ptr)->used++] = (e))
+#define bufCount(ptr) \
+        ((ptr) ? bufHdr(ptr)->used : 0)
+
+#define bufPush(ptr, e) \
+        (bufMaybeResize((void**)&ptr, 1, sizeof(e)), (ptr)[bufHdr(ptr)->used++] = (e))
+
+#define bufPop(ptr)          \
+        (_bufErrIfZero(ptr), \
+         (ptr)[--bufHdr(ptr)->used])
+
+#define _bufErrIfZero(ptr) \
+        (*(volatile u8*)0 = 0)

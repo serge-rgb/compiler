@@ -117,9 +117,7 @@ typedef struct Codegen_s {
    SymTable*   symbol_table;
 
    u64         stack_offset;
-   u64         n_stack;
-   // TODO: Stretchy buffer stack value
-   StackValue  stack[1024];
+   StackValue* stack;
 
    // Constants
    AstNode* one;
@@ -425,14 +423,14 @@ void
 stackPushReg(Codegen* c, RegisterEnum reg) {
    instructionPrintf(c, 0, "push %s", locationString(c, &g_registers[reg], 64));
    c->stack_offset += 8;
-   c->stack[c->n_stack++] = (StackValue){ .type = Stack_QWORD };
+   bufPush(c->stack, (StackValue){ .type = Stack_QWORD });
 }
 
 void
 stackPushImm(Codegen* c, i64 val) {
    instructionPrintf(c, 0, "push %d", val);
    c->stack_offset += 8;
-   c->stack[c->n_stack++] = (StackValue){ .type = Stack_QWORD };
+   bufPush(c->stack, (StackValue){ .type = Stack_QWORD });
 }
 
 void
@@ -440,7 +438,8 @@ stackPushOffset(Codegen* c, u64 bytes) {
    Assert(bytes);
    instructionPrintf(c, 0, "sub rsp, %d", bytes);
    c->stack_offset += bytes;
-   c->stack[c->n_stack++] = (StackValue) { .type = Stack_OFFSET, .offset = bytes };
+   StackValue val = { .type = Stack_OFFSET, .offset = bytes };
+   bufPush(c->stack, val);
 }
 
 Location
@@ -455,7 +454,7 @@ locationFromId(Codegen* c, char* id) {
 
 void
 stackPop(Codegen* c, RegisterEnum reg) {
-   StackValue s = c->stack[--c->n_stack];
+   StackValue s = bufPop(c->stack);
    switch (s.type) {
       case Stack_QWORD: {
          instructionReg(c, 0, "pop %s", 64, reg);
@@ -1158,7 +1157,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       instructionPrintf(c, 0, ".func_end:");
 
-      while (c->n_stack > 0)  {
+      while (bufCount(c->stack) > 0)  {
          stackPop(c, Reg_RBX);
       }
 
