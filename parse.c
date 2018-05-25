@@ -495,6 +495,7 @@ parseStructDeclarationList(Parser* p) {
          }
          nextToken(p);
          AstNode* spec = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, p->token->line_number);
+         spec->ctype = ctype;
          (*iter) = spec;
          iter = &spec->next;
       }

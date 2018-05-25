@@ -441,6 +441,7 @@ stackPushImm(Codegen* c, i64 val) {
 
 void
 stackPushOffset(Codegen* c, u64 bytes) {
+   Assert(bytes);
    instructionPrintf(c, 0, "sub rsp, %d", bytes);
    c->stack_offset += bytes;
    c->stack[c->n_stack++] = (StackValue) { .type = Stack_OFFSET, .offset = bytes };
@@ -903,13 +904,14 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
    AstNode* declarator = specifier->next;
    AstNode* rhs = declarator->next;
 
+   // TODO: Emit warning for empty declarations.
    int bits = specifier->ctype.bits;
 
    if (specifier->ctype.type == Type_STRUCT) {
       char* tag_str = specifier->ctype.struct_.tag;
       AstNode* decls = specifier->ctype.struct_.decls;
       // TODO: Anonymous structs
-      if (tag_str) {
+      if (tag_str && decls) {
          if (findTag(c, tag_str)) {
             codegenError("Struct identifier redeclared: %s");
          }
@@ -921,16 +923,32 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             },
             .offset = 0,
          };
+
+         Assert(bits == 0);
+
+         for (AstNode* decl = decls;
+              decl;
+              decl = decl->next) {
+            AstNode* spec = decl->child;
+            AstNode* declarator = spec->next;
+
+
+            char* member_id = declarator->child->tok->cast.string;
+            struct StructMember member = { member_id, bits };
+            bufPush(entry.etype.c.struct_.members, member);
+
+            bits += spec->ctype.bits;
+         }
+         entry.etype.c.bits = bits;
          symInsert(&c->scope->tag_table, tag_str, entry);
       }
-      for (AstNode* decl = decls;
-           decl;
-           decl = decl->next) {
-         AstNode* spec = decl->child;
-         AstNode* declarator = spec->next;
-
-         printf("Decl name: %s\n", declarator->child->tok->cast.string);
-         Break; // TODO: Keep going here. Add struct layout.
+      if (tag_str && declarator->type != Ast_NONE) {
+         /* char* id = declarator->child->tok->cast.string; */
+         SymEntry* entry = Zero;
+         if (!(entry = findTag(c, tag_str))) {
+            codegenError("Use of undeclared struct name %s", tag_str);
+         }
+         bits = entry->etype.c.bits;
       }
    }
 

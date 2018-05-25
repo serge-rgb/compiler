@@ -34,6 +34,7 @@ exit 0
 #endif
 
 #include "memory.c"
+#include "stretchy.c"
 #include "hashmap.c"
 #include "string.c"
 #include "lexer.c"

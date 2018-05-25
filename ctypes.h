@@ -33,12 +33,17 @@ struct Ctype {
       Qual_RESTRICT = (1<<1),
       Qual_VOLATILE = (1<<2),
    }; int qualifiers;
+
    int      bits;
 
    union {
       struct CtypeStruct {
          char* tag;
          struct AstNode* decls;
+         struct StructMember {
+            char* id;
+            u64 offset;
+         } * members;
       } struct_;
 
       struct CtypeFunc {
