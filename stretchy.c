@@ -29,9 +29,9 @@ bufMaybeResize(void** ptr, sz count, sz size) {
         (bufMaybeResize((void**)&ptr, 1, sizeof(e)), (ptr)[bufHdr(ptr)->used++] = (e))
 
 #define bufPop(ptr)          \
-        (_bufErrIfZero(ptr), \
+        (_bufCrashIfZero(ptr), \
          (ptr)[--bufHdr(ptr)->used])
 
-#define _bufErrIfZero(ptr) \
+#define _bufCrashIfZero(ptr) \
         (bufCount(ptr) > 0  ? \
          0 : (*(volatile u8*)0 = 0))
