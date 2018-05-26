@@ -20,9 +20,11 @@ typedef size_t sz;
 #define false 0
 #define Zero {0}
 
-#define ASCII_MAX 128
-#define LINE_MAX  256
-#define PATH_MAX  256
+#define AsciiMax 128
+#define LineMax  256
+#define PathMax  256
+
+#define MaxU64 0xffffffffffffffff
 
 #define Max(a, b) ((a) < (b) ? (b) : (a))
 #define Min(a, b) ((a) > (b) ? (b) : (a))

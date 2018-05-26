@@ -42,6 +42,7 @@ struct Ctype {
          struct AstNode* decls;
          struct StructMember {
             char* id;
+            struct Ctype* ctype;
             u64 offset;
          } * members;
       } struct_;

@@ -4,7 +4,7 @@ main() {
    struct foo {
       int x;
    };
-   struct foo foo;
-   foo.x = 1;
-   return 1;
+   struct foo myvar;
+   myvar.x = 1;
+   return myvar.x;
 }

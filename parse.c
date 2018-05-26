@@ -31,8 +31,8 @@ void
 parseError(Parser* p, char* msg, ...) {
    va_list args;
    va_start(args, msg);
-   char buffer[LINE_MAX] = {0};
-   vsnprintf(buffer, LINE_MAX, msg, args);
+   char buffer[LineMax] = {0};
+   vsnprintf(buffer, LineMax, msg, args);
    fprintf(stderr, "Syntax error: %s\n", buffer);
 
    Break;

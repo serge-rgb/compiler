@@ -295,7 +295,7 @@ getToken(Arena* a, FileStream* fs) {
    }
    else if ((punctuator_token = isPunctuator(fs)) != 0) {
       t.type = TType_PUNCTUATOR;
-      if (punctuator_token && punctuator_token < ASCII_MAX) {
+      if (punctuator_token && punctuator_token < AsciiMax) {
          t.cast.character = fileStreamRead(fs);
       }
       else if (punctuator_token < 255) {
@@ -367,7 +367,7 @@ tokenPrint(Token* token) {
    printf("[");
    switch(token->type) {
       case TType_PUNCTUATOR: {
-         if (token->value < ASCII_MAX) {
+         if (token->value < AsciiMax) {
             printf("PUNCTUATOR %c", (char)token->cast.character);
          }
          else {

@@ -247,8 +247,8 @@ void
 codegenError(char* msg, ...) {
    va_list args;
    va_start(args, msg);
-   char buffer[LINE_MAX] = {0};
-   vsnprintf(buffer, LINE_MAX, msg, args);
+   char buffer[LineMax] = {0};
+   vsnprintf(buffer, LineMax, msg, args);
    fprintf(stderr, "Codegen error: %s\n", buffer);
    va_end(args);
 
@@ -306,8 +306,8 @@ locationString(Codegen* c, Location* r, int bits) {
 
 void
 codegenInit(Codegen* c, char* outfile) {
-   char asmfile [PATH_MAX] = {};
-   snprintf(asmfile, PATH_MAX, "%s.asm", outfile);
+   char asmfile [PathMax] = {};
+   snprintf(asmfile, PathMax, "%s.asm", outfile);
    g_asm = fopen(asmfile, "w");
    char* prelude =
 #ifdef _WIN32
@@ -348,8 +348,8 @@ codegenInit(Codegen* c, char* outfile) {
 
 char*
 codegenHtmlHidden(Codegen* c, u64 line_number) {
-   char* hidden = allocate(c->arena, LINE_MAX);
-   snprintf(hidden, LINE_MAX, "%s: %" FORMAT_I64 , c->file_name, line_number);
+   char* hidden = allocate(c->arena, LineMax);
+   snprintf(hidden, LineMax, "%s: %" FORMAT_I64 , c->file_name, line_number);
    return hidden;
 }
 
@@ -358,16 +358,16 @@ instructionPrintf(Codegen* c, u64 line_number, char* asm_line, ...) {
    va_list args;
    va_start(args, asm_line);
 
-   char out_asm[LINE_MAX] = {0};
+   char out_asm[LineMax] = {0};
 
    if (!line_number) {
       line_number = c->last_line_number;
    } else {
       c->last_line_number = line_number;
    }
-   int written = vsnprintf(out_asm, LINE_MAX, asm_line, args);
-   if (written >= LINE_MAX - 2) {  // Counting two extra character for the new line and 0 terminator.
-      codegenError("LINE_MAX is not sufficient for instruction length.");
+   int written = vsnprintf(out_asm, LineMax, asm_line, args);
+   if (written >= LineMax - 2) {  // Counting two extra character for the new line and 0 terminator.
+      codegenError("LineMax is not sufficient for instruction length.");
    }
    if (out_asm[written-1] != '\n') {
       out_asm[written] = '\n';
@@ -684,6 +684,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          if (expr_type) {
             expr_type->c.bits = bits;
             expr_type->c.type = Type_INT;
+            expr_type->location.immediate_value = node->tok->value;
          }
       }
       else if (node->type == Ast_ID) {
@@ -738,34 +739,47 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          if (!symbol_entry) {
             codegenError("%s undeclared.", struct_str);
          }
-         Break;
          char* tag_str = symbol_entry->c.struct_.tag;
          ExprType* struct_entry = findTag(c, tag_str);
+         if (!struct_entry) {
+            codegenError("No struct named %s", tag_str);
+         }
          struct StructMember* members = struct_entry->c.struct_.members;
          // TODO: Use a hash map?
-         u64 offset = 0xffffffffffffffff;
-         C
-         for (sz i = 0; i < bufCount(members); ++i) {
+         u64 member_idx = MaxU64;
+         for (u64 i = 0; i < bufCount(members); ++i) {
             if (!strcmp(members[i].id, field_str)) {
-               offset = members[i].offset;
+               member_idx = i;
                break;
             }
          }
-         if (offset == 0xffffffffffffffff) {
+         if (member_idx == MaxU64) {
             codegenError("Struct %s does not have %s member", tag_str, field_str);
          }
+
+         struct StructMember* member = members + member_idx;
+
          Assert(symbol_entry->location.type == Location_STACK);
-         u64 loc_off = symbol_entry->location.offset + offset;
+         u64 member_offset = member->offset;
+
+         Location loc = {
+            .type = Location_STACK,
+            .offset = symbol_entry->location.offset + member_offset,
+         };
+
+         if (expr_type) {
+            expr_type->c = *(member->ctype);
+            expr_type->location = loc;
+         }
+         int bits = member->ctype->bits;
+
          if (target == Target_STACK) {
             NotImplemented("Copying objects to the stack");
          }
          else if (target == Target_ACCUM) {
-            // TODO: What if it doesn't fit in a register?
-            Location loc = {
-               .type = Location_STACK,
-               .offset = symbol_entry->location.offset + offset,
-            };
-            locationString(c, &loc, )
+            instructionPrintf(c, node->line_number, "mov %s, %s",
+                              locationString(c, &g_registers[Reg_RAX], bits),
+                              locationString(c, &loc, bits));
          }
       }
       // Assignment expressions
@@ -779,26 +793,34 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          int bits = lhs_type.c.bits;
          ExprType rhs_type = Zero;
          codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
-         instructionPrintf(c, node->line_number, "mov %s, %s",
-                           locationString(c, &g_registers[Reg_RBX], bits),
-                           locationString(c, &lhs_type.location, bits));
-         switch (op->value) {
-            case ASSIGN_INCREMENT: {
-               instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
-            }break;
-            default: {
-               NotImplemented("Different assignment expressions");
-            }
-         }
-
-         instructionPrintf(c, node->line_number, "mov %s, %s",
-                           locationString(c, &lhs_type.location, bits),
-                           locationString(c, &g_registers[Reg_RBX], bits));
-
-         if (target == Target_ACCUM) {
+         Assert (lhs_type.c.bits == rhs_type.c.bits);
+         if (op->value == '=') {
             instructionPrintf(c, node->line_number, "mov %s, %s",
-                              locationString(c, &g_registers[Reg_RAX], bits),
+                              locationString(c, &lhs_type.location, bits),
+                              locationString(c, &rhs_type.location, bits));
+         }
+         else {
+            instructionPrintf(c, node->line_number, "mov %s, %s",
+                              locationString(c, &g_registers[Reg_RBX], bits),
                               locationString(c, &lhs_type.location, bits));
+            switch (op->value) {
+               case ASSIGN_INCREMENT: {
+                  instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
+               } break;
+               default: {
+                  NotImplemented("Different assignment expressions");
+               }
+            }
+
+            instructionPrintf(c, node->line_number, "mov %s, %s",
+                              locationString(c, &lhs_type.location, bits),
+                              locationString(c, &g_registers[Reg_RBX], bits));
+
+            if (target == Target_ACCUM) {
+               instructionPrintf(c, node->line_number, "mov %s, %s",
+                                 locationString(c, &g_registers[Reg_RAX], bits),
+                                 locationString(c, &lhs_type.location, bits));
+            }
          }
       }
       else if (node->type == Ast_POSTFIX_INC ||
@@ -962,7 +984,8 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
 
             char* member_id = declarator->child->tok->cast.string;
-            struct StructMember member = { member_id, bits };
+
+            struct StructMember member = { member_id, &spec->ctype, bits };
             bufPush(entry.c.struct_.members, member);
 
             bits += spec->ctype.bits;

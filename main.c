@@ -76,10 +76,10 @@ main(int args_n, char** args) {
          int res = compileTranslationUnit(file_name, outfile);
          if (res == 0) {
             // Call nasm from here.
-            char asm_file[PATH_MAX] = {0};
-            snprintf(asm_file, PATH_MAX, "%s.asm", outfile);
-            char obj_file[PATH_MAX] = {0};
-            snprintf(obj_file, PATH_MAX, "%s.o", outfile);
+            char asm_file[PathMax] = {0};
+            snprintf(asm_file, PathMax, "%s.asm", outfile);
+            char obj_file[PathMax] = {0};
+            snprintf(obj_file, PathMax, "%s.o", outfile);
             pid_t pid = fork();
             printf("Running nasm\n");
             int nasm_status = 0;
