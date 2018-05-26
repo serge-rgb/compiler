@@ -188,7 +188,13 @@ postfixExpr(Parser* p) {
          }
       }
       else if (nextPunctuator(p, '.')) {
-         NotImplemented("Dot postfix expression");
+        Token* id = nextToken(p);
+        if (id->type != TType_ID) {
+          parseError(p, "Expected identifier after '.'");
+        }
+        AstNode* right = makeAstNode(p->arena, Ast_ID, 0, 0);
+        right->tok = id;
+        left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, left, right);
       }
       else if (nextPunctuator(p, ARROW)) {
          NotImplemented("Arrow postfix expression");

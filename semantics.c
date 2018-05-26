@@ -28,7 +28,8 @@ nodeIsExpression(AstNode* node) {
        node->type == Ast_GEQ || node->type == Ast_NOT_EQUALS ||
        node->type == Ast_FUNCCALL || node->type == Ast_ASSIGN_EXPR ||
        node->type == Ast_NUMBER || node->type == Ast_ID ||
-       node->type == Ast_POSTFIX_INC || node->type == Ast_POSTFIX_DEC) {
+       node->type == Ast_POSTFIX_INC || node->type == Ast_POSTFIX_DEC ||
+       node->type == Ast_STRUCT_MEMBER_ACCESS) {
       isExpr = true;
    }
    return isExpr;

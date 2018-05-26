@@ -33,7 +33,6 @@ typedef struct Location_s {
          u64 offset;
       };
    };
-
 } Location;
 
 
@@ -708,6 +707,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             case 8: {
                size_str = "BYTE";
             } break;
+            case 0:{
+              InvalidCodePath;
+            }
             default: {
                NotImplemented("Can't handle this size.");
             } break;
@@ -727,6 +729,43 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          if (expr_type) {
             *expr_type = *entry;
+         }
+      }
+      else if (node->type == Ast_STRUCT_MEMBER_ACCESS) {
+         char* struct_str = node->child->tok->cast.string;
+         char* field_str = node->child->next->tok->cast.string;
+         ExprType* symbol_entry = findSymbol(c, struct_str);
+         if (!symbol_entry) {
+            codegenError("%s undeclared.", struct_str);
+         }
+         Break;
+         char* tag_str = symbol_entry->c.struct_.tag;
+         ExprType* struct_entry = findTag(c, tag_str);
+         struct StructMember* members = struct_entry->c.struct_.members;
+         // TODO: Use a hash map?
+         u64 offset = 0xffffffffffffffff;
+         C
+         for (sz i = 0; i < bufCount(members); ++i) {
+            if (!strcmp(members[i].id, field_str)) {
+               offset = members[i].offset;
+               break;
+            }
+         }
+         if (offset == 0xffffffffffffffff) {
+            codegenError("Struct %s does not have %s member", tag_str, field_str);
+         }
+         Assert(symbol_entry->location.type == Location_STACK);
+         u64 loc_off = symbol_entry->location.offset + offset;
+         if (target == Target_STACK) {
+            NotImplemented("Copying objects to the stack");
+         }
+         else if (target == Target_ACCUM) {
+            // TODO: What if it doesn't fit in a register?
+            Location loc = {
+               .type = Location_STACK,
+               .offset = symbol_entry->location.offset + offset,
+            };
+            locationString(c, &loc, )
          }
       }
       // Assignment expressions
