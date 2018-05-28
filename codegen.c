@@ -70,12 +70,12 @@ typedef struct ExprType_s {
 #define KeyCompareFunc  compareStringKey
 #include "hashmap.inl"
 
-enum {
-   Stack_OFFSET,
-   Stack_QWORD,
-};
 typedef struct StackValue_s {
    unsigned int offset  : 6;
+   enum {
+      Stack_OFFSET,
+      Stack_QWORD,
+   };
    unsigned int type : 2;
 } StackValue;
 
@@ -773,14 +773,16 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
          int bits = member->ctype->bits;
 
-         if (target == Target_STACK) {
-            NotImplemented("Copying objects to the stack");
-         }
-         else if (target == Target_ACCUM) {
+         if (target != Target_NONE) {
             instructionPrintf(c, node->line_number, "mov %s, %s",
                               locationString(c, &g_registers[Reg_RAX], bits),
                               locationString(c, &loc, bits));
+
+            if (target == Target_STACK) {
+               stackPushReg(c, Reg_RAX);
+            }
          }
+
       }
       // Assignment expressions
       else if (node->type == Ast_ASSIGN_EXPR) {
@@ -792,7 +794,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
          int bits = lhs_type.c.bits;
          ExprType rhs_type = Zero;
-         codegenEmit(c, rhs, &rhs_type, Target_ACCUM);
+         codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
          Assert (lhs_type.c.bits == rhs_type.c.bits);
          if (op->value == '=') {
             instructionPrintf(c, node->line_number, "mov %s, %s",
@@ -985,10 +987,11 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
             char* member_id = declarator->child->tok->cast.string;
 
-            struct StructMember member = { member_id, &spec->ctype, bits };
+            struct StructMember member = { member_id, &spec->ctype, bits/8 };
             bufPush(entry.c.struct_.members, member);
 
             bits += spec->ctype.bits;
+            bits = AlignPow2(bits, 8);
          }
          entry.c.bits = bits;
          symInsert(&c->scope->tag_table, tag_str, entry);
@@ -1010,6 +1013,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          codegenError("Symbol redeclared in scope");
       }
       // TODO: top level declarations
+      ExprType entry = {
+         .c = specifier->ctype,
+         .location = { .type = Location_STACK, .offset = c->stack_offset },
+      };
       stackPushOffset(c, bits/8);
 
       if (isLiteral(rhs)) {
@@ -1036,10 +1043,6 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else {
          // TODO: scc initializes to zero by default.
       }
-      ExprType entry = {
-         .c = specifier->ctype,
-         .location = { .type = Location_STACK, .offset = c->stack_offset },
-      };
 
       symInsert(&c->scope->symbol_table, id_str, entry);
    }

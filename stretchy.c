@@ -8,15 +8,15 @@ typedef struct BufHdr {
 #define bufHdr(ptr) ((ptr) ? (BufHdr*)ptr - 1 : NULL)
 
 void
-bufMaybeResize(void** ptr, sz count, sz size) {
+bufMaybeResize(void** ptr, sz count, sz element_size) {
    // TODO(Out of mem)
    if (!*ptr) {
-      *ptr = calloc(1, size*count + sizeof(BufHdr));
+      *ptr = calloc(1, element_size*count + sizeof(BufHdr));
       ((BufHdr*)*ptr)->capacity = count;
       *ptr += sizeof(BufHdr);
    }
    else if (bufHdr(*ptr)->capacity - bufHdr(*ptr)->used < count) {
-      *ptr = realloc(bufHdr(*ptr), sizeof(BufHdr) + (bufHdr(*ptr)->capacity *= 2));
+      *ptr = realloc(bufHdr(*ptr), sizeof(BufHdr) + (bufHdr(*ptr)->capacity *= 2)*element_size);
       *ptr += sizeof(BufHdr);
       // TODO(Zero-out new area)
    }
