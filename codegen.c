@@ -15,6 +15,7 @@ typedef struct Location_s {
       Location_IMMEDIATE,  // Default, not an lvalue.
       Location_REGISTER,
       Location_STACK,
+      Location_POINTER,
    }; int type;
    union {
       // REGISTER
@@ -31,6 +32,9 @@ typedef struct Location_s {
       // STACK
       struct {
          u64 offset;
+      };
+      // POINTER
+      struct {
       };
    };
 } Location;
@@ -622,6 +626,123 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
 }
 
 void
+emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+   char* id_str = node->tok->cast.string;
+   ExprType* entry = findSymbol(c, id_str);
+   Location loc = locationFromId(c, id_str);
+
+   if (!entry) {
+      codegenError("Use of undeclared identifier %s", node->tok->cast.string);
+   }
+
+   char* size_str = NULL;
+
+   if (entry->c.bits > 64) {
+      Location loc = {
+         .type = Location_POINTER,
+      };
+      Ctype type = {
+         .type = Type_POINTER,
+         .pointer = (struct CtypePointer) {
+            .pointee = // TODO: Keep going here.
+         },
+      };
+      if (expr_type) expr_type->location = loc;
+   }
+   else {
+      switch (entry->c.bits) {
+         case 64: {
+            size_str = "QWORD";
+         } break;
+         case 32: {
+            size_str = "DWORD";
+         } break;
+         case 16: {
+            size_str = "WORD";
+         } break;
+         case 8: {
+            size_str = "BYTE";
+         } break;
+         case 0:{
+            InvalidCodePath;
+         }
+      }
+      if (entry->c.bits <= 16) {
+         instructionPrintf(c, 0, "xor %s, %s",
+                           locationString(c, &g_registers[Reg_RAX], 64),
+                           locationString(c, &g_registers[Reg_RAX], 64));
+      }
+
+      instructionPrintf(c, 0, "mov %s, %s",
+                        locationString(c, &g_registers[Reg_RAX], entry->c.bits),
+                        locationString(c, &loc, entry->c.bits));
+      if (expr_type) expr_type->location = loc;
+   }
+   if (target == Target_STACK) {
+      stackPushReg(c, Reg_RAX);
+   }
+
+   if (expr_type) {
+      expr_type->c = entry->c;
+   }
+
+}
+
+void
+emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+   char* struct_str = node->child->tok->cast.string;
+   char* field_str = node->child->next->tok->cast.string;
+   ExprType* symbol_entry = findSymbol(c, struct_str);
+   if (!symbol_entry) {
+      codegenError("%s undeclared.", struct_str);
+   }
+   char* tag_str = symbol_entry->c.struct_.tag;
+   ExprType* struct_entry = findTag(c, tag_str);
+   if (!struct_entry) {
+      codegenError("No struct named %s", tag_str);
+   }
+   struct StructMember* members = struct_entry->c.struct_.members;
+   // TODO: Use a hash map?
+   u64 member_idx = MaxU64;
+   for (u64 i = 0; i < bufCount(members); ++i) {
+      if (!strcmp(members[i].id, field_str)) {
+         member_idx = i;
+         break;
+      }
+   }
+   if (member_idx == MaxU64) {
+      codegenError("Struct %s does not have %s member", tag_str, field_str);
+   }
+
+   struct StructMember* member = members + member_idx;
+
+   Assert(symbol_entry->location.type == Location_STACK);
+   u64 member_offset = member->offset;
+
+   Location loc = {
+      .type = Location_STACK,
+      .offset = symbol_entry->location.offset - member_offset,
+   };
+
+   if (expr_type) {
+      expr_type->c = *(member->ctype);
+      expr_type->location = loc;
+   }
+   int bits = member->ctype->bits;
+
+   if (target != Target_NONE) {
+      instructionPrintf(c, node->line_number, "mov %s, %s",
+                        locationString(c, &g_registers[Reg_RAX], bits),
+                        locationString(c, &loc, bits));
+
+      if (target == Target_STACK) {
+         stackPushReg(c, Reg_RAX);
+      }
+   }
+
+}
+
+void
 emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    if (nodeIsExpression(node)) {
       AstNode* child0 = node->child;
@@ -688,104 +809,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          }
       }
       else if (node->type == Ast_ID) {
-         char* id_str = node->tok->cast.string;
-         ExprType* entry = findSymbol(c, id_str);
-         Location loc = locationFromId(c, id_str);
-
-         if (!entry) {
-            codegenError("Use of undeclared identifier %s", node->tok->cast.string);
-         }
-
-         char* size_str = NULL;
-
-         switch (entry->c.bits) {
-            case 64: {
-               size_str = "QWORD";
-            } break;
-            case 32: {
-               size_str = "DWORD";
-            } break;
-            case 16: {
-               size_str = "WORD";
-            } break;
-            case 8: {
-               size_str = "BYTE";
-            } break;
-            case 0:{
-              InvalidCodePath;
-            }
-            default: {
-               NotImplemented("Can't handle this size.");
-            } break;
-         }
-         if (entry->c.bits <= 16) {
-            instructionPrintf(c, 0, "xor %s, %s",
-                              locationString(c, &g_registers[Reg_RAX], 64),
-                              locationString(c, &g_registers[Reg_RAX], 64));
-         }
-
-         instructionPrintf(c, 0, "mov %s, %s",
-                           locationString(c, &g_registers[Reg_RAX], entry->c.bits),
-                           locationString(c, &loc, entry->c.bits));
-         if (target == Target_STACK) {
-            stackPushReg(c, Reg_RAX);
-         }
-
-         if (expr_type) {
-            *expr_type = *entry;
-         }
+         emitIdentifier(c, node, expr_type, target);
       }
       else if (node->type == Ast_STRUCT_MEMBER_ACCESS) {
-         char* struct_str = node->child->tok->cast.string;
-         char* field_str = node->child->next->tok->cast.string;
-         ExprType* symbol_entry = findSymbol(c, struct_str);
-         if (!symbol_entry) {
-            codegenError("%s undeclared.", struct_str);
-         }
-         char* tag_str = symbol_entry->c.struct_.tag;
-         ExprType* struct_entry = findTag(c, tag_str);
-         if (!struct_entry) {
-            codegenError("No struct named %s", tag_str);
-         }
-         struct StructMember* members = struct_entry->c.struct_.members;
-         // TODO: Use a hash map?
-         u64 member_idx = MaxU64;
-         for (u64 i = 0; i < bufCount(members); ++i) {
-            if (!strcmp(members[i].id, field_str)) {
-               member_idx = i;
-               break;
-            }
-         }
-         if (member_idx == MaxU64) {
-            codegenError("Struct %s does not have %s member", tag_str, field_str);
-         }
-
-         struct StructMember* member = members + member_idx;
-
-         Assert(symbol_entry->location.type == Location_STACK);
-         u64 member_offset = member->offset;
-
-         Location loc = {
-            .type = Location_STACK,
-            .offset = symbol_entry->location.offset - member_offset,
-         };
-
-         if (expr_type) {
-            expr_type->c = *(member->ctype);
-            expr_type->location = loc;
-         }
-         int bits = member->ctype->bits;
-
-         if (target != Target_NONE) {
-            instructionPrintf(c, node->line_number, "mov %s, %s",
-                              locationString(c, &g_registers[Reg_RAX], bits),
-                              locationString(c, &loc, bits));
-
-            if (target == Target_STACK) {
-               stackPushReg(c, Reg_RAX);
-            }
-         }
-
+         emitStructMemberAccess(c, node, expr_type, target);
       }
       // Assignment expressions
       else if (node->type == Ast_ASSIGN_EXPR) {

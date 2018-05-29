@@ -21,8 +21,9 @@ struct Ctype {
       // TODO finish function
 
       Type_STRUCT = (1<<5),
+
+      Type_POINTER = (1<<6),
       // TODO union
-      // TODO pointer
       // TODO array
       // TODO atomic
    }; int type;
@@ -50,6 +51,10 @@ struct Ctype {
       struct CtypeFunc {
          struct AstNode* node; // TODO: refactor?
       } func;
+
+      struct CtypePointer {
+         struct Ctype* pointee;
+      } pointer;
 
       // CtypeStruct struct_;
       // CtypeFunc func;
