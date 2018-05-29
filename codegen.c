@@ -699,6 +699,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          char* size_str = NULL;
 
          switch (entry->c.bits) {
+            case 64: {
+               size_str = "QWORD";
+            } break;
             case 32: {
                size_str = "DWORD";
             } break;
@@ -764,7 +767,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          Location loc = {
             .type = Location_STACK,
-            .offset = symbol_entry->location.offset + member_offset,
+            .offset = symbol_entry->location.offset - member_offset,
          };
 
          if (expr_type) {
@@ -959,13 +962,21 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
    AstNode* rhs = declarator->next;
 
    // TODO: Emit warning for empty declarations.
-   int bits = specifier->ctype.bits;
 
-   if (specifier->ctype.type == Type_STRUCT) {
+   u64 bits = 0;
+
+   if (specifier->ctype.type != Type_STRUCT) {
+      bits = specifier->ctype.bits;
+   }
+   else {
       char* tag_str = specifier->ctype.struct_.tag;
       AstNode* decls = specifier->ctype.struct_.decls;
       // TODO: Anonymous structs
+
       if (tag_str && decls) {
+         Assert(specifier->ctype.bits != 0);
+         bits = specifier->ctype.bits;
+
          if (findTag(c, tag_str)) {
             codegenError("Struct identifier redeclared: %s");
          }
@@ -976,35 +987,40 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             .location = { .type = Location_STACK, .offset = 0 /*struct tag does not have a place*/ },
          };
 
-         Assert(bits == 0);
-
+         u64 offset = 0;
          for (AstNode* decl = decls;
               decl;
               decl = decl->next) {
             AstNode* spec = decl->child;
             AstNode* declarator = spec->next;
-
-
             char* member_id = declarator->child->tok->cast.string;
 
-            struct StructMember member = { member_id, &spec->ctype, bits/8 };
+            Assert(offset % 8 == 0);
+            struct StructMember member = { member_id, &spec->ctype, offset/8 };
             bufPush(entry.c.struct_.members, member);
 
-            bits += spec->ctype.bits;
-            bits = AlignPow2(bits, 8);
+            offset += spec->ctype.bits;
+            offset = AlignPow2(offset, 8);
          }
-         entry.c.bits = bits;
+         Assert(specifier->ctype.bits == offset);
+
+         entry.c.bits = offset;
+
          symInsert(&c->scope->tag_table, tag_str, entry);
       }
-      if (tag_str && declarator->type != Ast_NONE) {
-         /* char* id = declarator->child->tok->cast.string; */
-         ExprType* entry = Zero;
-         if (!(entry = findTag(c, tag_str))) {
-            codegenError("Use of undeclared struct name %s", tag_str);
+      else if (tag_str && declarator->type != Ast_NONE) {
+         Assert(specifier->ctype.bits == 0);
+
+         ExprType* entry = findTag(c, tag_str);
+         if (!entry) {
+            codegenError("Use of undeclared struct %s", tag_str);
          }
+
          bits = entry->c.bits;
       }
    }
+
+   Assert (bits != 0);
 
    if (declarator->type != Ast_NONE) {
       AstNode* ast_id = declarator->child;
@@ -1013,17 +1029,19 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          codegenError("Symbol redeclared in scope");
       }
       // TODO: top level declarations
+      stackPushOffset(c, bits/8);
+
       ExprType entry = {
          .c = specifier->ctype,
          .location = { .type = Location_STACK, .offset = c->stack_offset },
       };
-      stackPushOffset(c, bits/8);
+      entry.c.bits = bits;
 
       if (isLiteral(rhs)) {
          // TODO: Non-integer values.
          int value = rhs->tok->value;
 
-         switch (bits) {
+         switch (specifier->ctype.bits) {
             case 32: {
                instructionPrintf(c, node->line_number, "mov DWORD [ rsp ], 0x%x", value);
             } break;

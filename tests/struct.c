@@ -6,7 +6,8 @@ main() {
       int y;
    };
    struct foo myvar;
-   myvar.x = 1;
-   myvar.y = 2;
-   return myvar.x;
+   myvar.x = 2;
+   myvar.y = 1;
+   struct foo myothervar = myvar;
+   return myothervar.y;
 }
