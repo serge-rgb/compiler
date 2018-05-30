@@ -20,7 +20,7 @@ extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format
 
 
 #define PlatformAssert(expr) do { if (!(expr)) { \
-                                                printf("Assertion failed: %s", #expr);\
+                                                printf("Assertion failed: %s\n", #expr);\
                                                 __builtin_trap(); } } while(0)
 
 #define PlatformPrintString(...) snprintf(__VA_ARGS__)
