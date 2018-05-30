@@ -638,16 +638,13 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
    char* size_str = NULL;
 
    if (entry->c.bits > 64) {
-      Location loc = {
-         .type = Location_POINTER,
-      };
-      Ctype type = {
-         .type = Type_POINTER,
-         .pointer = (struct CtypePointer) {
-            .pointee = // TODO: Keep going here.
-         },
-      };
-      if (expr_type) expr_type->location = loc;
+      Assert(entry->location.type == Location_STACK);
+      if (target == Target_ACCUM) {
+         instructionPrintf(c, node->line_number, "mov rax, rsp");
+         // TODO: LEA
+         instructionPrintf(c, 0, "sub rax, %d", entry->location.offset);
+      }
+
    }
    else {
       switch (entry->c.bits) {
@@ -667,23 +664,25 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
             InvalidCodePath;
          }
       }
-      if (entry->c.bits <= 16) {
-         instructionPrintf(c, 0, "xor %s, %s",
-                           locationString(c, &g_registers[Reg_RAX], 64),
-                           locationString(c, &g_registers[Reg_RAX], 64));
-      }
 
-      instructionPrintf(c, 0, "mov %s, %s",
-                        locationString(c, &g_registers[Reg_RAX], entry->c.bits),
-                        locationString(c, &loc, entry->c.bits));
-      if (expr_type) expr_type->location = loc;
-   }
-   if (target == Target_STACK) {
-      stackPushReg(c, Reg_RAX);
+      if (target != Target_NONE) {
+         if (entry->c.bits <= 16) {
+            instructionPrintf(c, 0, "xor %s, %s",
+                              locationString(c, &g_registers[Reg_RAX], 64),
+                              locationString(c, &g_registers[Reg_RAX], 64));
+         }
+         instructionPrintf(c, 0, "mov %s, %s",
+                           locationString(c, &g_registers[Reg_RAX], entry->c.bits),
+                           locationString(c, &loc, entry->c.bits));
+         if (target == Target_STACK) {
+            stackPushReg(c, Reg_RAX);
+         }
+      }
    }
 
    if (expr_type) {
       expr_type->c = entry->c;
+      expr_type->location = loc;
    }
 
 }
@@ -1083,6 +1082,8 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else if (rhs->type != Ast_NONE)/* right-hand-side is not a literal*/ {
          ExprType type = {};
          codegenEmit(c, rhs, &type, Target_ACCUM );
+         // TODO: abstract mov into a function that does rep movb when necessary.
+         Assert(type.c.bits < 64);
          instructionReg(c, rhs->line_number, "mov QWORD [ rsp ], %s", 64, Reg_RAX);
       }
       else {

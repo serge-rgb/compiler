@@ -53,7 +53,6 @@ struct Ctype {
       } func;
 
       struct CtypePointer {
-         struct Ctype* pointee;
       } pointer;
 
       // CtypeStruct struct_;
