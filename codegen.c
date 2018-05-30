@@ -423,6 +423,29 @@ instructionReg(Codegen* c, u64 line_number, char* asm_line, int bits, ...) {
 }
 
 void
+mov(Codegen* c, u64 line_number, Location* out, Location* in, int bits) {
+   if (bits < 64) {
+      instructionPrintf(c, line_number, "mov %s, %s",
+                        locationString(c, out, bits),
+                        locationString(c, in, bits));
+   }
+   else {
+      if (out->type == Location_REGISTER) {
+         NotImplemented("Big copy - into register.");
+      }
+      else if (out->type == Location_STACK) {
+         // `in` is either on the stack, or it's a pointer to something.
+         instructionPrintf(c, line_number, "rep movsb");
+         NotImplemented("Big copy - into stack.");
+      }
+      else {
+         InvalidCodePath;
+      }
+      // TODO: Assert when doing a big copy into a register.
+   }
+}
+
+void
 stackPushReg(Codegen* c, RegisterEnum reg) {
    instructionPrintf(c, 0, "push %s", locationString(c, &g_registers[reg], 64));
    c->stack_offset += 8;
@@ -531,7 +554,7 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
             r = Reg_R9;
          } break;
       }
-      instructionReg(c, 0, "mov %s, %s", type.c.bits, r, Reg_RAX);
+      mov(c, 0,  &g_registers[r], &g_registers[Reg_RAX], type.c.bits);
    }
    else {
       NotImplemented("Need to implement params on Windows.");
@@ -671,9 +694,8 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
                               locationString(c, &g_registers[Reg_RAX], 64),
                               locationString(c, &g_registers[Reg_RAX], 64));
          }
-         instructionPrintf(c, 0, "mov %s, %s",
-                           locationString(c, &g_registers[Reg_RAX], entry->c.bits),
-                           locationString(c, &loc, entry->c.bits));
+         mov(c, 0, &g_registers[Reg_RAX], &loc, entry->c.bits);
+
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
@@ -730,9 +752,7 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
    int bits = member->ctype->bits;
 
    if (target != Target_NONE) {
-      instructionPrintf(c, node->line_number, "mov %s, %s",
-                        locationString(c, &g_registers[Reg_RAX], bits),
-                        locationString(c, &loc, bits));
+      mov(c, node->line_number, &g_registers[Reg_RAX], &loc, bits);
 
       if (target == Target_STACK) {
          stackPushReg(c, Reg_RAX);
@@ -786,6 +806,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          int bits = 32;
          switch (target) {
             case Target_ACCUM: {
+               Assert(bits < 64);
                instructionPrintf(
                   c,
                   node->line_number,
@@ -826,11 +847,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
          Assert (lhs_type.c.bits == rhs_type.c.bits);
          if (op->value == '=') {
-            instructionPrintf(c, node->line_number, "mov %s, %s",
-                              locationString(c, &lhs_type.location, bits),
-                              locationString(c, &rhs_type.location, bits));
+            mov(c, node->line_number, &lhs_type.location, &rhs_type.location, bits);
          }
          else {
+            Assert(bits < 64);
+            // TODO: Check for arithmetic type here.
             instructionPrintf(c, node->line_number, "mov %s, %s",
                               locationString(c, &g_registers[Reg_RBX], bits),
                               locationString(c, &lhs_type.location, bits));
@@ -856,6 +877,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
       }
       else if (node->type == Ast_POSTFIX_INC ||
                node->type == Ast_POSTFIX_DEC) {
+         // TODO: Check for type of postfix
          AstNode* expr = node->child;
          ExprType local_etype = {};
          emitExpression(c, expr, &local_etype, Target_STACK);
@@ -1068,23 +1090,27 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          int value = rhs->tok->value;
 
          switch (specifier->ctype.bits) {
+            case 64: {
+               instructionPrintf(c, node->line_number, "mov QWORD [ rsp ], 0x%x", value);
+            } break;
             case 32: {
                instructionPrintf(c, node->line_number, "mov DWORD [ rsp ], 0x%x", value);
+            } break;
+            case 16: {
+               instructionPrintf(c, node->line_number, "mov WORD [ rsp ], 0x%x", value);
             } break;
             case 8: {
                instructionPrintf(c, node->line_number, "mov BYTE [ rsp ], 0x%x", value);
             } break;
             default: {
-               NotImplemented("Declaration size");
+               InvalidCodePath;
             } break;
          }
       }
       else if (rhs->type != Ast_NONE)/* right-hand-side is not a literal*/ {
          ExprType type = {};
          codegenEmit(c, rhs, &type, Target_ACCUM );
-         // TODO: abstract mov into a function that does rep movb when necessary.
-         Assert(type.c.bits < 64);
-         instructionReg(c, rhs->line_number, "mov QWORD [ rsp ], %s", 64, Reg_RAX);
+         mov(c, rhs->line_number, &entry.location, &g_registers[Reg_RAX], type.c.bits);
       }
       else {
          // TODO: scc initializes to zero by default.

@@ -60,9 +60,11 @@ typedef size_t sz;
 
 #define Break PlatformBreak
 
-#define NotImplemented(message) \
-        printf("Not Implemented! -- [%s]\n", message); \
-        Assert(!message);
+#define NotImplemented(message)                          \
+        do {                                             \
+        printf("Not Implemented! -- [%s]\n", message);   \
+        Assert(!message);                                \
+        } while (0)
 
 
 typedef enum ErrorCode_s {
