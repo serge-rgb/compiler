@@ -63,7 +63,7 @@ typedef size_t sz;
 #define NotImplemented(message)                          \
         do {                                             \
         printf("Not Implemented! -- [%s]\n", message);   \
-        Assert(!message);                                \
+        Assert(!"Not implemented.");                                \
         } while (0)
 
 

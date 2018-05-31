@@ -119,7 +119,7 @@ typedef struct Codegen_s {
    u32         config;   // CodegenConfigFlags enum
    SymTable*   symbol_table;
 
-   u64         stack_offset;
+   u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
    StackValue* stack;
 
    // Constants
@@ -423,29 +423,6 @@ instructionReg(Codegen* c, u64 line_number, char* asm_line, int bits, ...) {
 }
 
 void
-mov(Codegen* c, u64 line_number, Location* out, Location* in, int bits) {
-   if (bits < 64) {
-      instructionPrintf(c, line_number, "mov %s, %s",
-                        locationString(c, out, bits),
-                        locationString(c, in, bits));
-   }
-   else {
-      if (out->type == Location_REGISTER) {
-         NotImplemented("Big copy - into register.");
-      }
-      else if (out->type == Location_STACK) {
-         // `in` is either on the stack, or it's a pointer to something.
-         instructionPrintf(c, line_number, "rep movsb");
-         NotImplemented("Big copy - into stack.");
-      }
-      else {
-         InvalidCodePath;
-      }
-      // TODO: Assert when doing a big copy into a register.
-   }
-}
-
-void
 stackPushReg(Codegen* c, RegisterEnum reg) {
    instructionPrintf(c, 0, "push %s", locationString(c, &g_registers[reg], 64));
    c->stack_offset += 8;
@@ -493,22 +470,32 @@ stackPop(Codegen* c, RegisterEnum reg) {
    }
 }
 
-#if 0
 void
-stackGet(Codegen *c, RegisterEnum reg) {
-   StackValue s = c->stack[c->n_stack - 1];
-   switch (s.type) {
-      case Stack_QWORD: {
-         instructionReg(c, 0, "pop %s", 64, reg);
-         c->stack_offset -= 8;
-      } break;
-      case Stack_OFFSET: {
-         c->stack_offset -= s.offset;
-         instructionPrintf(c, 0, "add rsp, %d", s.offset);
+movOrCopy(Codegen* c, u64 line_number, Location* out, Location* in, int bits) {
+   if (bits < 64) {
+      instructionPrintf(c, line_number, "mov %s, %s",
+                        locationString(c, out, bits),
+                        locationString(c, in, bits));
+   }
+   else {
+      if (out->type == Location_REGISTER) {
+         NotImplemented("Big copy - into register.");
       }
+      else if (out->type == Location_STACK) {
+         // Assuming the input address is in rax.
+
+         int bytes = bits/8;
+         instructionPrintf(c, line_number, "mov rsi, rax");
+         instructionPrintf(c, line_number, "mov rdi, rsp");
+         instructionPrintf(c, line_number, "mov rcx, 0x%x", bytes);
+         instructionPrintf(c, line_number, "rep movsb");
+      }
+      else {
+         InvalidCodePath;
+      }
+      // TODO: Assert when doing a big copy into a register.
    }
 }
-#endif
 
 void
 pushScope(Codegen* c) {
@@ -554,7 +541,7 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
             r = Reg_R9;
          } break;
       }
-      mov(c, 0,  &g_registers[r], &g_registers[Reg_RAX], type.c.bits);
+      movOrCopy(c, 0,  &g_registers[r], &g_registers[Reg_RAX], type.c.bits);
    }
    else {
       NotImplemented("Need to implement params on Windows.");
@@ -662,10 +649,13 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
 
    if (entry->c.bits > 64) {
       Assert(entry->location.type == Location_STACK);
-      if (target == Target_ACCUM) {
+      if (target != Target_NONE) {
          instructionPrintf(c, node->line_number, "mov rax, rsp");
          // TODO: LEA
-         instructionPrintf(c, 0, "sub rax, %d", entry->location.offset);
+         instructionPrintf(c, 0, "add rax, %d", c->stack_offset - entry->location.offset);
+         if (target == Target_STACK) {
+            stackPushReg(c, Reg_RAX);
+         }
       }
 
    }
@@ -694,7 +684,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
                               locationString(c, &g_registers[Reg_RAX], 64),
                               locationString(c, &g_registers[Reg_RAX], 64));
          }
-         mov(c, 0, &g_registers[Reg_RAX], &loc, entry->c.bits);
+         movOrCopy(c, 0, &g_registers[Reg_RAX], &loc, entry->c.bits);
 
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
@@ -752,7 +742,7 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
    int bits = member->ctype->bits;
 
    if (target != Target_NONE) {
-      mov(c, node->line_number, &g_registers[Reg_RAX], &loc, bits);
+      movOrCopy(c, node->line_number, &g_registers[Reg_RAX], &loc, bits);
 
       if (target == Target_STACK) {
          stackPushReg(c, Reg_RAX);
@@ -847,7 +837,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
          Assert (lhs_type.c.bits == rhs_type.c.bits);
          if (op->value == '=') {
-            mov(c, node->line_number, &lhs_type.location, &rhs_type.location, bits);
+            movOrCopy(c, node->line_number, &lhs_type.location, &rhs_type.location, bits);
          }
          else {
             Assert(bits < 64);
@@ -1013,6 +1003,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    u64 bits = 0;
 
+   // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_STRUCT) {
       bits = specifier->ctype.bits;
    }
@@ -1070,6 +1061,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    Assert (bits != 0);
 
+   // Declare a new symbol.
    if (declarator->type != Ast_NONE) {
       AstNode* ast_id = declarator->child;
       char* id_str = ast_id->tok->cast.string;
@@ -1085,7 +1077,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       };
       entry.c.bits = bits;
 
-      if (isLiteral(rhs)) {
+      if (isLiteral(rhs)) {               // Literal right-hand-side
          // TODO: Non-integer values.
          int value = rhs->tok->value;
 
@@ -1107,10 +1099,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             } break;
          }
       }
-      else if (rhs->type != Ast_NONE)/* right-hand-side is not a literal*/ {
-         ExprType type = {};
-         codegenEmit(c, rhs, &type, Target_ACCUM );
-         mov(c, rhs->line_number, &entry.location, &g_registers[Reg_RAX], type.c.bits);
+      else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
+         ExprType type = {};  // TODO: Here is probably where we want to specify the type in case there is an initializer list on the other side.
+         emitExpression(c, rhs, &type, Target_ACCUM);
+         movOrCopy(c, rhs->line_number, &entry.location, &type.location, type.c.bits);
       }
       else {
          // TODO: scc initializes to zero by default.
