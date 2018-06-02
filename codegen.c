@@ -748,7 +748,6 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
          stackPushReg(c, Reg_RAX);
       }
    }
-
 }
 
 void
@@ -922,7 +921,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             u64 line = left->line_number;
             instructionReg(c, line, "cmp %s, %s", left_type.c.bits, Reg_RAX, Reg_RBX);
 
-            char* instr;
+            char* instr = 0;
             switch(node->type) {
                case Ast_EQUALS: { instr = "sete %s"; } break;
                case Ast_LESS: { instr = "setl %s"; } break;

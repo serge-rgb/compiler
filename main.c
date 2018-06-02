@@ -1,5 +1,3 @@
-#include <unistd.h>
-
 int
 compileTranslationUnit(char* file_name, char* outfile) {
    fprintf(stderr, "Compiling file %s\n", file_name);
@@ -48,6 +46,16 @@ compileTranslationUnit(char* file_name, char* outfile) {
    return result;
 }
 
+int
+main(int args_n, char** args) {
+   u32* foo = malloc( 4 * 10 );
+
+   foo[10] = 1;
+
+   return 0;
+}
+
+#if 0
 static void
 printargs(char** args, int nargs) {
    for (int i = 0; i < nargs; ++i) {
@@ -184,5 +192,6 @@ main(int args_n, char** args) {
       }
    }
 }
+#endif
 
 #undef NUM_BYTES

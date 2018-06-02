@@ -366,6 +366,9 @@ void
 tokenPrint(Token* token) {
    printf("[");
    switch(token->type) {
+      case TType_NONE: {
+         printf("NONE.");
+      } break;
       case TType_PUNCTUATOR: {
          if (token->value < AsciiMax) {
             printf("PUNCTUATOR %c", (char)token->cast.character);

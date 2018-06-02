@@ -48,7 +48,7 @@ typedef size_t sz;
 
 #define ArrayErrorDefault(f, l) \
    fprintf(stderr, "Array overflow in %s:%d\n", f, l); \
-   raise(SIGTRAP);
+   Assert(!"Array error.");
 
 #define ArrayError(f, l) ArrayErrorDefault(f, l)
 #define ArrayPush(arr, e)                  \
