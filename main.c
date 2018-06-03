@@ -84,6 +84,10 @@ main(int argc, char** argv) {
       }
    }
 
+   if (bufCount(files) > 1) {
+      NotImplemented("More than one file.");
+   }
+
    for (sz i = 0 ; i < bufCount(files); ++i) {
       char outfile[PathMax] = Zero;
       snprintf(outfile, PathMax, "%s.asm", files[i]);
