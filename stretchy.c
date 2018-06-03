@@ -13,11 +13,11 @@ bufMaybeResize(void** ptr, sz count, sz element_size) {
    if (!*ptr) {
       *ptr = calloc(1, element_size*count + sizeof(BufHdr));
       ((BufHdr*)*ptr)->capacity = count;
-      *ptr += sizeof(BufHdr);
+      *ptr = (void*)((u8*)(*ptr) + sizeof(BufHdr));
    }
    else if (bufHdr(*ptr)->capacity - bufHdr(*ptr)->used < count) {
       *ptr = realloc(bufHdr(*ptr), sizeof(BufHdr) + (bufHdr(*ptr)->capacity *= 2)*element_size);
-      *ptr += sizeof(BufHdr);
+      *ptr = (void*)((u8*)(*ptr) + sizeof(BufHdr));
       // TODO(Zero-out new area)
    }
 }

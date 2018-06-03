@@ -27,3 +27,5 @@
 #define PlatformPrintString(...) sprintf_s(__VA_ARGS__)
 
 #define PlatformBreak __debugbreak()
+
+

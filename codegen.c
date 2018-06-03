@@ -16,7 +16,7 @@ typedef struct Location_s {
       Location_REGISTER,
       Location_STACK,
       Location_POINTER,
-   }; int type;
+   } type;
    union {
       // REGISTER
       struct {
@@ -32,9 +32,6 @@ typedef struct Location_s {
       // STACK
       struct {
          u64 offset;
-      };
-      // POINTER
-      struct {
       };
    };
 } Location;
@@ -79,8 +76,7 @@ typedef struct StackValue_s {
    enum {
       Stack_OFFSET,
       Stack_QWORD,
-   };
-   unsigned int type : 2;
+   } type : 2;
 } StackValue;
 
 #define SCOPE_HASH_SIZE 1024
@@ -310,7 +306,7 @@ locationString(Codegen* c, Location* r, int bits) {
 
 void
 codegenInit(Codegen* c, char* outfile) {
-   char asmfile [PathMax] = {};
+   char asmfile [PathMax] = Zero;
    snprintf(asmfile, PathMax, "%s.asm", outfile);
    g_asm = fopen(asmfile, "w");
    char* prelude =
@@ -519,7 +515,7 @@ void
 targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
    if ((c->config & Config_TARGET_LINUX) || (c->config & Config_TARGET_MACOS)) {
       RegisterEnum r = Reg_RDI;
-      ExprType type = {};
+      ExprType type = Zero;
       codegenEmit(c, param, &type, Target_ACCUM);
       switch (n_param) {
          case 0: {
@@ -868,7 +864,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                node->type == Ast_POSTFIX_DEC) {
          // TODO: Check for type of postfix
          AstNode* expr = node->child;
-         ExprType local_etype = {};
+         ExprType local_etype = Zero;
          emitExpression(c, expr, &local_etype, Target_STACK);
          if (local_etype.location.type == Location_IMMEDIATE) {
             codegenError("Attempting to increment an rvalue.");
@@ -1099,7 +1095,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          }
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
-         ExprType type = {};  // TODO: Here is probably where we want to specify the type in case there is an initializer list on the other side.
+         ExprType type = Zero;  // TODO: Here is probably where we want to specify the type in case there is an initializer list on the other side.
          emitExpression(c, rhs, &type, Target_ACCUM);
          movOrCopy(c, rhs->line_number, &entry.location, &type.location, type.c.bits);
       }

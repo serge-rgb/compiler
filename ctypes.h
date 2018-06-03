@@ -26,14 +26,14 @@ struct Ctype {
       // TODO union
       // TODO array
       // TODO atomic
-   }; int type;
+   } type;
 
 
    enum {
       Qual_CONST    = (1<<0),
       Qual_RESTRICT = (1<<1),
       Qual_VOLATILE = (1<<2),
-   }; int qualifiers;
+   } qualifiers;
 
    int      bits;
 
@@ -51,9 +51,6 @@ struct Ctype {
       struct CtypeFunc {
          struct AstNode* node; // TODO: refactor?
       } func;
-
-      struct CtypePointer {
-      } pointer;
 
       // CtypeStruct struct_;
       // CtypeFunc func;

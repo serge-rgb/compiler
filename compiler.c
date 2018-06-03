@@ -4,11 +4,9 @@
 if [ `uname` = "Linux" ]; then
    clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f elf64 out.asm && ld out.o
 elif [ `uname` = "MSYS_NT-10.0" ]; then
-   comment_for_cleanup="-Wno-unused-parameter -Wno-shadow -Wno-unused-macros"
-   if [ $? ];  then
-    exit
-   fi
-   clang-cl -Z7 $comment_for_cleanup -Wno-gnu-empty-initializer -Wno-covered-switch-default -Wno-gnu-empty-struct -Wno-shorten-64-to-32 -Wno-format-nonliteral -Wno-c++-compat -Wno-sign-conversion -Wno-string-conversion -Wno-missing-variable-declarations -Wno-sign-compare -Wno-shorten-64-to-32 -Wno-missing-noreturn -Wno-comma -Wno-pointer-arith -Wall -Wno-cast-align -Wno-missing-prototypes -Wno-deprecated-declarations -Wno-missing-braces -fsanitize=address compiler.c -link User32.lib -o compiler.exe
+   # *** NOTE: *** As of 2018-06-02, clang-cl is still pretty buggy when debugging with Visual Studio.
+   comment_for_cleanup="-Wno-unused-parameter -Wno-shadow -Wno-unused-macros -Wno-switch-enum"
+   clang-cl -Z7 $comment_for_cleanup -Wno-gnu-empty-initializer -Wno-covered-switch-default -Wno-gnu-empty-struct -Wno-shorten-64-to-32 -Wno-format-nonliteral -Wno-c++-compat -Wno-sign-conversion -Wno-string-conversion -Wno-missing-variable-declarations -Wno-sign-compare -Wno-shorten-64-to-32 -Wno-missing-noreturn -Wno-comma -Wno-pointer-arith -Wall -Wno-cast-align -Wno-missing-prototypes -Wno-deprecated-declarations -Wno-missing-braces compiler.c -link User32.lib
 else  # Assume it's macOS
    echo `uname`
    clang -g -Wall -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler # && ./compiler -t all
@@ -29,14 +27,14 @@ exit 0
 #include "common.h"
 
 #if defined(_WIN32)
-   #include "platform_windows.h"
+   #include "platform_windows.c"
 #else
-   #include "platform_unix.h"
+   #include "platform_unix.c"
 
    #if defined(__APPLE__) && defined(__MACH__)
-      #include "platform_macos.h"
+      #include "platform_macos.c"
    #elif defined(__linux__)
-      #include "platform_linux.h"
+      #include "platform_linux.c"
    #endif
 #endif
 

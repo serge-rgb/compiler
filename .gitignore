@@ -1,3 +1,13 @@
 out.*
 *.dSYM
 compiler
+
+# Compiler output
+tests/*.asm
+
+# Windows dev environment
+
+*.VC.*
+*.exp
+*.sln
+

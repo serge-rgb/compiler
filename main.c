@@ -46,12 +46,49 @@ compileTranslationUnit(char* file_name, char* outfile) {
    return result;
 }
 
+enum {
+   Arg_FILENAME,
+   Arg_NOTHING,
+};
 int
-main(int args_n, char** args) {
-   u32* foo = malloc( 4 * 10 );
+parseArgument(char* txt) {
+   if (txt[0] == '-') {
+      NotImplemented("Compiler opts");
+   }
+   else {
+      return Arg_FILENAME;
+   }
+   return Arg_NOTHING;
+}
 
-   foo[10] = 1;
+void
+printHelp() {
+   printf("Usage: scc {filename}+");
+}
 
+int
+main(int argc, char** argv) {
+   char** files = 0;
+
+   if (argc < 2) {
+      printHelp();
+      return 0;
+   }
+
+   for (int i = 1; i < argc; ++i) {
+      printf("Arg %d, [ %s ]\n", i, argv[i]);
+      switch (parseArgument(argv[i])) {
+         case Arg_FILENAME: {
+            bufPush(files, argv[i]);
+         } break;
+      }
+   }
+
+   for (sz i = 0 ; i < bufCount(files); ++i) {
+      char outfile[PathMax] = Zero;
+      snprintf(outfile, PathMax, "%s.asm", files[i]);
+      compileTranslationUnit(files[i], outfile);
+   }
    return 0;
 }
 
