@@ -605,7 +605,6 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
          ExprType* smaller = tleft.c.bits < tright.c.bits ? &tleft  : &tright;
          ExprType* bigger  = tleft.c.bits < tright.c.bits ? &tright : &tleft;
 
-
          smaller->c.bits = bigger->c.bits;
       }
       //

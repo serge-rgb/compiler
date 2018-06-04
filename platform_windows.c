@@ -29,3 +29,52 @@
 #define PlatformBreak __debugbreak()
 
 
+void
+winPrintError(int err_code) {
+    char* msg = 0;
+    char display [PathMax] = Zero;
+
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                  FORMAT_MESSAGE_FROM_SYSTEM |
+                  FORMAT_MESSAGE_IGNORE_INSERTS,
+                  NULL,
+                  err_code,
+                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                  (LPTSTR) &msg,
+                  0, NULL );
+
+    snprintf(display, PathMax, "Error: %s", msg);
+
+    MessageBoxA(NULL, (LPCTSTR)display, "Error", MB_OK);
+
+    fprintf(stderr, "%s\n", display);
+
+    LocalFree(msg);
+}
+
+int
+platformCreateProcess(char* name, char** args, sz n_args) {
+    STARTUPINFO startup_info = Zero;
+    PROCESS_INFORMATION proc_info = Zero;
+
+    // TODO: UTF-16 path names
+    BOOL cpr = CreateProcess(/*lpApplicationName*/ name,
+                             /*lpCommandLine*/ NULL,
+                             /*lpProcessAttributes*/ NULL,
+                             /*lpThreadAttributes*/ NULL,
+                             /*bInheritHandles*/ FALSE,
+                             /*dwCreationFlags*/0,
+                             /*lpEnvironment*/NULL,
+                             /*lpCurrentDirectory*/NULL,
+                             /*lpStartupInfo*/&startup_info,
+                             /*lpProcessInformation*/&proc_info);
+
+    if (!cpr) {
+        int err = GetLastError();
+        winPrintError(err);
+        fprintf(stderr, "CreateProcess failed: Error %d", err);
+        return 1;
+    }
+
+    return 0;
+}

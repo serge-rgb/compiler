@@ -68,6 +68,13 @@ printHelp() {
 
 int
 main(int argc, char** argv) {
+   enum {
+      Ok = 0,
+      CouldNotCompile = 1,
+      CouldNotAssemble = 2,
+      CouldNotLink = 3,
+   } result = Ok;
+
    char** files = 0;
 
    if (argc < 2) {
@@ -89,11 +96,34 @@ main(int argc, char** argv) {
    }
 
    for (sz i = 0 ; i < bufCount(files); ++i) {
-      char outfile[PathMax] = Zero;
-      snprintf(outfile, PathMax, "%s.asm", files[i]);
-      compileTranslationUnit(files[i], outfile);
+      char outfile[PathMax] = Zero; {
+         int written = snprintf(outfile, PathMax, "%s", files[i]);
+         for (int i = written-1;
+              i >= 0;
+              --i) {
+            if (outfile[i] == '.') {
+               outfile[i] = '\0';
+               break;
+            }
+         }
+      }
+      if (0 != compileTranslationUnit(files[i], outfile)) {
+         fprintf(stderr, "Could not compile file %s\n", files[i]);
+         result = CouldNotCompile;
+      }
+      else {
+         char* args[] = {
+            outfile,
+         };
+         // TODO: Removed hardcoded path to NASM
+         if (0 != platformCreateProcess("C:\\Program Files\\NASM\\nasm.exe", args, ArrayCount(args))) {
+            fprintf(stderr, "Failure running nasm.%s\n", files[i]);
+            result = CouldNotAssemble;
+         }
+      }
+
    }
-   return 0;
+   return result;
 }
 
 #if 0
