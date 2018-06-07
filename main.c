@@ -71,8 +71,6 @@ main(int argc, char** argv) {
    enum {
       Ok = 0,
       CouldNotCompile = 1,
-      CouldNotAssemble = 2,
-      CouldNotLink = 3,
    } result = Ok;
 
    char** files = 0;
@@ -112,47 +110,7 @@ main(int argc, char** argv) {
          result = CouldNotCompile;
       }
       else {
-         // TODO: Remove hardcoded path
-
-         char asmfile[PathMax] = Zero; {
-            snprintf(asmfile, ArrayCount(asmfile), "%s.asm", outfile);
-         }
-         char* args[] = {
-            "C:\\Program Files\\NASM\\nasm.exe",
-            asmfile,
-            "-f win64",
-            "-F cv8"
-         };
-         if (0 != platformCreateProcess(args, ArrayCount(args))) {
-            fprintf(stderr, "Failure running nasm.%s\n", files[i]);
-            result = CouldNotAssemble;
-         }
-         else {
-            char exearg[PathMax] = Zero; {
-               snprintf(exearg, ArrayCount(exearg), "/OUT:%s.exe", outfile);
-            }
-            char objfile[PathMax] = Zero; {
-               snprintf(objfile, ArrayCount(objfile), "%s.obj", outfile);
-            }
-            char pdbarg[PathMax] = Zero; {
-               snprintf(pdbarg, ArrayCount(pdbarg), "/PDB:%s.pdb", outfile);
-            }
-            char* args[] = {
-               // "link.exe",
-               "\"c:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.10.25017\\bin\\HostX64gc64\\link.exe\""
-               "/PDB:out.pdb",
-               objfile,
-               exearg,
-               "/DEBUG",
-               pdbarg,
-               "/ENTRY:_start",
-               "/SUBSYSTEM:CONSOLE", "kernel32.lib"
-            };
-            if ( 0 != platformCreateProcess(args, ArrayCount(args))) {
-               fprintf(stderr, "Link fail\n");
-               result = CouldNotLink;
-            }
-         }
+         result = platformCompileAndLinkAsmFile(outfile);
       }
 
    }

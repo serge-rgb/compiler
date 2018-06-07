@@ -518,28 +518,32 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
       ExprType type = Zero;
       codegenEmit(c, param, &type, Target_ACCUM);
       switch (n_param) {
-         case 0: {
-            // r is already RDI
-         } break;
-         case 1: {
-            r = Reg_RSI;
-         } break;
-         case 2: {
-            r = Reg_RDX;
-         } break;
-         case 3: {
-            r = Reg_RCX;
-         } break;
-         case 4: {
-            r = Reg_R8;
-         } break;
-         case 5: {
-            r = Reg_R9;
-         } break;
+         case 0: { } break;
+         case 1: { r = Reg_RSI; } break;
+         case 2: { r = Reg_RDX; } break;
+         case 3: { r = Reg_RCX; } break;
+         case 4: { r = Reg_R8;  } break;
+         case 5: { r = Reg_R9;  } break;
       }
       movOrCopy(c, 0,  &g_registers[r], &g_registers[Reg_RAX], type.c.bits);
    }
    else {
+      // Windows x64 calling convention:
+      // First 4 integers (left-to-right): RCX, RDX, R8, and R9
+      // First 4 floats (left-to-right): XMM0-3
+      // Items 5 an higher on the stack.
+      // Items larger than 16 bytes passed by reference.
+      Break;
+      Assert (isIntegerType(param->child->ctype));
+      if (n_param < 5) {
+         RegisterEnum r = Reg_RCX;
+         switch(n_param) {
+            case 0: {              } break;
+            case 1: { r = Reg_RDX; } break;
+            case 2: { r = Reg_R8; } break;
+            case 3: { r = Reg_R9; } break;
+         }
+      }
       NotImplemented("Need to implement params on Windows.");
    }
 }
@@ -576,6 +580,18 @@ targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
       }
    }
    else {
+      Break;
+      // TODO(Track parameter type.)
+      // Assert (isIntegerType(param->child->ctype));
+      if (n_param < 5) {
+         RegisterEnum r = Reg_RCX;
+         switch(n_param) {
+            case 0: {              } break;
+            case 1: { r = Reg_RDX; } break;
+            case 2: { r = Reg_R8; } break;
+            case 3: { r = Reg_R9; } break;
+         }
+      }
       NotImplemented("Implement parameter pop in Windows.");
    }
 }

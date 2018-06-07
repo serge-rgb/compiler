@@ -45,63 +45,121 @@ winPrintError(int err_code) {
 
     snprintf(display, PathMax, "Error: %s", msg);
 
-    MessageBoxA(NULL, (LPCTSTR)display, "Error", MB_OK);
+    // MessageBoxA(NULL, (LPCTSTR)display, "Error", MB_OK);
 
     fprintf(stderr, "%s\n", display);
 
     LocalFree(msg);
 }
 
-int
+ErrorCode
 platformCreateProcess(char** args, sz n_args) {
-   if (n_args == 0) {
-      return 1;
-   }
+   ErrorCode result = Fail;
 
-   char* name = args[0];
-   STARTUPINFO startup_info = {
-      .cb = sizeof(STARTUPINFO),
-      .hStdError = GetStdHandle(STD_OUTPUT_HANDLE),
-      .hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE),
-      .hStdInput = GetStdHandle(STD_INPUT_HANDLE),
-      .dwFlags = STARTF_USESTDHANDLES,
-   };
-   PROCESS_INFORMATION proc_info = Zero;
+   if (n_args != 0) {
+      STARTUPINFO startup_info = {
+         .cb = sizeof(STARTUPINFO),
+         .hStdError = GetStdHandle(STD_OUTPUT_HANDLE),
+         .hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE),
+         .hStdInput = GetStdHandle(STD_INPUT_HANDLE),
+         .dwFlags = STARTF_USESTDHANDLES,
+      };
+      PROCESS_INFORMATION proc_info = Zero;
 
-   // Create the child process.
-   char cmdline[1024] = Zero;
+      // Create the child process.
+      char cmdline[1024] = Zero;
 
-   for (int i =0; i < n_args; ++i) {
-      strncat(cmdline, args[i], ArrayCount(cmdline));
-      strncat(cmdline, " ", ArrayCount(cmdline));
-   }
+      for (int i =0; i < n_args; ++i) {
+         strncat(cmdline, args[i], ArrayCount(cmdline));
+         strncat(cmdline, " ", ArrayCount(cmdline));
+      }
 
-   BOOL cpr = CreateProcess(/*lpApplicationName*/ name,
-                            /*lpCommandLine*/ cmdline,
-                            /*lpProcessAttributes*/ NULL,
-                            /*lpThreadAttributes*/ NULL,
-                            /*bInheritHandles*/TRUE,
-                            /*dwCreationFlags*/0,
-                            /*lpEnvironment*/NULL,
-                            /*lpCurrentDirectory*/NULL,
-                            /*lpStartupInfo*/&startup_info,
-                            /*lpProcessInformation*/&proc_info);
-   if (!cpr) {
-      int err = GetLastError();
-      winPrintError(err);
-      fprintf(stderr, "CreateProcess failed: Error %d", err);
-      return 1;
-   }
-   else {
-      DWORD exit_code = 0;
-      GetExitCodeProcess(proc_info.hProcess, &exit_code);
-      if (exit_code != 0) {
-         fprintf(stderr, "Program failed with error code %ld\n", exit_code);
+      printf("Command line: %s\n", cmdline);
+
+      BOOL cpr = CreateProcess(/*lpApplicationName*/ NULL,  // Will grab first arg as app name.
+                               /*lpCommandLine*/ cmdline,
+                               /*lpProcessAttributes*/ NULL,
+                               /*lpThreadAttributes*/ NULL,
+                               /*bInheritHandles*/TRUE,
+                               /*dwCreationFlags*/0,
+                               /*lpEnvironment*/NULL,
+                               /*lpCurrentDirectory*/NULL,
+                               /*lpStartupInfo*/&startup_info,
+                               /*lpProcessInformation*/&proc_info);
+      if (!cpr) {
+         int err = GetLastError();
+         winPrintError(err);
+         fprintf(stderr, "CreateProcess failed: Error %d\n", err);
       }
       else {
+         DWORD wait_res = WaitForSingleObject(proc_info.hProcess, 2000);
+         if (wait_res == WAIT_OBJECT_0) {
+            DWORD exit_code = 0;
+            GetExitCodeProcess(proc_info.hProcess, &exit_code);
+            if (exit_code != 0) {
+               fprintf(stderr, "Program failed with error code %ld\n", exit_code);
+            }
+            else {
+               result = Ok;
+            }
+         }
+         else  {
+            fprintf(stderr, "WaitForSingleObject failed. Probably a timeout. %ld\n", wait_res);
+         }
+
+         CloseHandle(proc_info.hProcess);
+         CloseHandle(proc_info.hThread);
       }
-      CloseHandle(proc_info.hProcess);
-      CloseHandle(proc_info.hThread);
    }
-   return 0;
+   return result;
 }
+
+ErrorCode
+platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
+   ErrorCode result = Ok;
+
+   // TODO: Remove hardcoded path
+   char asmfile[PathMax] = Zero; {
+      snprintf(asmfile, ArrayCount(asmfile), "%s.asm", outfile);
+   }
+
+   char* args[] = {
+      "C:\\Program Files\\NASM\\nasm.exe",
+      asmfile,
+      "-f win64",
+      "-F cv8"
+   };
+   if (0 != platformCreateProcess(args, ArrayCount(args))) {
+      fprintf(stderr, "Failure running nasm. %s\n", asmfile);
+      result = CouldNotAssemble;
+   }
+   else {
+      char exearg[PathMax] = Zero; {
+         snprintf(exearg, ArrayCount(exearg), "/OUT:%s.exe", outfile);
+      }
+      char objfile[PathMax] = Zero; {
+         snprintf(objfile, ArrayCount(objfile), "%s.obj", outfile);
+      }
+      char pdbarg[PathMax] = Zero; {
+         snprintf(pdbarg, ArrayCount(pdbarg), "/PDB:%s.pdb", outfile);
+      }
+      char* args[] = {
+         // "link.exe",
+         "\"c:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.10.25017\\bin\\HostX64\\x64\\link.exe\""
+                 "/PDB:out.pdb",
+         objfile,
+         exearg,
+         "/DEBUG",
+         pdbarg,
+         "/ENTRY:_start",
+         "/SUBSYSTEM:CONSOLE", "kernel32.lib"
+      };
+      if ( 0 != platformCreateProcess(args, ArrayCount(args))) {
+         fprintf(stderr, "Link fail\n");
+         result = CouldNotLink;
+      }
+   }
+   return result;
+}
+
+

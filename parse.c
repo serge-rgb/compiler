@@ -100,7 +100,6 @@ nextPunctuator(Parser* p, int c) {
    return result;
 }
 
-
 void
 expectPunctuator(Parser* p, int punctuator) {
    if (!nextPunctuator(p, punctuator)) {

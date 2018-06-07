@@ -26,6 +26,8 @@ exit 0
 #include "std.h"
 #include "common.h"
 
+#include "error_codes.inl"
+
 #if defined(_WIN32)
    #include "platform_windows.c"
 #else
