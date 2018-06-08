@@ -10,35 +10,8 @@ typedef enum EmitTarget_n {
    Target_STACK,
 } EmitTarget;
 
-typedef struct Location_s {
-   enum {
-      Location_IMMEDIATE,  // Default, not an lvalue.
-      Location_REGISTER,
-      Location_STACK,
-      Location_POINTER,
-   } type;
-   union {
-      // REGISTER
-      struct {
-         char* reg;
-         char* reg_32;
-         char* reg_8;
-         b8    is_volatile;
-      };
-      // IMMEDIATE
-      struct {
-         u64 immediate_value;  // Cast to appropriate value based on token type.
-      };
-      // STACK
-      struct {
-         u64 offset;
-      };
-   };
-} Location;
-
-
 // Must be the same as g_registers.
-typedef enum RegisterEnum_n {
+enum RegisterEnum {
    Reg_RAX,
    Reg_RBX,
    Reg_RCX,
@@ -55,7 +28,37 @@ typedef enum RegisterEnum_n {
    Reg_R15,
 
    Reg_Count,
-} RegisterEnum;
+} typedef RegisterEnum;
+
+struct Location {
+   enum {
+      Location_IMMEDIATE,  // Default, not an lvalue.
+      Location_REGISTER,
+      Location_STACK,
+      Location_POINTER,
+   } type;
+   union {
+      // REGISTER
+      struct {
+         RegisterEnum reg;
+      };
+      // IMMEDIATE
+      struct {
+         u64 immediate_value;  // Cast to appropriate value based on token type.
+      };
+      // STACK
+      struct {
+         u64 offset;
+      };
+   };
+} typedef Location;
+
+struct Register {
+   char* reg;
+   char* reg_32;
+   char* reg_8;
+   b8    is_volatile;
+} typedef Register;
 
 typedef struct ExprType_s {
    Ctype    c;
@@ -123,64 +126,21 @@ typedef struct Codegen_s {
 } Codegen;
 
 static
-Location g_registers[] = {
-   {
-      .type = Location_REGISTER,
-      .reg    = "rax", .reg_32 = "eax", .reg_8  = "al",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "rbx", .reg_32 = "ebx", .reg_8  = "bl",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "rcx", .reg_32 = "ecx", .reg_8  = "cl",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "rdx", .reg_32 = "edx", .reg_8  = "dl",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "rsi", .reg_32 = "esi", .reg_8 = "ah",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "rdi", .reg_32 = "edi", .reg_8 = "bh"
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r8", .reg_32 = "r8d", .reg_8 = "ch",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r9", .reg_32 = "r9d",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r10", .reg_32 = "r10d",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r11", .reg_32 = "r11d",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r12", .reg_32 = "r12d",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r13", .reg_32 = "r13d",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r14", .reg_32 = "r14d",
-   },
-   {
-      .type = Location_REGISTER,
-      .reg    = "r15", .reg_32 = "r15d",
-   },
-
+Register g_registers[] = {
+   { .reg = "rax", .reg_32 = "eax" , .reg_8 = "al" },
+   { .reg = "rbx", .reg_32 = "ebx" , .reg_8 = "bl" },
+   { .reg = "rcx", .reg_32 = "ecx" , .reg_8 = "cl" },
+   { .reg = "rdx", .reg_32 = "edx" , .reg_8 = "dl" },
+   { .reg = "rsi", .reg_32 = "esi" , .reg_8 = "ah" },
+   { .reg = "rdi", .reg_32 = "edi" , .reg_8 = "bh" },
+   { .reg = "r8" , .reg_32 = "r8d" , .reg_8 = "ch" },
+   { .reg = "r9" , .reg_32 = "r9d" , .reg_8 = NULL },
+   { .reg = "r10", .reg_32 = "r10d", .reg_8 = NULL },
+   { .reg = "r11", .reg_32 = "r11d", .reg_8 = NULL },
+   { .reg = "r12", .reg_32 = "r12d", .reg_8 = NULL },
+   { .reg = "r13", .reg_32 = "r13d", .reg_8 = NULL },
+   { .reg = "r14", .reg_32 = "r14d", .reg_8 = NULL },
+   { .reg = "r15", .reg_32 = "r15d", .reg_8 = NULL },
 };
 
 // Forward declaration for recursive calls.
@@ -259,18 +219,18 @@ codegenError(char* msg, ...) {
 
 
 char*
-locationString(Codegen* c, Location* r, int bits) {
+locationString(Codegen* c, Location r, int bits) {
    char *res = NULL;
-   switch(r->type) {
+   switch(r.type) {
       case Location_REGISTER: {
          if (bits == 64) {
-            res = r->reg;
+            res = g_registers[r.reg].reg;
          }
          else if (bits == 32) {
-            res = r->reg_32;
+            res = g_registers[r.reg].reg_32;
          }
          else if (bits == 8) {
-            res = r->reg_8;
+            res = g_registers[r.reg].reg_8;
          }
          else {
             codegenError("No size information.");
@@ -279,10 +239,10 @@ locationString(Codegen* c, Location* r, int bits) {
       break;
       case Location_IMMEDIATE: {
          res = allocate(c->scope->arena, 128);
-         snprintf(res, 128, "0x%x", (int)r->immediate_value);
+         snprintf(res, 128, "0x%x", (int)r.immediate_value);
       } break;
       case Location_STACK: {
-         u64 rsp_relative = c->stack_offset - r->offset;
+         u64 rsp_relative = c->stack_offset - r.offset;
 
 #define ResultSize 64
          res = allocate(c->scope->arena, ResultSize);
@@ -379,6 +339,12 @@ instructionPrintf(Codegen* c, u64 line_number, char* asm_line, ...) {
    va_end(args);
 }
 
+Location
+registerLocation(RegisterEnum reg) {
+   Location loc = { .type = Location_REGISTER, .reg = reg };
+   return loc;
+}
+
 void
 instructionReg(Codegen* c, u64 line_number, char* asm_line, int bits, ...) {
 #define MaxRegs 2
@@ -406,21 +372,23 @@ instructionReg(Codegen* c, u64 line_number, char* asm_line, int bits, ...) {
       } break;
       case 1: {
          instructionPrintf(c, line_number, asm_line,
-                           locationString(c, &g_registers[regs[0]], bits));
+                           locationString(c, registerLocation(regs[0]), bits));
       } break;
       case 2: {
          instructionPrintf(c, line_number, asm_line,
-                           locationString(c, &g_registers[regs[0]], bits),
-                           locationString(c, &g_registers[regs[1]], bits));
+                           locationString(c, registerLocation(regs[0]), bits),
+                           locationString(c, registerLocation(regs[1]), bits));
       } break;
-
+      default: {
+         InvalidCodePath;
+      } break;
    }
 #undef MaxRegs
 }
 
 void
 stackPushReg(Codegen* c, RegisterEnum reg) {
-   instructionPrintf(c, 0, "push %s", locationString(c, &g_registers[reg], 64));
+   instructionPrintf(c, 0, "push %s", locationString(c, registerLocation(reg), 64));
    c->stack_offset += 8;
    bufPush(c->stack, (StackValue){ .type = Stack_QWORD });
 }
@@ -467,17 +435,17 @@ stackPop(Codegen* c, RegisterEnum reg) {
 }
 
 void
-movOrCopy(Codegen* c, u64 line_number, Location* out, Location* in, int bits) {
-   if (bits < 64) {
+movOrCopy(Codegen* c, u64 line_number, Location out, Location in, int bits) {
+   if (bits <= 64) {
       instructionPrintf(c, line_number, "mov %s, %s",
                         locationString(c, out, bits),
                         locationString(c, in, bits));
    }
    else {
-      if (out->type == Location_REGISTER) {
+      if (out.type == Location_REGISTER) {
          NotImplemented("Big copy - into register.");
       }
-      else if (out->type == Location_STACK) {
+      else if (out.type == Location_STACK) {
          // Assuming the input address is in rax.
 
          int bytes = bits/8;
@@ -513,10 +481,15 @@ popScope(Codegen* c) {
 
 void
 targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
+   ExprType type = Zero;
+   codegenEmit(c, param, &type, Target_ACCUM);
+
+   if (isRealType(&type.c)) {
+      NotImplemented("Floating parameters.");
+   }
+
    if ((c->config & Config_TARGET_LINUX) || (c->config & Config_TARGET_MACOS)) {
       RegisterEnum r = Reg_RDI;
-      ExprType type = Zero;
-      codegenEmit(c, param, &type, Target_ACCUM);
       switch (n_param) {
          case 0: { } break;
          case 1: { r = Reg_RSI; } break;
@@ -525,7 +498,7 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
          case 4: { r = Reg_R8;  } break;
          case 5: { r = Reg_R9;  } break;
       }
-      movOrCopy(c, 0,  &g_registers[r], &g_registers[Reg_RAX], type.c.bits);
+      movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), type.c.bits);
    }
    else {
       // Windows x64 calling convention:
@@ -533,9 +506,8 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
       // First 4 floats (left-to-right): XMM0-3
       // Items 5 an higher on the stack.
       // Items larger than 16 bytes passed by reference.
-      Break;
-      Assert (isIntegerType(param->child->ctype));
-      if (n_param < 5) {
+      Assert (isIntegerType(&type.c));
+      if (n_param < 4) {
          RegisterEnum r = Reg_RCX;
          switch(n_param) {
             case 0: {              } break;
@@ -543,13 +515,17 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
             case 2: { r = Reg_R8; } break;
             case 3: { r = Reg_R9; } break;
          }
+         // TODO: Win64 abi specifies we pass by reference when the size is greater than 64 bits.
+         movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), type.c.bits);
       }
-      NotImplemented("Need to implement params on Windows.");
    }
 }
 
 void
-targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
+targetPopParameter(Codegen* c, Ctype* ctype, u64 n_param, EmitTarget target) {
+   if (isRealType(ctype)) {
+      NotImplemented("float params");
+   }
    RegisterEnum r = Reg_RDI;
    if ((c->config & Config_TARGET_MACOS) || (c->config & Config_TARGET_LINUX)) {
       switch (n_param) {
@@ -580,10 +556,8 @@ targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
       }
    }
    else {
-      Break;
-      // TODO(Track parameter type.)
-      // Assert (isIntegerType(param->child->ctype));
-      if (n_param < 5) {
+      // TODO Float parameters.
+      if (n_param < 4) {
          RegisterEnum r = Reg_RCX;
          switch(n_param) {
             case 0: {              } break;
@@ -591,8 +565,16 @@ targetPopParameter(Codegen* c, u64 n_param, EmitTarget target) {
             case 2: { r = Reg_R8; } break;
             case 3: { r = Reg_R9; } break;
          }
+         if (target == Target_STACK) {
+            stackPushReg(c, r);
+         }
+         else {
+            instructionReg(c, 0, "mov %s, %s", 64, Reg_RAX, r);
+         }
       }
-      NotImplemented("Implement parameter pop in Windows.");
+      else {
+         NotImplemented("More than 4 parameters");
+      }
    }
 }
 
@@ -617,7 +599,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    if (tleft.c.bits != tright.c.bits ||
        tleft.c.type != tright.c.type) {
       // If both are integer types, then apply integer promotion rules.
-      if (isIntegerType(tleft.c) && isIntegerType(tright.c)) {
+      if (isIntegerType(&tleft.c) && isIntegerType(&tright.c)) {
          ExprType* smaller = tleft.c.bits < tright.c.bits ? &tleft  : &tright;
          ExprType* bigger  = tleft.c.bits < tright.c.bits ? &tright : &tleft;
 
@@ -692,8 +674,8 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       if (target != Target_NONE) {
          if (entry->c.bits <= 16) {
             instructionPrintf(c, 0, "xor %s, %s",
-                              locationString(c, &g_registers[Reg_RAX], 64),
-                              locationString(c, &g_registers[Reg_RAX], 64));
+                              locationString(c, registerLocation(Reg_RAX), 64),
+                              locationString(c, registerLocation(Reg_RAX), 64));
          }
          movOrCopy(c, 0, &g_registers[Reg_RAX], &loc, entry->c.bits);
 
@@ -762,45 +744,57 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
 }
 
 void
+emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+   AstNode* func = node->child;
+   char* label = func->tok->cast.string;
+
+   ExprType* sym = findSymbol(c, label);
+   if (!sym) {
+      codegenError("Call to undefined function. %s", label);
+   }
+   Ctype* type = &sym->c;
+   if (type->type != Type_FUNC) {
+      codegenError("%s is not a function.", label);
+   }
+
+   AstNode* params = func->next;
+   // Put the parameters in registers and/or the stack.
+   u64 n_param = 0;
+   for (AstNode* param = params;
+        param != NULL;
+        param = param->next) {
+      targetPushParameter(c, n_param++, param);
+   }
+
+   i32 expected_nparam = funcNumParams(sym->c.func.node);
+
+   if (n_param != expected_nparam) {
+      codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
+                   label, expected_nparam, n_param);
+   }
+
+   instructionPrintf(c, node->line_number, "call %s", label);
+
+   // TODO: Restore registers. Not necessary at the moment because of DDCG
+
+   if (target == Target_STACK) {
+      stackPushReg(c, Reg_RAX);
+   }
+
+   AstNode* funcdef = sym->c.func.node;
+   Assert(funcdef->type == Ast_FUNCDEF);
+
+   expr_type->c = funcdef->child->ctype;
+   expr_type->location = g_registers[Reg_RAX];
+}
+
+void
 emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    if (nodeIsExpression(node)) {
       AstNode* child0 = node->child;
 
       if (node->type == Ast_FUNCCALL) {
-         AstNode* func = node->child;
-         char* label = func->tok->cast.string;
-
-         ExprType* sym = findSymbol(c, label);
-         if (!sym) {
-            codegenError("Call to undefined function. %s", label);
-         }
-         Ctype* type = &sym->c;
-         if (type->type != Type_FUNC) {
-            codegenError("%s is not a function.", label);
-         }
-
-         AstNode* params = func->next;
-         // Put the parameters in registers and/or the stack.
-         u64 n_param = 0;
-         for (AstNode* param = params;
-              param != NULL;
-              param = param->next) {
-            targetPushParameter(c, n_param++, param);
-         }
-
-         i32 expected_nparam = funcNumParams(sym->c.func.node);
-
-         if (n_param != expected_nparam) {
-            codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
-                         label, expected_nparam, n_param);
-         }
-
-         instructionPrintf(c, node->line_number, "call %s", label);
-         if (target == Target_STACK) {
-            stackPushReg(c, Reg_RAX);
-         }
-
-         *expr_type = *sym;
+         emitFunctionCall(c, node, expr_type, target);
       }
       else if (node->type == Ast_NUMBER) {
          int bits = 32;
@@ -1245,7 +1239,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
                    func_name,
                    (ExprType) {
                       .c= node->ctype,
-                      .location = { .type = Location_STACK, .offset = 0 }, // TODO: location for functions
+                      .location = { .type = Location_IMMEDIATE, .offset = 0 }, // TODO: location for functions
                    });
       }
 
@@ -1273,7 +1267,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
             Assert (param_declarator && param_declarator->child->type == Ast_ID);
 
-            targetPopParameter(c, n_param++, Target_STACK);
+            targetPopParameter(c, &param_type_spec->ctype, n_param++, Target_STACK);
 
             ExprType entry = {
                .c = param_type_spec->ctype,
@@ -1314,13 +1308,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    else {
       codegenError("Funcdef: Invalid node in the tree.");
    }
-}
-
-void
-emitFunctionCall(Codegen* c, AstNode* node) {
-   // Save all volatile registers which are bound.
-   // Call the function.
-   // Restore all volatile registers which are bound.
 }
 
 void

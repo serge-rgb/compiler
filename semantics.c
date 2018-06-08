@@ -10,9 +10,19 @@ isArithmeticType(Ctype ctype) {
 }
 
 b32
-isIntegerType(Ctype ctype) {
-   if (ctype.type == Type_INT ||
-       ctype.type == Type_CHAR) {
+isRealType(Ctype* ctype) {
+  b32 is_float = false;
+  if (ctype->type == Type_FLOAT ||
+      ctype->type == Type_DOUBLE) {
+    is_float = true;
+  }
+  return is_float;
+}
+
+b32
+isIntegerType(Ctype* ctype) {
+   if (ctype->type == Type_INT ||
+       ctype->type == Type_CHAR) {
       return true;
    }
    return false;

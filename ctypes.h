@@ -15,6 +15,7 @@ struct Ctype {
 
       // Real types
       Type_FLOAT = Type_ARITH | (1<<3),
+      Type_DOUBLE = Type_ARITH | (1<<4),
 
       // Function
       Type_FUNC = (1<<4),
@@ -49,7 +50,7 @@ struct Ctype {
       } struct_;
 
       struct CtypeFunc {
-         struct AstNode* node; // TODO: refactor?
+         struct AstNode* node; // Funcdef ast node.
       } func;
 
       // CtypeStruct struct_;
