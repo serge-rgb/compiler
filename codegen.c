@@ -677,7 +677,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
                               locationString(c, registerLocation(Reg_RAX), 64),
                               locationString(c, registerLocation(Reg_RAX), 64));
          }
-         movOrCopy(c, 0, &g_registers[Reg_RAX], &loc, entry->c.bits);
+         movOrCopy(c, 0, registerLocation(Reg_RAX), loc, entry->c.bits);
 
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
@@ -735,7 +735,7 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
    int bits = member->ctype->bits;
 
    if (target != Target_NONE) {
-      movOrCopy(c, node->line_number, &g_registers[Reg_RAX], &loc, bits);
+      movOrCopy(c, node->line_number, registerLocation(Reg_RAX), loc, bits);
 
       if (target == Target_STACK) {
          stackPushReg(c, Reg_RAX);
@@ -785,7 +785,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    Assert(funcdef->type == Ast_FUNCDEF);
 
    expr_type->c = funcdef->child->ctype;
-   expr_type->location = g_registers[Reg_RAX];
+   expr_type->location = registerLocation(Reg_RAX);
 }
 
 void
@@ -805,7 +805,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   c,
                   node->line_number,
                   "mov %s, %d",
-                  locationString(c, &g_registers[Reg_RAX], bits),
+                  locationString(c, registerLocation(Reg_RAX), bits),
                   node->tok->cast.integer);
             } break;
             case Target_STACK: {
@@ -841,14 +841,14 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
          Assert (lhs_type.c.bits == rhs_type.c.bits);
          if (op->value == '=') {
-            movOrCopy(c, node->line_number, &lhs_type.location, &rhs_type.location, bits);
+            movOrCopy(c, node->line_number, lhs_type.location, rhs_type.location, bits);
          }
          else {
             Assert(bits < 64);
             // TODO: Check for arithmetic type here.
             instructionPrintf(c, node->line_number, "mov %s, %s",
-                              locationString(c, &g_registers[Reg_RBX], bits),
-                              locationString(c, &lhs_type.location, bits));
+                              locationString(c, registerLocation(Reg_RBX), bits),
+                              locationString(c, lhs_type.location, bits));
             switch (op->value) {
                case ASSIGN_INCREMENT: {
                   instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
@@ -859,13 +859,13 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
 
             instructionPrintf(c, node->line_number, "mov %s, %s",
-                              locationString(c, &lhs_type.location, bits),
-                              locationString(c, &g_registers[Reg_RBX], bits));
+                              locationString(c, lhs_type.location, bits),
+                              locationString(c, registerLocation(Reg_RBX), bits));
 
             if (target == Target_ACCUM) {
                instructionPrintf(c, node->line_number, "mov %s, %s",
-                                 locationString(c, &g_registers[Reg_RAX], bits),
-                                 locationString(c, &lhs_type.location, bits));
+                                 locationString(c, registerLocation(Reg_RAX), bits),
+                                 locationString(c, lhs_type.location, bits));
             }
          }
       }
@@ -883,8 +883,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          Location var = local_etype.location;
 
          instructionPrintf(c, node->line_number, "mov %s, %s",
-                           locationString(c, &var, local_etype.c.bits),
-                           locationString(c, &g_registers[Reg_RAX], local_etype.c.bits));
+                           locationString(c, var, local_etype.c.bits),
+                           locationString(c, registerLocation(Reg_RAX), local_etype.c.bits));
          if (target == Target_STACK) {
             // Result is already on the stack.
          }
@@ -1106,7 +1106,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType type = Zero;  // TODO: Here is probably where we want to specify the type in case there is an initializer list on the other side.
          emitExpression(c, rhs, &type, Target_ACCUM);
-         movOrCopy(c, rhs->line_number, &entry.location, &type.location, type.c.bits);
+         movOrCopy(c, rhs->line_number, entry.location, type.location, type.c.bits);
       }
       else {
          // TODO: scc initializes to zero by default.

@@ -234,15 +234,15 @@ identifyKeyword(Buffer* b) {
 
 ErrorCode
 parseInt(char* str, int* out_int) {
-   ErrorCode result = SUCCESS;
+   ErrorCode result = Ok;
    if (!out_int) {
-      return ERROR_PARSE_INT;
+      return IntParse;
    }
    int val = 0;
    while (*str != '\0') {
       char c = *str;
       if (c-'0' < 0 || c-'0' > 9) {
-         result = ERROR_PARSE_INT;
+         result = IntParse;
          break;
       }
       val = (val * 10) + c-'0';
@@ -344,7 +344,7 @@ getToken(Arena* a, FileStream* fs) {
       if (t.type == TType_NUMBER) {
          int val = 0;
          ErrorCode err = parseInt(str, &val);
-         if (err != SUCCESS) {
+         if (err != Ok) {
             char msg[1024] = {0};
             PrintString(msg, 1024, "Error while parsing integer. Token string %s", str);
             lexerError(msg);

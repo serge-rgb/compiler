@@ -1,10 +1,11 @@
 #pragma once
 
-enum {
+enum ErrorCode {
   Ok = 0,
 
   Fail = 1,
 
-  CouldNotAssemble = 2,
-  CouldNotLink = 3,
+  IntParse,
+  CouldNotAssemble,
+  CouldNotLink,
 } typedef ErrorCode;

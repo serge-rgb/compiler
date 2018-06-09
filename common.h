@@ -66,9 +66,3 @@ typedef size_t sz;
         Assert(!"Not implemented.");                                \
         } while (0)
 
-
-typedef enum ErrorCode_s {
-    SUCCESS = 0,
-
-    ERROR_PARSE_INT = 1,
-} ErrorCode;
