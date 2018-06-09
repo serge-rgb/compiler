@@ -564,20 +564,19 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
             if (nextPunctuator(p, '{')) {
                decl_list = parseStructDeclarationList(p);
 
-               u64 bits = 0;
-
-               for (AstNode* decl = decl_list;
-                    decl;
-                    decl = decl->next) {
-                  AstNode* spec = decl->child;
-                  bits += spec->ctype.bits;
-                  bits = AlignPow2(bits, 8);
-               }
                noneIfNull(p->arena, &decl_list);
                expectPunctuator(p, '}');
-               out->bits = bits;
             }
          }
+         u64 bits = 0;
+         for (AstNode* decl = decl_list;
+              decl;
+              decl = decl->next) {
+            AstNode* spec = decl->child;
+            bits += spec->ctype.bits;
+            bits = AlignPow2(bits, 8);
+         }
+         out->bits = bits;
          out->struct_.decls = decl_list;
       } break;
       case Keyword_long: {

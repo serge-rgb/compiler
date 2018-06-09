@@ -8,23 +8,25 @@ struct Ctype {
 
       // Arithmetic types
       Type_ARITH = (1<<0),
+      Type_PEANO = (1<<8),  // NOTE: Type_INTEGER would be buggy af.
+      Type_REAL  = (1<<9),
 
       // Integer types
-      Type_CHAR = Type_ARITH | (1<<1),
-      Type_INT  = Type_ARITH | (1<<2),
+      Type_CHAR = Type_ARITH | Type_PEANO | (1<<1),
+      Type_INT  = Type_ARITH | Type_PEANO | (1<<2),
 
       // Real types
-      Type_FLOAT = Type_ARITH | (1<<3),
-      Type_DOUBLE = Type_ARITH | (1<<4),
+      Type_FLOAT = Type_ARITH | Type_REAL | (1<<3),
+      Type_DOUBLE = Type_ARITH | Type_REAL | (1<<4),
 
-      // Function
       Type_FUNC = (1<<4),
 
+      // Aggregates
       Type_STRUCT = (1<<5),
       Type_UNION = (1<<6),
 
+      // Pointers
       Type_POINTER = (1<<7),
-      // TODO union
       // TODO array
       // TODO atomic
    } type;

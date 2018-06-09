@@ -1226,7 +1226,7 @@ emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
 
 void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
-   AstNode* specifier        = node->child;
+   AstNode* specifier   = node->child;
    AstNode* declarator  = specifier->next;
    AstNode* compound    = declarator->next;
 

@@ -2,40 +2,30 @@
 
 b32
 isArithmeticType(Ctype ctype) {
-   if (ctype.type == Type_INT ||
-       ctype.type == Type_CHAR) {
-      return true;
-   }
-   return false;
+   b32 arith = ctype.type & Type_ARITH;
+   return arith;
 }
 
 b32
 isRealType(Ctype* ctype) {
-  b32 is_float = false;
-  if (ctype->type == Type_FLOAT ||
-      ctype->type == Type_DOUBLE) {
-    is_float = true;
-  }
-  return is_float;
+   b32 real = ctype->type & Type_REAL;
+   return real;
 }
 
 b32
 isIntegerType(Ctype* ctype) {
-   if (ctype->type == Type_INT ||
-       ctype->type == Type_CHAR) {
-      return true;
-   }
-   return false;
+   b32 integer = ctype->type & Type_PEANO;
+   return integer;
 }
 
 b32
 isAggregateType(Ctype* ctype) {
-  b32 is_aggr = false;
-  if (ctype->type == Type_STRUCT ||
-      ctype->type == Type_UNION) {
-    is_aggr = true;
-  }
-  return is_aggr;
+   b32 is_aggr = false;
+   if (ctype->type == Type_STRUCT ||
+       ctype->type == Type_UNION) {
+      is_aggr = true;
+   }
+   return is_aggr;
 }
 
 b32
