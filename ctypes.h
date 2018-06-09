@@ -31,19 +31,18 @@ struct Ctype {
       // TODO atomic
    } type;
 
-
    enum {
       Qual_CONST    = (1<<0),
       Qual_RESTRICT = (1<<1),
       Qual_VOLATILE = (1<<2),
    } qualifiers;
 
-   int      bits;
-
+   // TODO: Move this into an associated struct.
    union {
       struct CtypeStruct {
          char* tag;
          struct AstNode* decls;
+         u64 bits;
          struct StructMember {
             char* id;
             struct Ctype* ctype;

@@ -540,15 +540,12 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
    switch (t->value) {
       case Keyword_int: {
          out->type = Type_INT;
-         out->bits = 32;
       } break;
       case Keyword_char: {
          out->type = Type_CHAR;
-         out->bits = 8;
       } break;
       case Keyword_float: {
          out->type = Type_FLOAT;
-         out->bits = 32;
       } break;
       case Keyword_struct: {
          AstNode* decl_list = NULL;
@@ -568,33 +565,27 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
                expectPunctuator(p, '}');
             }
          }
-         u64 bits = 0;
          for (AstNode* decl = decl_list;
               decl;
               decl = decl->next) {
             AstNode* spec = decl->child;
-            bits += spec->ctype.bits;
-            bits = AlignPow2(bits, 8);
+            out->struct_.bits += typeBits(&spec->ctype);
+            out->struct_.bits = AlignPow2(out->struct_.bits, 8);
          }
-         out->bits = bits;
          out->struct_.decls = decl_list;
       } break;
       case Keyword_long: {
-         out->type = Type_INT;
-         out->bits = 64;
+         NotImplemented("long");
       } break;
       case Keyword_short: {
-         out->type = Type_INT;
-         out->bits = 16;
+         NotImplemented("short");
       } break;
       case Keyword_union: {
          NotImplemented("unions");
       } break;
       case Keyword__Bool: {
-
       } //break;
       case Keyword__Complex: {
-
       } //break;
       case Keyword__Imaginary: {
          NotImplemented("Type Specifier.");
@@ -949,7 +940,6 @@ parseFunctionDefinition(Parser* p) {
 
          Ctype type = {
             .type = Type_FUNC,
-            .bits = pointerSizeBits(),
             .func = (struct CtypeFunc){ .node = result  },
          };
 

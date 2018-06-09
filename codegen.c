@@ -499,7 +499,7 @@ pushParameter(Codegen* c, u64 n_param, AstNode* param) {
          case 4: { r = Reg_R8;  } break;
          case 5: { r = Reg_R9;  } break;
       }
-      movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), type.c.bits);
+      movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), typeBits(&type.c));
    }
    else {
       // Windows x64 calling convention:
@@ -508,7 +508,7 @@ pushParameter(Codegen* c, u64 n_param, AstNode* param) {
       // Items 5 an higher on the stack.
       // Items larger than 16 bytes passed by reference.
       if (isIntegerType(&type.c)
-          || (type.c.type == Type_STRUCT && type.c.bits <= 64)) {
+          || (type.c.type == Type_STRUCT && typeBits(&type.c)<= 64)) {
          if (n_param < 4) {
             RegisterEnum r = Reg_RCX;
             switch(n_param) {
@@ -518,7 +518,7 @@ pushParameter(Codegen* c, u64 n_param, AstNode* param) {
                case 3: { r = Reg_R9; } break;
             }
             // TODO: Win64 abi specifies we pass by reference when the size is greater than 64 bits.
-            movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), type.c.bits);
+            movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), typeBits(&type.c));
          }
       }
    }
@@ -528,11 +528,13 @@ Location
 popParameter(Codegen* c, Ctype* ctype, u64 n_param) {
    Location loc = Zero;
 
+   DevBreak("Need to make it so that struct type specifiers for previously"
+            "completed struct types have the correct size information.");
    if (isRealType(ctype)) {
       NotImplemented("float params");
    }
    else if (isIntegerType(ctype) ||
-            (isAggregateType(ctype) && ctype->bits <= 64)) {
+            (isAggregateType(ctype) && typeBits(ctype) <= 64)) {
       if ((c->config & Config_TARGET_MACOS) || (c->config & Config_TARGET_LINUX)) {
          if (n_param < 6) {
             loc.type = Location_REGISTER;
@@ -588,14 +590,14 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
 
    stackPop(c, Reg_RBX);
 
-   if (tleft.c.bits != tright.c.bits ||
+   if (typeBits(&tleft.c) != typeBits(&tright.c) ||
        tleft.c.type != tright.c.type) {
       // If both are integer types, then apply integer promotion rules.
       if (isIntegerType(&tleft.c) && isIntegerType(&tright.c)) {
-         ExprType* smaller = tleft.c.bits < tright.c.bits ? &tleft  : &tright;
-         ExprType* bigger  = tleft.c.bits < tright.c.bits ? &tright : &tleft;
+         // ExprType* smaller = typeBits(&tleft.c) < typeBits(&tright.c) ? &tleft  : &tright;
+         // ExprType* bigger  = typeBits(&tleft.c) < typeBits(&tright.c) ? &tright : &tleft;
 
-         smaller->c.bits = bigger->c.bits;
+         NotImplemented("Int promotion");
       }
       //
       // If one of them is floating point... do floating point conversion.
@@ -606,7 +608,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
       *expr_type = tleft;
    }
 
-   int bits = tleft.c.bits;
+   int bits = typeBits(&tleft.c);
    switch (type) {
       case Ast_ADD: { instructionReg(c, 0, "add %s, %s", bits, Reg_RAX, Reg_RBX); } break;
       case Ast_SUB: { instructionReg(c, 0, "sub %s, %s", bits, Reg_RAX, Reg_RBX); } break;
@@ -632,7 +634,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
 
    char* size_str = NULL;
 
-   if (entry->c.bits > 64) {
+   if (typeBits(&entry->c) > 64) {
       Assert(entry->location.type == Location_STACK);
       if (target != Target_NONE) {
          instructionPrintf(c, node->line_number, "mov rax, rsp");
@@ -645,7 +647,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
 
    }
    else {
-      switch (entry->c.bits) {
+      switch (typeBits(&entry->c)) {
          case 64: {
             size_str = "QWORD";
          } break;
@@ -664,12 +666,12 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       }
 
       if (target != Target_NONE) {
-         if (entry->c.bits <= 16) {
+         if (typeBits(&entry->c) <= 16) {
             instructionPrintf(c, 0, "xor %s, %s",
                               locationString(c, registerLocation(Reg_RAX), 64),
                               locationString(c, registerLocation(Reg_RAX), 64));
          }
-         movOrCopy(c, 0, registerLocation(Reg_RAX), loc, entry->c.bits);
+         movOrCopy(c, 0, registerLocation(Reg_RAX), loc, typeBits(&entry->c));
 
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
@@ -724,7 +726,7 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
          expr_type->c = *(member->ctype);
          expr_type->location = loc;
       }
-      int bits = member->ctype->bits;
+      int bits = typeBits(member->ctype);
 
       if (target != Target_NONE) {
          movOrCopy(c, node->line_number, registerLocation(Reg_RAX), loc, bits);
@@ -818,7 +820,6 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             } break;
          }
          if (expr_type) {
-            expr_type->c.bits = bits;
             expr_type->c.type = Type_INT;
             expr_type->location.immediate_value = node->tok->value;
          }
@@ -837,10 +838,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
          ExprType lhs_type = Zero;
          codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
-         int bits = lhs_type.c.bits;
+         int bits = typeBits(&lhs_type.c);
          ExprType rhs_type = Zero;
          codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
-         Assert (lhs_type.c.bits == rhs_type.c.bits);
+         Assert (typeBits(&lhs_type.c) == typeBits(&rhs_type.c));
          if (op->value == '=') {
             movOrCopy(c, node->line_number, lhs_type.location, rhs_type.location, bits);
          }
@@ -884,8 +885,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          Location var = local_etype.location;
 
          instructionPrintf(c, node->line_number, "mov %s, %s",
-                           locationString(c, var, local_etype.c.bits),
-                           locationString(c, registerLocation(Reg_RAX), local_etype.c.bits));
+                           locationString(c, var, typeBits(&local_etype.c)),
+                           locationString(c, registerLocation(Reg_RAX), typeBits(&local_etype.c)));
          if (target == Target_STACK) {
             // Result is already on the stack.
          }
@@ -925,7 +926,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             stackPop(c, Reg_RBX);
 
             u64 line = left->line_number;
-            instructionReg(c, line, "cmp %s, %s", left_type.c.bits, Reg_RAX, Reg_RBX);
+            instructionReg(c, line, "cmp %s, %s", typeBits(&left_type.c), Reg_RAX, Reg_RBX);
 
             char* instr = 0;
             switch(node->type) {
@@ -971,10 +972,10 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
          codegenEmit(c, right, &right_type, Target_STACK);
          codegenEmit(c, left, &left_type, Target_ACCUM);
          stackPop(c, Reg_RBX);
-         if (left_type.c.bits != right_type.c.bits) {
+         if (typeBits(&left_type.c) != typeBits(&right_type.c)) {
             NotImplemented("Promotion rules");
          }
-         instructionReg(c, cond->line_number, "cmp %s, %s", left_type.c.bits, Reg_RAX, Reg_RBX);
+         instructionReg(c, cond->line_number, "cmp %s, %s", typeBits(&left_type.c), Reg_RAX, Reg_RBX);
          switch(cond->type) {
             case Ast_EQUALS: { instructionPrintf(c, 0, "je %s", then); } break;
             case Ast_LESS: { instructionPrintf(c, 0, "jl %s", then); } break;
@@ -988,7 +989,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);
-         instructionReg(c, cond->line_number, "cmp %s, %s", expr_type.c.bits, Reg_RAX, Reg_RBX);
+         instructionReg(c, cond->line_number, "cmp %s, %s", typeBits(&expr_type.c), Reg_RAX, Reg_RBX);
          instructionPrintf(c, 0, "jne %s", then);
          instructionPrintf(c, 0, "jmp %s", els);
       } break;
@@ -1010,7 +1011,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_STRUCT) {
-      bits = specifier->ctype.bits;
+      bits = typeBits(&specifier->ctype);
    }
    else {
       char* tag_str = specifier->ctype.struct_.tag;
@@ -1018,8 +1019,8 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       // TODO: Anonymous structs
 
       if (tag_str && decls) {
-         Assert(specifier->ctype.bits != 0);
-         bits = specifier->ctype.bits;
+         Assert(typeBits(&specifier->ctype) != 0);
+         bits = typeBits(&specifier->ctype);
 
          if (findTag(c, tag_str)) {
             codegenError("Struct identifier redeclared: %s");
@@ -1043,24 +1044,22 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             struct StructMember member = { member_id, &spec->ctype, offset/8 };
             bufPush(entry.c.struct_.members, member);
 
-            offset += spec->ctype.bits;
+            offset += typeBits(&spec->ctype);
             offset = AlignPow2(offset, 8);
          }
-         Assert(specifier->ctype.bits == offset);
-
-         entry.c.bits = offset;
+         Assert(typeBits(&specifier->ctype) == offset);
 
          symInsert(&c->scope->tag_table, tag_str, entry);
       }
       else if (tag_str && declarator->type != Ast_NONE) {
-         Assert(specifier->ctype.bits == 0);
+         Assert(typeBits(&specifier->ctype) == 0);
 
          ExprType* entry = findTag(c, tag_str);
          if (!entry) {
             codegenError("Use of undeclared struct %s", tag_str);
          }
 
-         bits = entry->c.bits;
+         bits = typeBits(&entry->c);
       }
    }
 
@@ -1080,13 +1079,12 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          .c = specifier->ctype,
          .location = { .type = Location_STACK, .offset = c->stack_offset },
       };
-      entry.c.bits = bits;
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
          // TODO: Non-integer values.
          int value = rhs->tok->value;
 
-         switch (specifier->ctype.bits) {
+         switch (typeBits(&specifier->ctype)) {
             case 64: {
                instructionPrintf(c, node->line_number, "mov QWORD [ rsp ], 0x%x", value);
             } break;
@@ -1107,7 +1105,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType type = Zero;  // TODO: Here is probably where we want to specify the type in case there is an initializer list on the other side.
          emitExpression(c, rhs, &type, Target_ACCUM);
-         movOrCopy(c, rhs->line_number, entry.location, type.location, type.c.bits);
+         movOrCopy(c, rhs->line_number, entry.location, type.location, typeBits(&type.c));
       }
       else {
          // TODO: scc initializes to zero by default.
