@@ -1,10 +1,9 @@
-char foo(char a)
-{
-   return 41;
+int
+func1(int a, int b) {
+   return a + b;
 }
 
-int main()
-{
-   int x = foo();
-   return x;
+int
+main() {
+   return func1(2, 2) == 4;
 }

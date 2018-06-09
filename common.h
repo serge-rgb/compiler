@@ -60,6 +60,10 @@ typedef size_t sz;
 
 #define Break PlatformBreak
 
+#define DevBreak(message) \
+        fprintf(stderr, "Compiler dev: Keep going here [%s]\n", message); \
+        Break;
+
 #define NotImplemented(message)                          \
         do {                                             \
         printf("Not Implemented! -- [%s]\n", message);   \

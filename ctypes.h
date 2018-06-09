@@ -19,11 +19,11 @@ struct Ctype {
 
       // Function
       Type_FUNC = (1<<4),
-      // TODO finish function
 
       Type_STRUCT = (1<<5),
+      Type_UNION = (1<<6),
 
-      Type_POINTER = (1<<6),
+      Type_POINTER = (1<<7),
       // TODO union
       // TODO array
       // TODO atomic

@@ -30,6 +30,7 @@ enum RegisterEnum {
    Reg_Count,
 } typedef RegisterEnum;
 
+// TODO: Make Location fit in a register and use a hack to fit 64-bit values.
 struct Location {
    enum {
       Location_IMMEDIATE,  // Default, not an lvalue.
@@ -480,7 +481,7 @@ popScope(Codegen* c) {
 }
 
 void
-targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
+pushParameter(Codegen* c, u64 n_param, AstNode* param) {
    ExprType type = Zero;
    codegenEmit(c, param, &type, Target_ACCUM);
 
@@ -506,76 +507,67 @@ targetPushParameter(Codegen* c, u64 n_param, AstNode* param) {
       // First 4 floats (left-to-right): XMM0-3
       // Items 5 an higher on the stack.
       // Items larger than 16 bytes passed by reference.
-      Assert (isIntegerType(&type.c));
-      if (n_param < 4) {
-         RegisterEnum r = Reg_RCX;
-         switch(n_param) {
-            case 0: {              } break;
-            case 1: { r = Reg_RDX; } break;
-            case 2: { r = Reg_R8; } break;
-            case 3: { r = Reg_R9; } break;
+      if (isIntegerType(&type.c)
+          || (type.c.type == Type_STRUCT && type.c.bits <= 64)) {
+         if (n_param < 4) {
+            RegisterEnum r = Reg_RCX;
+            switch(n_param) {
+               case 0: {              } break;
+               case 1: { r = Reg_RDX; } break;
+               case 2: { r = Reg_R8; } break;
+               case 3: { r = Reg_R9; } break;
+            }
+            // TODO: Win64 abi specifies we pass by reference when the size is greater than 64 bits.
+            movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), type.c.bits);
          }
-         // TODO: Win64 abi specifies we pass by reference when the size is greater than 64 bits.
-         movOrCopy(c, 0,  registerLocation(r), registerLocation(Reg_RAX), type.c.bits);
       }
    }
 }
 
-void
-targetPopParameter(Codegen* c, Ctype* ctype, u64 n_param, EmitTarget target) {
+Location
+popParameter(Codegen* c, Ctype* ctype, u64 n_param) {
+   Location loc = Zero;
+
    if (isRealType(ctype)) {
       NotImplemented("float params");
    }
-   RegisterEnum r = Reg_RDI;
-   if ((c->config & Config_TARGET_MACOS) || (c->config & Config_TARGET_LINUX)) {
-      switch (n_param) {
-         case 0: {
-            // r is already RDI
-         } break;
-         case 1: {
-            r = Reg_RSI;
-         } break;
-         case 2: {
-            r = Reg_RDX;
-         } break;
-         case 3: {
-            r = Reg_RCX;
-         } break;
-         case 4: {
-            r = Reg_R8;
-         } break;
-         case 5: {
-            r = Reg_R9;
-         } break;
+   else if (isIntegerType(ctype) ||
+            (isAggregateType(ctype) && ctype->bits <= 64)) {
+      if ((c->config & Config_TARGET_MACOS) || (c->config & Config_TARGET_LINUX)) {
+         if (n_param < 6) {
+            loc.type = Location_REGISTER;
+            switch (n_param) {
+               case 0: { loc.reg = Reg_RDI; } break;
+               case 1: { loc.reg = Reg_RSI; } break;
+               case 2: { loc.reg = Reg_RDX; } break;
+               case 3: { loc.reg = Reg_RCX; } break;
+               case 4: { loc.reg = Reg_R8;  } break;
+               case 5: { loc.reg = Reg_R9;  } break;
+            }
+         }
+         else {
+            NotImplemented("System V ABI params on stack");
+         }
       }
-      if (target == Target_STACK) {
-         stackPushReg(c, r);
-      }
-      else {
-         instructionReg(c, 0, "mov %s, %s", 64, Reg_RAX, r);
+      else if (c->config & Config_TARGET_WIN){
+         if (n_param < 4) {
+            loc.type = Location_REGISTER;
+            switch(n_param) {
+               case 0: { loc.reg = Reg_RCX; } break;
+               case 1: { loc.reg = Reg_RDX; } break;
+               case 2: { loc.reg = Reg_R8;  } break;
+               case 3: { loc.reg = Reg_R9;  } break;
+            }
+         }
+         else {
+            NotImplemented("More than 4 parameters");
+         }
       }
    }
    else {
-      // TODO Float parameters.
-      if (n_param < 4) {
-         RegisterEnum r = Reg_RCX;
-         switch(n_param) {
-            case 0: {              } break;
-            case 1: { r = Reg_RDX; } break;
-            case 2: { r = Reg_R8; } break;
-            case 3: { r = Reg_R9; } break;
-         }
-         if (target == Target_STACK) {
-            stackPushReg(c, r);
-         }
-         else {
-            instructionReg(c, 0, "mov %s, %s", 64, Reg_RAX, r);
-         }
-      }
-      else {
-         NotImplemented("More than 4 parameters");
-      }
+      NotImplemented("Float or large parameter.");
    }
+   return loc;
 }
 
 void
@@ -720,25 +712,34 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
 
    struct StructMember* member = members + member_idx;
 
-   Assert(symbol_entry->location.type == Location_STACK);
-   u64 member_offset = member->offset;
+   if (symbol_entry->location.type == Location_STACK) {
+      u64 member_offset = member->offset;
 
-   Location loc = {
-      .type = Location_STACK,
-      .offset = symbol_entry->location.offset - member_offset,
-   };
+      Location loc = {
+         .type = Location_STACK,
+         .offset = symbol_entry->location.offset - member_offset,
+      };
 
-   if (expr_type) {
-      expr_type->c = *(member->ctype);
-      expr_type->location = loc;
+      if (expr_type) {
+         expr_type->c = *(member->ctype);
+         expr_type->location = loc;
+      }
+      int bits = member->ctype->bits;
+
+      if (target != Target_NONE) {
+         movOrCopy(c, node->line_number, registerLocation(Reg_RAX), loc, bits);
+
+         if (target == Target_STACK) {
+            stackPushReg(c, Reg_RAX);
+         }
+      }
    }
-   int bits = member->ctype->bits;
-
-   if (target != Target_NONE) {
-      movOrCopy(c, node->line_number, registerLocation(Reg_RAX), loc, bits);
-
-      if (target == Target_STACK) {
-         stackPushReg(c, Reg_RAX);
+   else if (symbol_entry->location.type == Location_REGISTER) {
+      if (target == Target_ACCUM) {
+         instructionReg(c, node->line_number, "mov %s, %s", 64, Reg_RAX, symbol_entry->location.reg);
+      }
+      else if (target == Target_STACK) {
+         stackPushReg(c, symbol_entry->location.reg);
       }
    }
 }
@@ -763,7 +764,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    for (AstNode* param = params;
         param != NULL;
         param = param->next) {
-      targetPushParameter(c, n_param++, param);
+      pushParameter(c, n_param++, param);
    }
 
    i32 expected_nparam = funcNumParams(sym->c.func.node);
@@ -1125,7 +1126,8 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
          if (stmt->child) {
-            emitExpression(c, stmt->child, NULL, Target_ACCUM);
+            ExprType et = {0};
+            emitExpression(c, stmt->child, &et, Target_ACCUM);
             instructionPrintf(c, stmt->line_number, "jmp .func_end");
          }
       } break;
@@ -1267,16 +1269,15 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
             Assert (param_declarator && param_declarator->child->type == Ast_ID);
 
-            targetPopParameter(c, &param_type_spec->ctype, n_param++, Target_STACK);
+            Location param_loc = popParameter(c, &param_type_spec->ctype, n_param++);
 
             ExprType entry = {
                .c = param_type_spec->ctype,
-               .location = { .type = Location_STACK, .offset = c->stack_offset },
+               .location = param_loc,
             };
             symInsert(&c->scope->symbol_table, id_str, entry);
 
             p = p->next;
-
          }
       }
 

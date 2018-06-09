@@ -29,6 +29,16 @@ isIntegerType(Ctype* ctype) {
 }
 
 b32
+isAggregateType(Ctype* ctype) {
+  b32 is_aggr = false;
+  if (ctype->type == Type_STRUCT ||
+      ctype->type == Type_UNION) {
+    is_aggr = true;
+  }
+  return is_aggr;
+}
+
+b32
 nodeIsExpression(AstNode* node) {
    b32 isExpr = false;
    if (node->type == Ast_MUL || node->type == Ast_DIV ||

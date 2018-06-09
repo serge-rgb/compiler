@@ -965,19 +965,13 @@ parseFunctionDefinition(Parser* p) {
 
 AstNode*
 parseTranslationUnit(Parser* p) {
-   // How to parse a function declaration
-   // 1. declaration specifier
-   // 2. declarator
-   // 3. declaration list (one or more declarations)
-   // 4. compound statement
-
    // Return a list of declarations and function definitions.
    //
    AstNode* result = NULL;
    AstNode** cur = &result;
    while (true) {
-      if (   (*cur = parseFunctionDefinition(p))) {
-          // || (*cur = parseDeclaration(p))) {     // TODO: Top level declarations.
+      if (   (*cur = parseFunctionDefinition(p))
+          || (*cur = parseDeclaration(p))) {     // TODO: Top level declarations.
          cur = &((*cur)->next);
       } else {
          break;
