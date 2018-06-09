@@ -34,7 +34,6 @@
  * `  // Now test_Hashmap is defined. Insert elements with test_hmInsert and
  * `  // get them with test_hmGet
  * `  MyMap hm = {0};
- * `  hm.arena = my_arena;
  * `  testInsert(&hm, 42, TRUE);
  * `  bool v = testGet(&hm, 42);  // TRUE
  * `
@@ -68,6 +67,16 @@
  * `   #define KeyCompareFunc myKeyCompare
  * `   #include "hashmap.inl"
  * `
+ * `   int example_func() {
+ * `     str_Hashmap hm = {0};
+*  `     hm.arena = my_arena;  // You can specify the arena to control how the allocation is done.
+ * `     strInsert(&hm, "hello world", 42);
+ * `   }
+ *
+ *
+ *
+ *
+ *
  *
  **/
 

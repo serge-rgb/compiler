@@ -13,5 +13,7 @@ int proc_struct(struct veci foo) {
 int main() {
    struct veci foo;
    foo.x = 4;
+   foo.y = 2;
+   foo.z = 1;
    return proc_struct(foo);
 }

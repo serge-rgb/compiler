@@ -2,13 +2,18 @@
 // Forward declaration. Defined in codegen.c
 typedef struct RegisterValue_s RegisterValue;
 
+#define HashmapName AggregateSizes
+#define HashmapPrefix aggr
+#define HashmapKey char*
+#define HashmapValue u64
+#include "hashmap.inl"
 
-#define CTYPE_HASHMAP_SIZE 128
 struct Parser {
    Token* token;  // The next token to parse.
    Arena* arena;
    AstNode* tree;
    char* file_name;
+   AggregateSizes sizes;
 } typedef Parser;
 
 // A function that takes a Parser and returns an AstNode*
@@ -560,19 +565,28 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
             out->struct_.tag = id->cast.string;
             if (nextPunctuator(p, '{')) {
                decl_list = parseStructDeclarationList(p);
-
                noneIfNull(p->arena, &decl_list);
                expectPunctuator(p, '}');
             }
+            else {
+               u64* bits = aggrGet(&p->sizes, id->cast.string);
+               Assert (bits);
+               out->struct_.bits = *bits;
+            }
          }
-         for (AstNode* decl = decl_list;
-              decl;
-              decl = decl->next) {
-            AstNode* spec = decl->child;
-            out->struct_.bits += typeBits(&spec->ctype);
-            out->struct_.bits = AlignPow2(out->struct_.bits, 8);
+         if (decl_list) {
+            for (AstNode* decl = decl_list;
+                 decl;
+                 decl = decl->next) {
+               AstNode* spec = decl->child;
+               out->struct_.bits += typeBits(&spec->ctype);
+               out->struct_.bits = AlignPow2(out->struct_.bits, 8);
+            }
+            if ( !aggrGet(&p->sizes, id->cast.string) ) {
+               aggrInsert(&p->sizes, id->cast.string, out->struct_.bits);
+            }
+            out->struct_.decls = decl_list;
          }
-         out->struct_.decls = decl_list;
       } break;
       case Keyword_long: {
          NotImplemented("long");
