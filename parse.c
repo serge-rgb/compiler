@@ -191,17 +191,15 @@ postfixExpr(Parser* p) {
             }
          }
       }
-      else if (nextPunctuator(p, '.')) {
+      else if (nextPunctuator(p, '.')
+               || nextPunctuator(p, ARROW)) {
         Token* id = nextToken(p);
         if (id->type != TType_ID) {
-          parseError(p, "Expected identifier after '.'");
+          parseError(p, "Expected identifier after '.' or '->'");
         }
         AstNode* right = makeAstNode(p->arena, Ast_ID, 0, 0);
         right->tok = id;
         left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, left, right);
-      }
-      else if (nextPunctuator(p, ARROW)) {
-         NotImplemented("Arrow postfix expression");
       }
       else if (nextPunctuator(p, INCREMENT)) {
          left = makeAstNode(p->arena, Ast_POSTFIX_INC, left, 0);

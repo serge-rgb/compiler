@@ -584,7 +584,7 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
       }
       else if (c->config & Config_TARGET_WIN){
          if (n_param < 4) {
-            if (isIntegerType(ctype)) {
+            if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
                loc.type = Location_REGISTER;
                switch(n_param) {
                   case 0: { loc.reg = Reg_RCX; } break;
@@ -729,7 +729,20 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
    if (!symbol_entry) {
       codegenError("%s undeclared.", struct_str);
    }
-   char* tag_str = symbol_entry->c.aggr.tag;
+
+   Ctype *ctype = NULL;
+   Location address = Zero;
+   if (symbol_entry->c.type == Type_POINTER) {
+      ctype = &symbol_entry->c.pointer.pointee->c;
+      address = symbol_entry->location;
+   }
+   else {
+      Assert(symbol_entry->c.type = Type_AGGREGATE);
+      ctype = &symbol_entry->c;
+      address = symbol_entry->location;
+   }
+
+   char* tag_str = ctype->aggr.tag;
    ExprType* struct_entry = findTag(c, tag_str);
    if (!struct_entry) {
       codegenError("No struct named %s", tag_str);
@@ -748,36 +761,34 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
    }
 
    struct StructMember* member = members + member_idx;
+   u64 member_offset = member->offset;
+   int bits = typeBits(member->ctype);
 
-   if (symbol_entry->location.type == Location_STACK) {
-      u64 member_offset = member->offset;
-
-      Location loc = {
-         .type = Location_STACK,
-         .offset = symbol_entry->location.offset - member_offset,
-      };
-
-      if (expr_type) {
-         expr_type->c = *(member->ctype);
-         expr_type->location = loc;
-      }
-      int bits = typeBits(member->ctype);
+   if (address.type == Location_STACK) {
+      address.offset = symbol_entry->location.offset - member_offset;
 
       if (target != Target_NONE) {
-         movOrCopy(c, node->line_number, registerLocation(Reg_RAX), loc, bits);
+         movOrCopy(c, node->line_number, registerLocation(Reg_RAX), address, bits);
 
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
       }
    }
-   else if (symbol_entry->location.type == Location_REGISTER) {
-      if (target == Target_ACCUM) {
-         instructionReg(c, node->line_number, "mov %s, %s", 64, Reg_RAX, symbol_entry->location.reg);
+   else if (address.type == Location_REGISTER) {
+      if (target != Target_NONE) {
+         instructionPrintf(c, node->line_number, "mov %s, [%s + %d]",
+                           locationString(c, (Location){ .type=Location_REGISTER, .reg=Reg_RAX }, typeBits(member->ctype)),
+                           g_registers[address.reg].reg,
+                           member_offset);
+         if (target == Target_STACK) {
+            stackPushReg(c, address.reg);
+         }
       }
-      else if (target == Target_STACK) {
-         stackPushReg(c, symbol_entry->location.reg);
-      }
+   }
+   if (expr_type) {
+      expr_type->c = *(member->ctype);
+      expr_type->location = address;
    }
 }
 
@@ -1355,10 +1366,11 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       if (entry) {
          codegenError("Redefining function %s", func_name);
       } else {
+         // TODO: function ctype. grab pointer from declarator and type from specifier
          symInsert(&c->scope->symbol_table,
                    func_name,
                    (ExprType) {
-                      .c= node->ctype,
+                      .c = (Ctype) { .type = Type_FUNC, .func.node = node },
                       .location = { .type = Location_IMMEDIATE, .offset = 0 }, // TODO: location for functions
                    });
       }
@@ -1389,13 +1401,25 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
             Assert (param_declarator && param_declarator->child->type == Ast_ID);
 
-            Location param_loc = popParameter(c, &param_type_spec->ctype, n_param++, &offset);
+            Ctype param_type;
+            if (param_declarator->is_pointer) {
+               param_type.type = Type_POINTER;
+               param_type.pointer.pointee = AllocType(c->arena, ExprType);
+               param_type.pointer.pointee->c = param_type_spec->ctype;
+            }
+            else {
+               param_type = param_type_spec->ctype;
+            }
 
-            ExprType entry = {
-               .c = param_type_spec->ctype,
-               .location = param_loc,
-            };
-            symInsert(&c->scope->symbol_table, id_str, entry);
+            Location param_loc = popParameter(c, &param_type, n_param++, &offset);
+
+            symInsert(&c->scope->symbol_table,
+                                        id_str,
+                                        (ExprType){
+                                           .c = param_type,
+                                           .location = param_loc,
+                                        });
+
 
             p = p->next;
          }
