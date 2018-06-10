@@ -20,11 +20,13 @@ struct AstNode {
       Token*   tok;
       // Otherwise..
       Ctype    ctype;
+      // When the node is Ast_DECLARATOR
+      b32 is_pointer;
    };
    struct AstNode* child;
-   struct AstNode* next;  // TODO: Rename to `next`
+   struct AstNode* next;
 
-   u64      line_number;
+   u64 line_number;
 } typedef AstNode;
 
 typedef struct AstMul_s {

@@ -32,14 +32,27 @@ u64
 typeBits(Ctype* ctype) {
    u64 bits = 0;
    switch(ctype->type) {
-      case Type_CHAR: { bits = 8; } break;
+      // 8 bits
+      case Type_CHAR: {
+         bits = 8;
+      } break;
+
+      // 32 bits
       case Type_FLOAT:
-      case Type_INT: { bits = 32; } break;
+      case Type_INT: {
+         bits = 32;
+      } break;
+
+      // 64 bits
+      case Type_POINTER:
       case Type_DOUBLE: {
          bits = 64;
       } break;
+
+      // N bits
+      case Type_UNION:
       case Type_STRUCT: {
-         bits = ctype->struct_.bits;
+         bits = ctype->aggr.bits;
       } break;
 
       default: {

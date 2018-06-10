@@ -48,14 +48,15 @@ struct Ctype {
             struct Ctype* ctype;
             u64 offset;
          } * members;
-      } struct_;
+      } aggr;
 
       struct CtypeFunc {
          struct AstNode* node; // Funcdef ast node.
       } func;
 
-      // CtypeStruct struct_;
-      // CtypeFunc func;
+      struct CtypePointer {
+         struct Ctype* pointee;
+      } pointer;
    };
 } typedef Ctype;
 

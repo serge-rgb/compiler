@@ -722,12 +722,12 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
    if (!symbol_entry) {
       codegenError("%s undeclared.", struct_str);
    }
-   char* tag_str = symbol_entry->c.struct_.tag;
+   char* tag_str = symbol_entry->c.aggr.tag;
    ExprType* struct_entry = findTag(c, tag_str);
    if (!struct_entry) {
       codegenError("No struct named %s", tag_str);
    }
-   struct StructMember* members = struct_entry->c.struct_.members;
+   struct StructMember* members = struct_entry->c.aggr.members;
    // TODO: Use a hash map?
    u64 member_idx = MaxU64;
    for (u64 i = 0; i < bufCount(members); ++i) {
@@ -791,6 +791,9 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    }
 
    AstNode* params = func->next;
+
+   u64 stack_top = bufCount(c->stack);
+
    // Put the parameters in registers and/or the stack.
    u64 n_param = 0;
    for (AstNode* param = params;
@@ -811,6 +814,9 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    instructionPrintf(c, node->line_number, "call %s", label);
    c->stack_offset += pointerSizeBits() / 8;
 
+   while (bufCount(c->stack) != stack_top) {
+      stackPop(c, Reg_RBX);
+   }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
 
    if (target == Target_STACK) {
@@ -1047,8 +1053,8 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       bits = typeBits(&specifier->ctype);
    }
    else {
-      char* tag_str = specifier->ctype.struct_.tag;
-      AstNode* decls = specifier->ctype.struct_.decls;
+      char* tag_str = specifier->ctype.aggr.tag;
+      AstNode* decls = specifier->ctype.aggr.decls;
       // TODO: Anonymous structs
 
       if (tag_str && decls) {
@@ -1075,9 +1081,17 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
             Assert(offset % 8 == 0);
             struct StructMember member = { member_id, &spec->ctype, offset/8 };
-            bufPush(entry.c.struct_.members, member);
+            bufPush(entry.c.aggr.members, member);
 
-            offset += typeBits(&spec->ctype);
+            Ctype* ctype = NULL;
+            if (declarator->is_pointer) {
+               DevBreak("struct member is pointer");
+            }
+            else {
+               ctype = &spec->ctype;
+            }
+
+            offset += typeBits(ctype);
             offset = AlignPow2(offset, 8);
          }
          Assert(typeBits(&specifier->ctype) == offset);
@@ -1090,7 +1104,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             codegenError("Use of undeclared struct %s", tag_str);
          }
 
-         bits = typeBits(&entry->c);
+         if (declarator->is_pointer)
+            bits = pointerSizeBits();
+         else
+            bits = typeBits(&entry->c);
       }
    }
 
@@ -1106,6 +1123,15 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       // TODO: top level declarations
       stackPushOffset(c, bits/8);
 
+      Ctype ctype;
+      if (declarator->is_pointer) {
+         ctype.type = Type_POINTER;
+         ctype.pointer.pointee = &specifier->ctype;
+      }
+      else {
+         ctype = specifier->ctype;
+      }
+
       ExprType entry = {
          .c = specifier->ctype,
          .location = { .type = Location_STACK, .offset = c->stack_offset },
@@ -1115,7 +1141,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          // TODO: Non-integer values.
          int value = rhs->tok->value;
 
-         switch (typeBits(&specifier->ctype)) {
+         switch (typeBits(&ctype)) {
             case 64: {
                instructionPrintf(c, node->line_number, "mov QWORD [ rsp ], 0x%x", value);
             } break;

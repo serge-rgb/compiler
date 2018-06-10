@@ -562,7 +562,7 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
             noneIfNull(p->arena, &decl_list);
             expectPunctuator(p, '}');
          } else {
-            out->struct_.tag = id->cast.string;
+            out->aggr.tag = id->cast.string;
             if (nextPunctuator(p, '{')) {
                decl_list = parseStructDeclarationList(p);
                noneIfNull(p->arena, &decl_list);
@@ -571,7 +571,7 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
             else {
                u64* bits = aggrGet(&p->sizes, id->cast.string);
                Assert (bits);
-               out->struct_.bits = *bits;
+               out->aggr.bits = *bits;
             }
          }
          if (decl_list) {
@@ -579,13 +579,13 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
                  decl;
                  decl = decl->next) {
                AstNode* spec = decl->child;
-               out->struct_.bits += typeBits(&spec->ctype);
-               out->struct_.bits = AlignPow2(out->struct_.bits, 8);
+               out->aggr.bits += typeBits(&spec->ctype);
+               out->aggr.bits = AlignPow2(out->aggr.bits, 8);
             }
             if ( !aggrGet(&p->sizes, id->cast.string) ) {
-               aggrInsert(&p->sizes, id->cast.string, out->struct_.bits);
+               aggrInsert(&p->sizes, id->cast.string, out->aggr.bits);
             }
-            out->struct_.decls = decl_list;
+            out->aggr.decls = decl_list;
          }
       } break;
       case Keyword_long: {
@@ -706,14 +706,23 @@ parseDeclarator(Parser* p) {
    AstNode* r = NULL;
    Token* t;
    Token* bt = marktrack(p);
-   if (nextPunctuator(p, '(')) {
-      parseError(p, "Function declarators not supported yet");
-   }
-   else if (nextPunctuator(p, '*')) {
-      parseError(p, "pointer declarators not supported yet");
-   }
-   else if ((t = nextToken(p)) && (t->type == TType_ID)) {
+   b32 is_ptr = false;
 
+   if (nextPunctuator(p, '*')) {
+      is_ptr = true;
+   }
+
+   if (nextPunctuator(p, '(')) {
+      AstNode* inner = parseDeclarator(p);
+      if (!inner) {
+         parseError(p, "Expected declarator inside (");
+      }
+      else {
+         expectPunctuator(p, ')');
+      }
+   }
+
+   if ((t = nextToken(p)) && (t->type == TType_ID)) {
       AstNode* id = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
       id->tok = t;
       if (nextPunctuator(p, '(')) {
@@ -726,6 +735,7 @@ parseDeclarator(Parser* p) {
          }
       }
       r = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATOR, id, NULL, t->line_number);
+      r->is_pointer = is_ptr;
    }
    else {
       backtrack(p, bt);
