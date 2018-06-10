@@ -11,14 +11,12 @@ struct veci {
 //}
 
 int main() {
-   /*
    struct veci foo;
    foo.x = 4;
    foo.y = 2;
    foo.z = 1;
-   */
 
-   struct veci *pfoo = 0;
+   struct veci *pfoo = &foo;
 
    // return proc_struct(foo);
    return 0;

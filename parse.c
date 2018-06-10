@@ -233,7 +233,22 @@ unaryExpr(Parser* p) {
    alignof
    **/
 
-   AstNode* t = postfixExpr(p);
+   AstNode* t = NULL;
+
+   if (nextPunctuator(p, '*')) {
+      NotImplemented("indirection operator");
+   }
+   else if (nextPunctuator(p, '&')) {
+      AstNode* postfix = postfixExpr(p);
+      if (!postfix) {
+         parseError(p, "Expected expression after &");
+      }
+      t = makeAstNode(p->arena, Ast_ADDRESS, postfix, 0);
+   }
+   else {
+      t = postfixExpr(p);
+   }
+
    return t;
 }
 
@@ -554,7 +569,7 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
       } break;
       case Keyword_struct: {
          AstNode* decl_list = NULL;
-         out->type = Type_STRUCT;
+         out->type = Type_AGGREGATE;
          Token* id = nextToken(p);
          if (id->type != TType_ID) {
             expectPunctuator(p, '{');

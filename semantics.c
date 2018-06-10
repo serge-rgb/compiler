@@ -20,11 +20,7 @@ isIntegerType(Ctype* ctype) {
 
 b32
 isAggregateType(Ctype* ctype) {
-   b32 is_aggr = false;
-   if (ctype->type == Type_STRUCT ||
-       ctype->type == Type_UNION) {
-      is_aggr = true;
-   }
+   b32 is_aggr = ctype->type == Type_AGGREGATE;
    return is_aggr;
 }
 
@@ -50,8 +46,7 @@ typeBits(Ctype* ctype) {
       } break;
 
       // N bits
-      case Type_UNION:
-      case Type_STRUCT: {
+      case Type_AGGREGATE: {
          bits = ctype->aggr.bits;
       } break;
 
@@ -73,7 +68,7 @@ nodeIsExpression(AstNode* node) {
        node->type == Ast_FUNCCALL || node->type == Ast_ASSIGN_EXPR ||
        node->type == Ast_NUMBER || node->type == Ast_ID ||
        node->type == Ast_POSTFIX_INC || node->type == Ast_POSTFIX_DEC ||
-       node->type == Ast_STRUCT_MEMBER_ACCESS) {
+       node->type == Ast_STRUCT_MEMBER_ACCESS || node->type == Ast_ADDRESS) {
       isExpr = true;
    }
    return isExpr;

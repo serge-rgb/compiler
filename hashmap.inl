@@ -81,8 +81,8 @@
  **/
 
 
-#ifndef HashmapSize
-#define HashmapSize 1024
+#ifndef HashmapInitSize
+#define HashmapInitSize 1024
 #endif
 
 #ifndef HashmapPrefix
@@ -126,13 +126,24 @@ struct Generic(HashmapKeyVal_s) {
 
 typedef struct {
    Arena                   arena;
-   Generic(HashmapKeyVal)  keyvals[HashmapSize];
+   Generic(HashmapKeyVal)  *keyvals;
+   u32                     n_keyvals;
 } HashmapName;
 
 void
+Generic(__maybeInit) (HashmapName* hm) {
+   if (!hm->keyvals) {
+      hm->n_keyvals = HashmapInitSize;
+      hm->keyvals = AllocArray(&hm->arena, Generic(HashmapKeyVal), hm->n_keyvals);
+   }
+}
+
+HashmapValue*
 Generic(Insert) (HashmapName* hm, HashmapKey key, HashmapValue val) {
+   Generic(__maybeInit(hm));
+
    u64 hash = HashFunction(&key);
-   Generic(HashmapKeyVal) *kv = &hm->keyvals[hash % HashmapSize];
+   Generic(HashmapKeyVal) *kv = &hm->keyvals[hash % hm->n_keyvals];
    while (true) {
    // Using the first element as a sentinel.
 #if defined(KeyCompareFunc)
@@ -153,12 +164,15 @@ Generic(Insert) (HashmapName* hm, HashmapKey key, HashmapValue val) {
    kv = kv->next;
    kv->key = key;
    kv->val = val;
+
+   return &kv->val;
 }
 
 HashmapValue*
 Generic(Get) (HashmapName* hm, HashmapKey   key) {
+   Generic(__maybeInit(hm));
    u64 hash = HashFunction(&key);
-   Generic(HashmapKeyVal)* kv = hm->keyvals[hash % HashmapSize].next;
+   Generic(HashmapKeyVal)* kv = hm->keyvals[hash % hm->n_keyvals].next;
    HashmapValue* result = NULL;
    while (kv) {
 #if defined(KeyCompareFunc)
@@ -184,5 +198,5 @@ Generic(Get) (HashmapName* hm, HashmapKey   key) {
 #undef HashmapName
 #undef HashmapKey
 #undef HashmapPrefix
-#undef HashmapSize
+#undef HashmapInitSize
 #undef HashmapValue

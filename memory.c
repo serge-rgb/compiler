@@ -1,6 +1,7 @@
 #define ARENA_DEFAULT_BLOCK_SIZE Megabytes(1)
 
 #define AllocType(arena, type) allocate(arena, sizeof(type))
+#define AllocArray(arena, type, count) allocate(arena, sizeof(type) * (count))
 
 #define ArenaBootstrap(object, arenaName)    \
 {                                            \

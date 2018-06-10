@@ -33,7 +33,9 @@ enum RegisterEnum {
 // TODO: Make Location fit in a register and use a hack to fit 64-bit values.
 struct Location {
    enum {
-      Location_IMMEDIATE,  // Default, not an lvalue.
+      Location_INVALID,
+
+      Location_IMMEDIATE,
       Location_REGISTER,
       Location_STACK,
       Location_POINTER,
@@ -465,13 +467,11 @@ movOrCopy(Codegen* c, u64 line_number, Location out, Location in, int bits) {
       else {
          InvalidCodePath;
       }
-      // TODO: Assert when doing a big copy into a register.
    }
 }
 
 void
 pushScope(Codegen* c) {
-   // TODO
    Scope* prev_scope = c->scope;
    c->scope = allocate(c->arena, sizeof(*c->scope));
    ArenaBootstrap(c->scope, arena);
@@ -481,9 +481,16 @@ pushScope(Codegen* c) {
 void
 popScope(Codegen* c) {
    deallocate(c->scope->arena);
-   if (!arenaIsEmpty(&c->scope->symbol_table.arena)) {
-      deallocate(&c->scope->symbol_table.arena);
+
+   // We might have pointers to objects declared in this scope
+   // We can't deallocate, but we can go through all of our symbols and mark them as invalid.
+
+   for (sz i = 0;
+        i < c->scope->symbol_table.n_keyvals;
+        ++i) {
+      c->scope->symbol_table.keyvals[i] = (symHashmapKeyVal)Zero;
    }
+
    c->scope = c->scope->prev;
 }
 
@@ -728,7 +735,7 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
       codegenError("No struct named %s", tag_str);
    }
    struct StructMember* members = struct_entry->c.aggr.members;
-   // TODO: Use a hash map?
+
    u64 member_idx = MaxU64;
    for (u64 i = 0; i < bufCount(members); ++i) {
       if (!strcmp(members[i].id, field_str)) {
@@ -835,156 +842,211 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
    if (nodeIsExpression(node)) {
       AstNode* child0 = node->child;
 
-      if (node->type == Ast_FUNCCALL) {
-         emitFunctionCall(c, node, expr_type, target);
-      }
-      else if (node->type == Ast_NUMBER) {
-         int bits = 32;
-         switch (target) {
-            case Target_ACCUM: {
-               Assert(bits < 64);
-               instructionPrintf(
-                  c,
-                  node->line_number,
-                  "mov %s, %d",
-                  locationString(c, registerLocation(Reg_RAX), bits),
-                  node->tok->cast.integer);
-            } break;
-            case Target_STACK: {
-               stackPushImm(c, node->tok->value);
-            } break;
-            case Target_NONE: { /* Nothing */ } break;
-            case Target_TMP: {
-               InvalidCodePath;  // Will remove this case later.
-            } break;
-         }
-         if (expr_type) {
-            expr_type->c.type = Type_INT;
-            expr_type->location.immediate_value = node->tok->value;
-         }
-      }
-      else if (node->type == Ast_ID) {
-         emitIdentifier(c, node, expr_type, target);
-      }
-      else if (node->type == Ast_STRUCT_MEMBER_ACCESS) {
-         emitStructMemberAccess(c, node, expr_type, target);
-      }
-      // Assignment expressions
-      else if (node->type == Ast_ASSIGN_EXPR) {
-         AstNode* lhs = node->child;
-         AstNode* rhs = lhs->next;
-         Token* op = node->tok;
+      switch (node->type) {
+         case Ast_FUNCCALL: {
+            emitFunctionCall(c, node, expr_type, target);
+         } break;
+         case Ast_NUMBER: {
+            int bits = 32;
+            switch (target) {
+               case Target_ACCUM: {
+                  Assert(bits < 64);
+                  instructionPrintf(
+                                    c,
+                                    node->line_number,
+                                    "mov %s, %d",
+                                    locationString(c, registerLocation(Reg_RAX), bits),
+                                    node->tok->cast.integer);
+               } break;
+               case Target_STACK: {
+                  stackPushImm(c, node->tok->value);
+               } break;
+               case Target_NONE: { /* Nothing */ } break;
+               case Target_TMP: {
+                  InvalidCodePath;  // Will remove this case later.
+               } break;
+            }
+            if (expr_type) {
+               expr_type->c.type = Type_INT;
+               expr_type->location = (Location) {
+                  .type = Location_IMMEDIATE,
+                  .immediate_value = node->tok->value,
+               };
+            }
+         } break;
+         case Ast_ID: {
+            emitIdentifier(c, node, expr_type, target);
+         } break;
+         case Ast_STRUCT_MEMBER_ACCESS: {
+            emitStructMemberAccess(c, node, expr_type, target);
+         } break;
+         // Assignment expressions
+         case Ast_ASSIGN_EXPR: {
+            AstNode* lhs = node->child;
+            AstNode* rhs = lhs->next;
+            Token* op = node->tok;
 
-         ExprType lhs_type = Zero;
-         codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
-         int bits = typeBits(&lhs_type.c);
-         ExprType rhs_type = Zero;
-         codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
-         Assert (typeBits(&lhs_type.c) == typeBits(&rhs_type.c));
-         if (op->value == '=') {
-            movOrCopy(c, node->line_number, lhs_type.location, rhs_type.location, bits);
-         }
-         else {
-            Assert(bits < 64);
-            // TODO: Check for arithmetic type here.
+            ExprType lhs_type = Zero;
+            codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
+            int bits = typeBits(&lhs_type.c);
+            ExprType rhs_type = Zero;
+            codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
+            Assert (typeBits(&lhs_type.c) == typeBits(&rhs_type.c));
+            if (op->value == '=') {
+               movOrCopy(c, node->line_number, lhs_type.location, rhs_type.location, bits);
+            }
+            else {
+               Assert(bits < 64);
+               // TODO: Check for arithmetic type here.
+               instructionPrintf(c, node->line_number, "mov %s, %s",
+                                 locationString(c, registerLocation(Reg_RBX), bits),
+                                 locationString(c, lhs_type.location, bits));
+               switch (op->value) {
+                  case ASSIGN_INCREMENT: {
+                     instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
+                  } break;
+                  default: {
+                     NotImplemented("Different assignment expressions");
+                  }
+               }
+
+               instructionPrintf(c, node->line_number, "mov %s, %s",
+                                 locationString(c, lhs_type.location, bits),
+                                 locationString(c, registerLocation(Reg_RBX), bits));
+
+               if (target == Target_ACCUM) {
+                  instructionPrintf(c, node->line_number, "mov %s, %s",
+                                    locationString(c, registerLocation(Reg_RAX), bits),
+                                    locationString(c, lhs_type.location, bits));
+               }
+            }
+         } break;
+         case Ast_POSTFIX_INC:
+         case Ast_POSTFIX_DEC: {
+            // TODO: Check for type of postfix
+            AstNode* expr = node->child;
+            ExprType local_etype = Zero;
+            emitExpression(c, expr, &local_etype, Target_STACK);
+            if (local_etype.location.type == Location_IMMEDIATE) {
+               codegenError("Attempting to increment an rvalue.");
+            }
+            emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
+
+            Location var = local_etype.location;
+
             instructionPrintf(c, node->line_number, "mov %s, %s",
-                              locationString(c, registerLocation(Reg_RBX), bits),
-                              locationString(c, lhs_type.location, bits));
-            switch (op->value) {
-               case ASSIGN_INCREMENT: {
-                  instructionReg(c, 0, "add %s, %s", bits, Reg_RBX, Reg_RAX);
+                              locationString(c, var, typeBits(&local_etype.c)),
+                              locationString(c, registerLocation(Reg_RAX), typeBits(&local_etype.c)));
+            if (target == Target_STACK) {
+               // Result is already on the stack.
+            }
+            else if (target == Target_ACCUM) {
+               // Return old value.
+               stackPop(c, Reg_RAX);
+            }
+            if (expr_type) {
+               *expr_type = local_etype;
+
+            }
+         } break;
+         case Ast_ADDRESS: {
+            AstNode* expr = node->child;
+            ExprType* et = AllocType(c->arena, ExprType);
+            emitExpression(c, expr, et, Target_NONE);
+
+            ExprType result = Zero;
+
+            switch (et->c.type) {
+               case Type_POINTER: {
+                  // result.c = *et.c.pointer.pointee;
+                  NotImplemented("address of a pointer");
+               } break;
+               case Type_AGGREGATE: {
+                  if (et->location.type == Location_STACK) {
+                     result.c.type = Type_POINTER;
+                     result.c.pointer.pointee = et;
+                  } else {
+                     NotImplemented("Aggregate somewhere other than the stack.");
+                  }
+               } break;
+               case Type_FUNC: {
+                  NotImplemented("address of func");
+               } break;
+               case Type_ARRAY: {
+                  NotImplemented("address of array");
                } break;
                default: {
-                  NotImplemented("Different assignment expressions");
+                  codegenError("Cannot take the address of this type of expression.");
                }
             }
 
-            instructionPrintf(c, node->line_number, "mov %s, %s",
-                              locationString(c, lhs_type.location, bits),
-                              locationString(c, registerLocation(Reg_RBX), bits));
-
-            if (target == Target_ACCUM) {
-               instructionPrintf(c, node->line_number, "mov %s, %s",
-                                 locationString(c, registerLocation(Reg_RAX), bits),
-                                 locationString(c, lhs_type.location, bits));
+            if (target != Target_NONE) {
+               Location* loc = &result.c.pointer.pointee->location;
+               switch (loc->type) {
+                  case Location_STACK: {
+                     // TODO lea
+                     instructionPrintf(c, node->line_number, "mov rax, rsp");
+                     instructionPrintf(c, 0, "add rax, %d", c->stack_offset - loc->offset);
+                  } break;
+                  default: {
+                     NotImplemented("Address of something not on the stack");
+                  }
+               }
+               if (target == Target_STACK) {
+                  stackPushReg(c, Reg_RAX);
+                  result.location = (Location){ .type = Location_STACK, .offset = c->stack_offset };
+               }
+               else {
+                  result.location = (Location){ .type = Location_REGISTER, .reg = Reg_RAX };
+               }
+               *expr_type = result;
             }
-         }
-      }
-      else if (node->type == Ast_POSTFIX_INC ||
-               node->type == Ast_POSTFIX_DEC) {
-         // TODO: Check for type of postfix
-         AstNode* expr = node->child;
-         ExprType local_etype = Zero;
-         emitExpression(c, expr, &local_etype, Target_STACK);
-         if (local_etype.location.type == Location_IMMEDIATE) {
-            codegenError("Attempting to increment an rvalue.");
-         }
-         emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
-
-         Location var = local_etype.location;
-
-         instructionPrintf(c, node->line_number, "mov %s, %s",
-                           locationString(c, var, typeBits(&local_etype.c)),
-                           locationString(c, registerLocation(Reg_RAX), typeBits(&local_etype.c)));
-         if (target == Target_STACK) {
-            // Result is already on the stack.
-         }
-         else if (target == Target_ACCUM) {
-            // Return old value.
-            stackPop(c, Reg_RAX);
-         }
-         if (expr_type) {
-            *expr_type = local_etype;
-
-         }
-      }
-      // Binary operators
-      else {
-         AstNode* child1 = child0->next;
-         if (node->type == Ast_ADD ||
-             node->type == Ast_SUB ||
-             node->type == Ast_MUL ||
-             node->type == Ast_DIV) {
-
-
-            emitArithBinaryExpr(c, node->type, expr_type, child0, child1, target);
-
-         }
-         else if (node->type == Ast_LESS ||
-                  node->type == Ast_LEQ ||
-                  node->type == Ast_GREATER ||
-                  node->type == Ast_GEQ ||
-                  node->type == Ast_NOT_EQUALS ||
-                  node->type == Ast_EQUALS) {
-            AstNode* left = node->child;
-            AstNode* right = node->child->next;
-            ExprType left_type = {0};
-            ExprType right_type = {0};
-            codegenEmit(c, right, &right_type, Target_STACK);
-            codegenEmit(c, left, &left_type, Target_ACCUM);
-            stackPop(c, Reg_RBX);
-
-            u64 line = left->line_number;
-            instructionReg(c, line, "cmp %s, %s", typeBits(&left_type.c), Reg_RAX, Reg_RBX);
-
-            char* instr = 0;
-            switch(node->type) {
-               case Ast_EQUALS: { instr = "sete %s"; } break;
-               case Ast_LESS: { instr = "setl %s"; } break;
-               case Ast_LEQ: { instr = "setle %s"; } break;
-               case Ast_GREATER: { instr = "setg %s"; } break;
-               case Ast_GEQ: { instr = "setge %s"; } break;
-               case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
-               default: { InvalidCodePath; } break;
+         } break;
+         // Binary operators
+         default: {
+            AstNode* child1 = child0->next;
+            if (node->type == Ast_ADD ||
+                node->type == Ast_SUB ||
+                node->type == Ast_MUL ||
+                node->type == Ast_DIV) {
+               emitArithBinaryExpr(c, node->type, expr_type, child0, child1, target);
             }
-            instructionReg(c, line, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
+            else if (node->type == Ast_LESS ||
+                     node->type == Ast_LEQ ||
+                     node->type == Ast_GREATER ||
+                     node->type == Ast_GEQ ||
+                     node->type == Ast_NOT_EQUALS ||
+                     node->type == Ast_EQUALS) {
+               AstNode* left = node->child;
+               AstNode* right = node->child->next;
+               ExprType left_type = {0};
+               ExprType right_type = {0};
+               codegenEmit(c, right, &right_type, Target_STACK);
+               codegenEmit(c, left, &left_type, Target_ACCUM);
+               stackPop(c, Reg_RBX);
 
-            if (target == Target_STACK) {
-               stackPushReg(c, Reg_RAX);
+               u64 line = left->line_number;
+               instructionReg(c, line, "cmp %s, %s", typeBits(&left_type.c), Reg_RAX, Reg_RBX);
+
+               char* instr = 0;
+               switch(node->type) {
+                  case Ast_EQUALS: { instr = "sete %s"; } break;
+                  case Ast_LESS: { instr = "setl %s"; } break;
+                  case Ast_LEQ: { instr = "setle %s"; } break;
+                  case Ast_GREATER: { instr = "setg %s"; } break;
+                  case Ast_GEQ: { instr = "setge %s"; } break;
+                  case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
+                  default: { InvalidCodePath; } break;
+               }
+               instructionReg(c, line, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
+
+               if (target == Target_STACK) {
+                  stackPushReg(c, Reg_RAX);
+               }
             }
-         }
-         else {
-            NotImplemented("Missing codegen for expression AST node.");
+            else {
+               NotImplemented("Missing codegen for expression AST node.");
+            }
          }
       }
    }
@@ -1049,7 +1111,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
    u64 bits = 0;
 
    // Figure out the size of the declaration from the type specifier.
-   if (specifier->ctype.type != Type_STRUCT) {
+   if (specifier->ctype.type != Type_AGGREGATE) {
       bits = typeBits(&specifier->ctype);
    }
    else {
@@ -1123,19 +1185,22 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       // TODO: top level declarations
       stackPushOffset(c, bits/8);
 
+      ExprType* entry = symInsert(&c->scope->symbol_table,
+                                  id_str,
+                                  (ExprType){
+                                     .c = specifier->ctype,
+                                     .location = { .type = Location_STACK, .offset = c->stack_offset },
+                                  });
+
       Ctype ctype;
+
       if (declarator->is_pointer) {
          ctype.type = Type_POINTER;
-         ctype.pointer.pointee = &specifier->ctype;
+         ctype.pointer.pointee = entry;
       }
       else {
          ctype = specifier->ctype;
       }
-
-      ExprType entry = {
-         .c = specifier->ctype,
-         .location = { .type = Location_STACK, .offset = c->stack_offset },
-      };
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
          // TODO: Non-integer values.
@@ -1162,13 +1227,12 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType type = Zero;  // TODO: Here is probably where we want to specify the type in case there is an initializer list on the other side.
          emitExpression(c, rhs, &type, Target_ACCUM);
-         movOrCopy(c, rhs->line_number, entry.location, type.location, typeBits(&type.c));
+         movOrCopy(c, rhs->line_number, entry->location, type.location, typeBits(&type.c));
       }
       else {
          // TODO: scc initializes to zero by default.
       }
 
-      symInsert(&c->scope->symbol_table, id_str, entry);
    }
 }
 
