@@ -529,7 +529,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
       if (typeBits(&etype->c) <= 64) {
          loc.type = Location_REGISTER;
          if (n_param < 4) {
-            if (isIntegerType(&etype->c)) {
+            if (isIntegerType(&etype->c) || etype->c.type == Type_POINTER) {
                switch(n_param) {
                   case 0: { loc.reg = Reg_RCX; } break;
                   case 1: { loc.reg = Reg_RDX; } break;
@@ -1188,25 +1188,24 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       ExprType* entry = symInsert(&c->scope->symbol_table,
                                   id_str,
                                   (ExprType){
-                                     .c = specifier->ctype,
+                                     .c = Zero,
                                      .location = { .type = Location_STACK, .offset = c->stack_offset },
                                   });
 
-      Ctype ctype;
-
       if (declarator->is_pointer) {
-         ctype.type = Type_POINTER;
-         ctype.pointer.pointee = entry;
+         entry->c.type = Type_POINTER;
+         entry->c.pointer.pointee = AllocType(c->arena, ExprType);
+         entry->c.pointer.pointee->c = specifier->ctype;
       }
       else {
-         ctype = specifier->ctype;
+         entry->c = specifier->ctype;
       }
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
          // TODO: Non-integer values.
          int value = rhs->tok->value;
 
-         switch (typeBits(&ctype)) {
+         switch (typeBits(&entry->c)) {
             case 64: {
                instructionPrintf(c, node->line_number, "mov QWORD [ rsp ], 0x%x", value);
             } break;
@@ -1225,7 +1224,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          }
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
-         ExprType type = Zero;  // TODO: Here is probably where we want to specify the type in case there is an initializer list on the other side.
+         ExprType type = Zero;
          emitExpression(c, rhs, &type, Target_ACCUM);
          movOrCopy(c, rhs->line_number, entry->location, type.location, typeBits(&type.c));
       }
