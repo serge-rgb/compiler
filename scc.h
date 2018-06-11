@@ -1,9 +1,113 @@
 #pragma once
 
+// ========================
+// ======== Common ========
+// ========================
+
+typedef uint8_t  u8;
+typedef uint8_t  b8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint32_t b32;
+typedef uint64_t u64;
+
+typedef int32_t i32;
+typedef int64_t i64;
+
+typedef size_t sz;
+
+// Printf format strings.
+#define FORMAT_I64 PLATFORM_FORMAT_I64
+#define FORMAT_U64 PLATFORM_FORMAT_U64
+
+#define true 1
+#define false 0
+#define Zero {0}
+
+#define AsciiMax 128
+#define LineMax  256
+#define PathMax  256
+
+#define MaxU64 0xffffffffffffffff
+
+#define Max(a, b) ((a) < (b) ? (b) : (a))
+#define Min(a, b) ((a) > (b) ? (b) : (a))
+
+#define Kilobytes(n) (1024*n)
+#define Megabytes(n) Kilobytes(1024)
+#define Gigabytes(n) Megabytes(1024)
+
+// Next multiple of p which is greater than v, or v if it is already aligned.
+#define AlignPow2(v, p) ( \
+	                        (((v) + (p) - 1) & ~((p) - 1)) \
+                        )
+
+#define Assert(expr) PlatformAssert(expr)
+
+#define PrintString(...) PlatformPrintString(__VA_ARGS__)
+
+#define InvalidCodePath Assert(!"Invalid code path.")
+
+#define ArrayCount(arr) (sizeof((arr)) / sizeof(*(arr)))
+
+#define ArrayErrorDefault(f, l) \
+   fprintf(stderr, "Array overflow in %s:%d\n", f, l); \
+   Assert(!"Array error.");
+
+#define ArrayError(f, l) ArrayErrorDefault(f, l)
+#define ArrayPush(arr, e)                  \
+        if (ArrayCount(arr) > n_##arr) {   \
+           (arr)[n_##arr++] = e;           \
+        } else {                           \
+           ArrayError(__FILE__, __LINE__); \
+        }
+
+#define Break PlatformBreak
+
+#define DevBreak(message) \
+        fprintf(stderr, "Compiler dev: Keep going here [%s]\n", message); \
+        Break;
+
+#define NotImplemented(message)                          \
+        do {                                             \
+        printf("Not Implemented! -- [%s]\n", message);   \
+        Assert(!"Not implemented.");                                \
+        } while (0)
+
+// ==============================
+// ======== Error codes =========
+// ==============================
+
+enum ErrorCode {
+  Ok = 0,
+
+  Fail = 1,
+
+  IntParse,
+  CouldNotAssemble,
+  CouldNotLink,
+} typedef ErrorCode;
 
 // ==========================
-// ========  Memory  ========
+// ======== Platform ========
 // ==========================
+
+#if defined(_WIN32)
+   #include "platform_windows.c"
+#else
+   #include "platform_unix.c"
+
+   #if defined(__APPLE__) && defined(__MACH__)
+      #include "platform_macos.c"
+   #elif defined(__linux__)
+      #include "platform_linux.c"
+   #endif
+#endif
+
+
+// ========================
+// ======== Memory ========
+// ========================
 
 
 #define ARENA_DEFAULT_BLOCK_SIZE Megabytes(1)
@@ -42,9 +146,9 @@ void* allocate(Arena* a, size_t num_bytes);
 void  deallocate(Arena* a);
 
 
-// ==========================
-// ========  Html    ========
-// ==========================
+// ======================
+// ======== Html ========
+// ======================
 
 
 // TODO: Not very useful. Will probably get rid of this.
@@ -55,9 +159,9 @@ typedef struct Html_s {
 } Html;
 
 
-// ==========================
-// ========  Ctype   ========
-// ==========================
+// =======================
+// ======== Ctype ========
+// =======================
 
 
 struct AstNode;
@@ -121,9 +225,9 @@ struct Ctype {
 } typedef Ctype;
 
 
-// ==========================
-// ======== Lexer    ========
-// ==========================
+// =======================
+// ======== Lexer ========
+// =======================
 
 
 enum Keyword {
@@ -168,9 +272,9 @@ struct Token {
 } typedef Token;
 
 
-// ==========================
-// ======== AST      ========
-// ==========================
+// =====================
+// ======== AST ========
+// =====================
 
 
 typedef enum AstType_n {
@@ -196,9 +300,9 @@ struct AstNode {
 } typedef AstNode;
 
 
-// ==========================
-// ======== Parser   ========
-// ==========================
+// ========================
+// ======== Parser ========
+// ========================
 
 
 struct AggregateSizes;
@@ -217,9 +321,9 @@ struct Parser {
 } typedef Parser;
 
 
-// ==========================
-// ========  Codegen ========
-// ==========================
+// =========================
+// ======== Codegen ========
+// =========================
 
 
 typedef enum EmitTarget_n {

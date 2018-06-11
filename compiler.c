@@ -24,24 +24,8 @@ exit 0
 // ----
 
 #include "std.h"
-#include "common.h"
-
-#include "error_codes.inl"
-
-#if defined(_WIN32)
-   #include "platform_windows.c"
-#else
-   #include "platform_unix.c"
-
-   #if defined(__APPLE__) && defined(__MACH__)
-      #include "platform_macos.c"
-   #elif defined(__linux__)
-      #include "platform_linux.c"
-   #endif
-#endif
 
 #include "scc.h"
-
 
 #include "memory.c"
 #include "stretchy.c"
