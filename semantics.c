@@ -1,5 +1,3 @@
-#include "ctypes.h"
-
 b32
 isArithmeticType(Ctype ctype) {
    b32 arith = ctype.type & Type_ARITH;
@@ -145,6 +143,7 @@ typesAreCompatible(Ctype a, Ctype b) {
    b32 compatible = false;
    if (a.type == b.type) {
       if (a.type == Type_POINTER) {
+         DevBreak("Use a ctype identifier instead of pointers.");
          compatible = typesAreCompatible(a.pointer.pointee->c,
                                          b.pointer.pointee->c);
       }
@@ -153,14 +152,32 @@ typesAreCompatible(Ctype a, Ctype b) {
       }
    }
    else {
-      NotImplemented("Compatibility rules");
+      if (a.type == Type_POINTER || b.type == Type_POINTER) {
+         compatible = false;
+      }
+      else {
+         NotImplemented("Compatibility rules");
+      }
    }
    return compatible;
 }
 
 Ctype
 paramType(AstNode* node) {
+   Assert(node->type == Ast_PARAMETER);
    Ctype result = Zero;
+
+
+   AstNode* type_spec = node->child;
+   AstNode* declarator = type_spec->next;
+
+   if (declarator->is_pointer) {
+      result.type = Type_POINTER;
+   }
+   else {
+      result = type_spec->ctype;
+   }
+
    return result;
 }
 

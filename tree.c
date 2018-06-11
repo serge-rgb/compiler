@@ -1,6 +1,3 @@
-#include "ctypes.h"
-
-
 char* g_ast_type_string[] = {
 #define X(node) #node ,
 #include "ast_nodes.inl"

@@ -18,6 +18,5 @@ int main() {
 
    struct veci *pfoo = &foo;
 
-   return proc_struct(foo);   // TODO: Check for incompatible types.
    return proc_struct(pfoo) == 2;
 }
