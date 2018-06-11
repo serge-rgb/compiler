@@ -40,6 +40,9 @@ exit 0
    #endif
 #endif
 
+#include "scc.h"
+
+
 #include "memory.c"
 #include "stretchy.c"
 #include "hashmap.c"

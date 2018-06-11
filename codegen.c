@@ -2,130 +2,6 @@
 static FILE* g_asm;
 
 
-typedef enum EmitTarget_n {
-   Target_TMP, // Using while I port to DDCG
-
-   Target_NONE,
-   Target_ACCUM,
-   Target_STACK,
-} EmitTarget;
-
-// Must be the same as g_registers.
-enum RegisterEnum {
-   Reg_RAX,
-   Reg_RBX,
-   Reg_RCX,
-   Reg_RDX,
-   Reg_RSI,
-   Reg_RDI,
-   Reg_R8,
-   Reg_R9,
-   Reg_R10,
-   Reg_R11,
-   Reg_R12,
-   Reg_R13,
-   Reg_R14,
-   Reg_R15,
-
-   Reg_Count,
-} typedef RegisterEnum;
-
-// TODO: Make Location fit in a register and use a hack to fit 64-bit values.
-struct Location {
-   enum {
-      Location_INVALID,
-
-      Location_IMMEDIATE,
-      Location_REGISTER,
-      Location_STACK,
-      Location_POINTER,
-   } type;
-   union {
-      // REGISTER
-      struct {
-         RegisterEnum reg;
-      };
-      // IMMEDIATE
-      struct {
-         u64 immediate_value;  // Cast to appropriate value based on token type.
-      };
-      // STACK
-      struct {
-         u64 offset;
-      };
-   };
-} typedef Location;
-
-struct Register {
-   char* reg;
-   char* reg_32;
-   char* reg_8;
-   b8    is_volatile;
-} typedef Register;
-
-struct ExprType {
-   Ctype    c;
-   Location location;
-} typedef ExprType;
-
-
-#define HashmapName     SymTable
-#define HashmapPrefix   sym
-#define HashmapKey      char*
-#define HashmapValue    ExprType
-#define HashFunction    hashStrPtr
-#define KeyCompareFunc  compareStringKey
-#include "hashmap.inl"
-
-typedef struct StackValue_s {
-   unsigned int offset  : 6;
-   enum {
-      Stack_OFFSET,
-      Stack_QWORD,
-   } type : 2;
-} StackValue;
-
-#define SCOPE_HASH_SIZE 1024
-typedef struct Scope_s Scope;
-struct Scope_s {
-   Arena*      arena;
-
-   int         if_count;
-   Scope*      prev;
-   SymTable    label_table;
-   SymTable    tag_table;
-   SymTable    symbol_table;
-};
-
-typedef enum CodegenConfigFlags_n {
-   Config_TARGET_MACOS = (1<<0),
-   Config_TARGET_LINUX = (1<<1),
-   Config_TARGET_WIN   = (1<<2),
-} CodegenConfigFlags;
-
-#define CODEGEN_QUEUE_SIZE 1024
-
-
-typedef struct Codegen_s {
-   StackValue* stack;  // Stack allocation / de-allocation is done on a per-function basis.
-
-   Arena*      arena;
-   Scope*      scope;
-   char*       waiting;
-   char*       queue[CODEGEN_QUEUE_SIZE];
-   u64         queue_lines[CODEGEN_QUEUE_SIZE];
-   int         n_queue;              // Size of the queue.
-   Html*       html;
-   char*       file_name;
-   u64         last_line_number;
-   u32         config;   // CodegenConfigFlags enum
-
-   u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
-
-   // Constants
-   AstNode* one;
-} Codegen;
-
 static
 Register g_registers[] = {
    { .reg = "rax", .reg_32 = "eax" , .reg_8 = "al" },
@@ -826,16 +702,18 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
                    label, expected_nparam, n_param);
    }
 
-   AstNode* func_param = funcParams(sym->c.func.node);
+   AstNode* expected_param = funcParams(sym->c.func.node);
 
    for (AstNode* param = params;
         param != NULL;
         param = param->next) {
       ExprType et = {0};
       emitExpression(c, param, &et, Target_NONE);
-      DevBreak("Grab type for both params, check for compatibility");
+      if (!typesAreCompatible(et.c, paramType(expected_param))) {
+         codegenError("Attempting to pass incompatible parameter to function.");
+      }
       pushParameter(c, n_param++, &et);
-      func_param = func_param->next;
+      expected_param = expected_param->next;
    }
 
    instructionPrintf(c, node->line_number, "call %s", label);

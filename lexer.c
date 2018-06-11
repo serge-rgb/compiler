@@ -4,29 +4,6 @@ char* g_keywords[] = {
    #undef X
 };
 
-typedef enum Keyword_n {
-   #define X(keyword) Keyword_ ## keyword,
-   #include "keywords.inl"
-   #undef X
-} Keyword;
-
-typedef enum TokType_n {
-   TType_NONE,
-   TType_PUNCTUATOR,
-   TType_STRING_LITERAL,
-   TType_NUMBER,
-   TType_ID,
-   TType_KEYWORD = 0xF000,
-} TokType;
-
-typedef enum Punctuator_n {
-   Punctuator_BEGIN = /*...*/  128,  // ASCII codes are reserved for single-char tokens.
-#define X(op, name) name,
-#include "punctuators.inl"
-#undef X
-   Punctuator_END,
-} Punctuator;
-
 char* g_punctuator_strings[] = {
 #define X(op, name) #op,
 #include "punctuators.inl"
@@ -39,29 +16,11 @@ indexOfPunctuator(Punctuator p) {
    return idx;
 }
 
-typedef struct Token_s Token;
-struct Token_s {
-   TokType type;
-   union {
-      u64 value;
-      union {
-         char*    string;
-         u8       character;
-         u16      uint16;
-         i32      int32;
-         i32      integer;
-      } cast;
-   };
 
-   u64 line_number;
-
-   Token*    next;
-};
-
-typedef struct FileStream_s {
+struct FileStream {
    FILE* fd;
    u64 line_number;
-} FileStream;
+} typedef FileStream;
 
 b32
 fileStreamInit(FileStream* fs, char* fname) {

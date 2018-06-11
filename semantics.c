@@ -39,13 +39,13 @@ typeBits(Ctype* ctype) {
          bits = 32;
       } break;
 
-      // 64 bits
+         // 64 bits
       case Type_POINTER:
       case Type_DOUBLE: {
          bits = 64;
       } break;
 
-      // N bits
+         // N bits
       case Type_AGGREGATE: {
          bits = ctype->aggr.bits;
       } break;
@@ -111,31 +111,56 @@ isLiteral(AstNode* node) {
 
 AstNode*
 funcDeclarationSpecifier(AstNode* node) {
-  Assert (node->type == Ast_FUNCDEF);
-  return node->child;
+   Assert (node->type == Ast_FUNCDEF);
+   return node->child;
 }
 
 AstNode*
 funcDeclarator(AstNode* node) {
-  Assert (node->type == Ast_FUNCDEF);
-  return node->child->next;
+   Assert (node->type == Ast_FUNCDEF);
+   return node->child->next;
 }
 
 AstNode*
 funcParams(AstNode* node) {
-  Assert (node->type == Ast_FUNCDEF);
-  AstNode* params = funcDeclarator(node)->child->next;
-  return params;
+   Assert (node->type == Ast_FUNCDEF);
+   AstNode* params = funcDeclarator(node)->child->next;
+   return params;
 }
 
 i32
 funcNumParams(AstNode* node) {
-  Assert (node->type == Ast_FUNCDEF);
-  i32 nparam = 0;
-  for(AstNode* param = funcDeclarator(node)->child->next;
-      param != NULL;
-      param = param->next) {
-     ++nparam;
-  }
-  return nparam;
+   Assert (node->type == Ast_FUNCDEF);
+   i32 nparam = 0;
+   for(AstNode* param = funcDeclarator(node)->child->next;
+       param != NULL;
+       param = param->next) {
+      ++nparam;
+   }
+   return nparam;
 }
+
+b32
+typesAreCompatible(Ctype a, Ctype b) {
+   b32 compatible = false;
+   if (a.type == b.type) {
+      if (a.type == Type_POINTER) {
+         compatible = typesAreCompatible(a.pointer.pointee->c,
+                                         b.pointer.pointee->c);
+      }
+      else {
+         compatible = true;
+      }
+   }
+   else {
+      NotImplemented("Compatibility rules");
+   }
+   return compatible;
+}
+
+Ctype
+paramType(AstNode* node) {
+   Ctype result = Zero;
+   return result;
+}
+

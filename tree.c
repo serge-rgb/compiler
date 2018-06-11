@@ -1,38 +1,12 @@
 #include "ctypes.h"
 
 
-typedef enum AstType_n {
-#define X(node) node,
-#include "ast_nodes.inl"
-#undef X
-} AstType;
-
 char* g_ast_type_string[] = {
 #define X(node) #node ,
 #include "ast_nodes.inl"
 #undef X
 };
 
-struct AstNode {
-   AstType  type;
-   union {
-      // When the node corresponds to a token.
-      Token*   tok;
-      // Otherwise..
-      Ctype    ctype;
-      // When the node is Ast_DECLARATOR
-      b32 is_pointer;
-   };
-   struct AstNode* child;
-   struct AstNode* next;
-
-   u64 line_number;
-} typedef AstNode;
-
-typedef struct AstMul_s {
-   AstNode* left;
-   AstNode* right;
-} AstMul;
 
 static AstNode* AstNode_MUL;
 

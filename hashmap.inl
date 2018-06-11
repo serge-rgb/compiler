@@ -99,6 +99,15 @@
 #define HashmapValue int
 #endif
 
+// Default hash functions.
+u64 hashStr(char* str, size_t size);
+u64 hashStrPtr (char** str);
+b32 compareStringKey (char* a, char* b);
+
+#ifndef HashPointer
+#define HashPointer(ptr) (hashStr((char*)(ptr), sizeof(*(ptr))))
+#endif
+
 #ifndef HashFunction
 #define HashFunction HashPointer
 #endif
@@ -200,3 +209,4 @@ Generic(Get) (HashmapName* hm, HashmapKey   key) {
 #undef HashmapPrefix
 #undef HashmapInitSize
 #undef HashmapValue
+#undef HashFunction

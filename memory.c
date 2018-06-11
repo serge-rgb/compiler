@@ -1,32 +1,3 @@
-#define ARENA_DEFAULT_BLOCK_SIZE Megabytes(1)
-
-#define AllocType(arena, type) allocate(arena, sizeof(type))
-#define AllocArray(arena, type, count) allocate(arena, sizeof(type) * (count))
-
-#define ArenaBootstrap(object, arenaName)    \
-{                                            \
-   size_t sz = sizeof(*object);              \
-               u8* block = arenaBlock(&sz);  \
-               block += sizeof(ArenaHeader); \
-               Arena a = {                   \
-                  .used = 0,                 \
-                          .size = sz,        \
-                          .block = block,    \
-               };                            \
-Arena* p = allocate(&a, sizeof(Arena));      \
-        *p = a;                              \
-        object->arenaName = p;               \
-}
-
-typedef struct Arena_s Arena;
-struct Arena_s {
-   u8*     block;
-   size_t  used;
-   size_t  size;
-
-   Arena* next;
-};
-
 typedef struct ArenaHeader_s {
    u8* previous;  // Pointer to the memory block of the previous arena.
 } ArenaHeader;

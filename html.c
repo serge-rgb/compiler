@@ -3,11 +3,6 @@
  * about how it was generated.
  */
 
-typedef struct Html_s {
-   FILE* fd;
-   int instr_count;
-} Html;
-
 void
 htmlBegin(Html* html) {
    html->fd = fopen("out.html", "w");

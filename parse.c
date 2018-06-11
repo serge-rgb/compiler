@@ -1,21 +1,3 @@
-
-// Forward declaration. Defined in codegen.c
-typedef struct RegisterValue_s RegisterValue;
-
-#define HashmapName AggregateSizes
-#define HashmapPrefix aggr
-#define HashmapKey char*
-#define HashmapValue u64
-#include "hashmap.inl"
-
-struct Parser {
-   Token* token;  // The next token to parse.
-   Arena* arena;
-   AstNode* tree;
-   char* file_name;
-   AggregateSizes sizes;
-} typedef Parser;
-
 // A function that takes a Parser and returns an AstNode*
 typedef AstNode* ParseFunction(Parser*);
 
