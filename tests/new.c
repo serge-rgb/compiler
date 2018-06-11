@@ -7,7 +7,7 @@ struct veci {
 
 
 int proc_struct(struct veci* foo) {
-   return foo->y;
+   return foo.y;
 }
 
 int main() {
@@ -18,6 +18,6 @@ int main() {
 
    struct veci *pfoo = &foo;
 
-   // return proc_struct(foo);   // TODO: Check for incompatible types.
+   return proc_struct(foo);   // TODO: Check for incompatible types.
    return proc_struct(pfoo) == 2;
 }

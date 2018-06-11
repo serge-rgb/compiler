@@ -121,6 +121,13 @@ funcDeclarator(AstNode* node) {
   return node->child->next;
 }
 
+AstNode*
+funcParams(AstNode* node) {
+  Assert (node->type == Ast_FUNCDEF);
+  AstNode* params = funcDeclarator(node)->child->next;
+  return params;
+}
+
 i32
 funcNumParams(AstNode* node) {
   Assert (node->type == Ast_FUNCDEF);

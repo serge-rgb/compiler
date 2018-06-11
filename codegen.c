@@ -817,16 +817,25 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    for (AstNode* param = params;
         param != NULL;
         param = param->next) {
-      ExprType et = {0};
-      emitExpression(c, param, &et, Target_NONE);
-      pushParameter(c, n_param++, &et);
+      n_param++;
    }
 
-   i32 expected_nparam = funcNumParams(sym->c.func.node);
-
+   u64 expected_nparam = funcNumParams(sym->c.func.node);
    if (n_param != expected_nparam) {
       codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
                    label, expected_nparam, n_param);
+   }
+
+   AstNode* func_param = funcParams(sym->c.func.node);
+
+   for (AstNode* param = params;
+        param != NULL;
+        param = param->next) {
+      ExprType et = {0};
+      emitExpression(c, param, &et, Target_NONE);
+      DevBreak("Grab type for both params, check for compatibility");
+      pushParameter(c, n_param++, &et);
+      func_param = func_param->next;
    }
 
    instructionPrintf(c, node->line_number, "call %s", label);
