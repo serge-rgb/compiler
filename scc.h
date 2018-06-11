@@ -427,17 +427,12 @@ enum CodegenConfigFlags {
    Config_TARGET_WIN   = (1<<2),
 } typedef CodegenConfigFlags;
 
-#define CODEGEN_QUEUE_SIZE 1024
-
 struct Codegen {
    StackValue* stack;  // Stack allocation / de-allocation is done on a per-function basis.
 
    Arena*      arena;
    Scope*      scope;
    char*       waiting;
-   char*       queue[CODEGEN_QUEUE_SIZE];
-   u64         queue_lines[CODEGEN_QUEUE_SIZE];
-   int         n_queue;              // Size of the queue.
    Html*       html;
    char*       file_name;
    u64         last_line_number;
