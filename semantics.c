@@ -138,46 +138,20 @@ funcNumParams(AstNode* node) {
    return nparam;
 }
 
-b32
-typesAreCompatible(Ctype a, Ctype b) {
-   b32 compatible = false;
-   if (a.type == b.type) {
-      if (a.type == Type_POINTER) {
-         DevBreak("Use a ctype identifier instead of pointers.");
-         compatible = typesAreCompatible(a.pointer.pointee->c,
-                                         b.pointer.pointee->c);
-      }
-      else {
-         compatible = true;
-      }
-   }
-   else {
-      if (a.type == Type_POINTER || b.type == Type_POINTER) {
-         compatible = false;
-      }
-      else {
-         NotImplemented("Compatibility rules");
-      }
-   }
-   return compatible;
-}
-
-Ctype
-paramType(AstNode* node) {
+void
+paramType(Ctype* out, AstNode* node) {
    Assert(node->type == Ast_PARAMETER);
-   Ctype result = Zero;
-
 
    AstNode* type_spec = node->child;
    AstNode* declarator = type_spec->next;
 
    if (declarator->is_pointer) {
-      result.type = Type_POINTER;
+      out->type = Type_POINTER;
+      Assert(out->pointer.pointee);
+      out->pointer.pointee->c = type_spec->ctype;
    }
    else {
-      result = type_spec->ctype;
+      *out = type_spec->ctype;
    }
-
-   return result;
 }
 

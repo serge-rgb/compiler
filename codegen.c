@@ -670,6 +670,67 @@ emitStructMemberAccess(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget
 
 void emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);  // forward decl
 
+b32
+typesAreCompatible(Codegen* c, Ctype a, Ctype b) {
+   b32 compatible = false;
+   if (a.type == b.type) {
+      if (a.type == Type_POINTER) {
+         compatible = typesAreCompatible(c,
+                                         a.pointer.pointee->c,
+                                         b.pointer.pointee->c);
+      }
+      else {
+         switch (a.type) {
+            case Type_AGGREGATE: {
+               // TODO: Anonymous structs
+               if ((a.aggr.tag && b.aggr.tag)) {
+                  ExprType* aggr_a = findTag(c, a.aggr.tag);
+                  ExprType* aggr_b = findTag(c, b.aggr.tag);
+                  // TODO: We could return here by just having the same tag. C
+                  // spec says (6.7.2) that when two types have the same tag,
+                  // defined in different translation units, they must have:
+                  //    - The same number of parameters.
+                  //    - Every corresponding parameter is compatible.
+                  if (aggr_a == aggr_b) {
+                     compatible = true;
+                  }
+                  // SPEC: We deviate from the spec by always considering two
+                  // structs with the same layout as compatible.
+                  else {
+                     u64 n_a = bufCount(aggr_a->c.aggr.members);
+                     u64 n_b = bufCount(aggr_b->c.aggr.members);
+                     if (n_a == n_b) {
+                        compatible = true;
+                        for (u64 i = 0; i < n_a; ++i) {
+                           // TODO: Alignment check.
+                           if (!typesAreCompatible(c,
+                                                   *aggr_a->c.aggr.members[i].ctype,
+                                                   *aggr_b->c.aggr.members[i].ctype)) {
+                              compatible = false;
+                              break;
+                           }
+                        }
+                     }
+                  }
+               }
+            } break;
+            default: {
+               compatible = true;
+            } break;
+         }
+      }
+   }
+   else {
+      if (a.type == Type_POINTER || b.type == Type_POINTER) {
+         compatible = false;
+      }
+      else {
+         NotImplemented("Compatibility rules");
+      }
+   }
+   return compatible;
+}
+
 void
 emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    AstNode* func = node->child;
@@ -688,19 +749,24 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
 
    u64 stack_top = bufCount(c->stack);
 
-   // Put the parameters in registers and/or the stack.
-   u64 n_param = 0;
-   for (AstNode* param = params;
-        param != NULL;
-        param = param->next) {
-      n_param++;
+   // Check count
+   {
+      u64 n_param = 0;
+      for (AstNode* param = params;
+           param != NULL;
+           param = param->next) {
+         n_param++;
+      }
+
+      u64 expected_nparam = funcNumParams(sym->c.func.node);
+      if (n_param != expected_nparam) {
+         codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
+                      label, expected_nparam, n_param);
+      }
    }
 
-   u64 expected_nparam = funcNumParams(sym->c.func.node);
-   if (n_param != expected_nparam) {
-      codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
-                   label, expected_nparam, n_param);
-   }
+   // Put the parameters in registers and/or the stack.
+   u64 n_param = 0;
 
    AstNode* expected_param = funcParams(sym->c.func.node);
 
@@ -709,7 +775,10 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
         param = param->next) {
       ExprType et = {0};
       emitExpression(c, param, &et, Target_NONE);
-      if (!typesAreCompatible(et.c, paramType(expected_param))) {
+      ExprType expected_et = {0};
+      ExprType pointee = {0};
+      expected_et.c.pointer.pointee = &pointee;
+      if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
          codegenError("Attempting to pass incompatible parameter to function.");
       }
       pushParameter(c, n_param++, &et);

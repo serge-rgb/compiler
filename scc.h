@@ -203,7 +203,7 @@ struct Ctype {
 
    // TODO: Move this into an associated struct.
    union {
-      struct CtypeStruct {
+      struct CtypeAggregate {
          char* tag;
          struct AstNode* decls;
          u64 bits;
