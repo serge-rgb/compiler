@@ -16,6 +16,7 @@ Things that are (partially) implemented as of June 12, 2018:
 - Win64 ABI
 - System V (e.g. Mac & linux) ABI .
 - Laxer type compatibility rules. (types are compatible if their fields match)
+- No `->` operator. Pointers to structs can be accessed with `.`.
 
 To-Do (short term):
 -------------------
@@ -25,6 +26,7 @@ To-Do (short term):
 - external functions
 - global declarations
 - preprocessor
+- "Legacy" mode for including and/or writing standard C.
 
 To-Do (mid term):
 ------------------

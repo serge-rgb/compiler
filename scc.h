@@ -318,6 +318,10 @@ struct Parser {
    AstNode* tree;
    char* file_name;
    AggregateSizes sizes;
+
+   enum {
+     ParserFlag_FANSI = (1 << 0),
+   } flags;
 } typedef Parser;
 
 

@@ -2,6 +2,12 @@
 typedef AstNode* ParseFunction(Parser*);
 
 void
+initParser(Parser* p) {
+   p->flags = ParserFlag_FANSI;
+}
+
+
+void
 noneIfNull(Arena* a, AstNode** n) {
    if (!*n) {
       *n = makeAstNode(a, Ast_NONE, NULL, NULL);
@@ -151,6 +157,7 @@ AstNode* argumentExpressionList(Parser* p);
 AstNode*
 postfixExpr(Parser* p) {
    AstNode* left = primaryExpr(p);
+   Token* t = NULL;
    while (left) {
       AstNode* right = NULL;
 
@@ -173,15 +180,18 @@ postfixExpr(Parser* p) {
             }
          }
       }
-      else if (nextPunctuator(p, '.')
-               || nextPunctuator(p, ARROW)) {
-        Token* id = nextToken(p);
-        if (id->type != TType_ID) {
-          parseError(p, "Expected identifier after '.' or '->'");
-        }
-        AstNode* right = makeAstNode(p->arena, Ast_ID, 0, 0);
-        right->tok = id;
-        left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, left, right);
+      else if ((t = nextPunctuator(p, '.'))
+               || (t = nextPunctuator(p, ARROW))) {
+         if (t->cast.character == ARROW && p->flags & ParserFlag_FANSI) {
+            parseError(p, "The -> operator was removed in scc. Compile on legacy mode to use it.");
+         }
+         Token* id = nextToken(p);
+         if (id->type != TType_ID) {
+            parseError(p, "Expected identifier after '.' or '->'");
+         }
+         AstNode* right = makeAstNode(p->arena, Ast_ID, 0, 0);
+         right->tok = id;
+         left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, left, right);
       }
       else if (nextPunctuator(p, INCREMENT)) {
          left = makeAstNode(p->arena, Ast_POSTFIX_INC, left, 0);

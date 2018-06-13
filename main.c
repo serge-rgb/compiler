@@ -18,6 +18,7 @@ compileTranslationUnit(char* file_name, char* outfile) {
       Token* tokens = tokenize(&a, &file_stream);
 
       Parser p = {0};
+      initParser(&p);
       Arena tmp_parser_arena = {0};
       p.arena = &tmp_parser_arena;
       p.token = tokens;
