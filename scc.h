@@ -14,6 +14,9 @@ typedef uint64_t u64;
 typedef int32_t i32;
 typedef int64_t i64;
 
+typedef float f32;
+typedef double f64;
+
 typedef size_t sz;
 
 // Printf format strings.
@@ -262,7 +265,8 @@ struct Token {
          u8       character;
          u16      uint16;
          i32      int32;
-         i32      integer;
+         f32      real32;
+         f64      real64;
       } cast;
    };
 

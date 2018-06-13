@@ -20,6 +20,44 @@ Register g_registers[] = {
    { .reg = "r15", .reg_32 = "r15d", .reg_8 = NULL },
 };
 
+// TODO:
+//
+// In order to support floating point, we're going to have to abstract our
+// instruction-emitting code.
+//
+// Currently, we mostly printf whatever instruction we need, but now that we
+// are going to introduce different kinds of data we might find it useful to
+// introduce a "typed register".
+//
+// With our current stack-machine model, we only need two typed registers, but
+// later iterations of the code generator can probably build on this
+// abstraction.
+//
+// In the typed register model, a "mov(A, B)" abstraction would result in (for instance)
+// a conversion from float to int or vice versa, or simply an x86 mov, or a
+// wide SSE2 instruction for wide types. It will be useful to dispatch the
+// appropriate instruction from the abstraction function, instead of sprinkling
+// switch statements all over the code.
+//
+// This means that before going into implementing floats, we must first
+// abstract away our current code, moving all printf-style instructions to
+// their abstracted counterparts.
+
+#if 0
+Location
+accumFor(Ctype* t) {
+   Location loc = Zero;
+   loc.type = Location_REGISTER;
+   if (t->type & Type_REAL) {
+      loc.reg = Reg_XMM0;
+   }
+   if (t->type & Type_PEANO) {
+      loc.reg = Reg_RAX;
+   }
+   return loc;
+}
+#endif
+
 // Forward declaration for recursive calls.
 void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
 
@@ -823,23 +861,30 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                                     node->line_number,
                                     "mov %s, %d",
                                     locationString(c, registerLocation(Reg_RAX), bits),
-                                    node->tok->cast.integer);
+                                    node->tok->cast.int32);
+                  expr_type->location = (Location) {
+                     .type = Location_REGISTER,
+                     .reg = Reg_RAX,
+                  };
                } break;
                case Target_STACK: {
                   stackPushImm(c, node->tok->value);
+                  expr_type->location = (Location) {
+                     .type = Location_STACK,
+                     .reg = c->stack_offset,
+                  };
                } break;
-               case Target_NONE: { /* Nothing */ } break;
+               case Target_NONE: {
+                  expr_type->location = (Location) {
+                     .type = Location_IMMEDIATE,
+                     .immediate_value = node->tok->value,
+                  };
+               } break;
                case Target_TMP: {
                   InvalidCodePath;  // Will remove this case later.
                } break;
             }
-            if (expr_type) {
-               expr_type->c.type = Type_INT;
-               expr_type->location = (Location) {
-                  .type = Location_IMMEDIATE,
-                  .immediate_value = node->tok->value,
-               };
-            }
+            expr_type->c.type = Type_INT;
          } break;
          case Ast_ID: {
             emitIdentifier(c, node, expr_type, target);
@@ -1169,14 +1214,31 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       }
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
-         // TODO: Non-integer values.
          b32 is_integer = rhs->tok->type == TType_NUMBER;
          if (is_integer) {
             if (!isIntegerType(&entry->c) && entry->c.type != Type_POINTER) {
-               if (entry->c.type == Type_FLOAT) {
-                  DevBreak("Convert int to float.");
+               DevBreak("Before implementing floating point variables, we need an instruction abstraction with typed registers.")
+               if (entry->c.type == Type_FLOAT) {  // Float lhs, integer literal rhs
+                  switch (typeBits(&entry->c)) {
+                     // NOTE: Nasm provides the conversion for us, and we
+                     // probably don't need to think about floating point
+                     // constants until we make our own assembler.
+                     case 64: {
+                        instructionPrintf(c, node->line_number, "mov DWORD [ rsp ], __float64__(%f)", rhs->tok->cast.real32);
+                     } break;
+                     case 32: {
+                        instructionPrintf(c, node->line_number, "mov DWORD [ rsp ], __float32__(%f)", rhs->tok->cast.real32);
+                     } break;
+                     case 16:
+                     case 8:
+                     default: {
+                        codegenError("Cannot put a floating point value in less than 32 bits.");
+                     } break;
+                  }
                }
-               codegenError("Cannot convert integer literal to non-integer type.");
+               else {
+                  codegenError("Cannot convert integer literal to non-integer type.");
+               }
             }
             else {
                int value = rhs->tok->value;

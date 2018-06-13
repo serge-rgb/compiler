@@ -620,7 +620,7 @@ int
 parseTypeQualifier(Token* t) {
    int quals = 0;
 
-   int v = t->cast.integer;
+   int v = t->value;
 
    quals =  (v == Keyword_const) ? Qual_CONST : 0
           | (v == Keyword_restrict) ? Qual_RESTRICT : 0
@@ -648,7 +648,7 @@ parseDeclarationSpecifiers(Parser* p) {
 
    while (p->token->type == TType_KEYWORD) {
       Token* t = nextToken(p);
-      int v = t->cast.integer;
+      int v = t->value;
       // Storage class specifiers
       if (v == Keyword_typedef ||
           v == Keyword_extern ||
