@@ -7,7 +7,7 @@ struct veci {
 
 
 int proc_struct(struct veci* foo) {
-   return foo->y;
+   return foo.y;
 }
 
 int main() {

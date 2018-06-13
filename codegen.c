@@ -1170,24 +1170,35 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
          // TODO: Non-integer values.
-         int value = rhs->tok->value;
+         b32 is_integer = rhs->tok->type == TType_NUMBER;
+         if (is_integer) {
+            if (!isIntegerType(&entry->c) && entry->c.type != Type_POINTER) {
+               if (entry->c.type == Type_FLOAT) {
+                  DevBreak("Convert int to float.");
+               }
+               codegenError("Cannot convert integer literal to non-integer type.");
+            }
+            else {
+               int value = rhs->tok->value;
 
-         switch (typeBits(&entry->c)) {
-            case 64: {
-               instructionPrintf(c, node->line_number, "mov QWORD [ rsp ], 0x%x", value);
-            } break;
-            case 32: {
-               instructionPrintf(c, node->line_number, "mov DWORD [ rsp ], 0x%x", value);
-            } break;
-            case 16: {
-               instructionPrintf(c, node->line_number, "mov WORD [ rsp ], 0x%x", value);
-            } break;
-            case 8: {
-               instructionPrintf(c, node->line_number, "mov BYTE [ rsp ], 0x%x", value);
-            } break;
-            default: {
-               InvalidCodePath;
-            } break;
+               switch (typeBits(&entry->c)) {
+                  case 64: {
+                     instructionPrintf(c, node->line_number, "mov QWORD [ rsp ], 0x%x", value);
+                  } break;
+                  case 32: {
+                     instructionPrintf(c, node->line_number, "mov DWORD [ rsp ], 0x%x", value);
+                  } break;
+                  case 16: {
+                     instructionPrintf(c, node->line_number, "mov WORD [ rsp ], 0x%x", value);
+                  } break;
+                  case 8: {
+                     instructionPrintf(c, node->line_number, "mov BYTE [ rsp ], 0x%x", value);
+                  } break;
+                  default: {
+                     InvalidCodePath;
+                  } break;
+               }
+            }
          }
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
