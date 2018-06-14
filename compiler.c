@@ -36,5 +36,6 @@ exit 0
 #include "tree.c"
 #include "semantics.c"
 #include "parse.c"
+#include "x64.c"
 #include "codegen.c"
 #include "main.c"

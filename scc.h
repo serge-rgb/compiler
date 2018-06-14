@@ -329,6 +329,39 @@ struct Parser {
 } typedef Parser;
 
 
+// =====================================
+// ======== Machine abstraction ========
+// =====================================
+
+struct TypedRegister {
+  enum {
+    TypedR_NONE,
+
+    TypedR_INTEGER,
+    TypedR_FLOAT,
+    TypedR_STACK,
+    TypedR_HEAP,
+    // TODO: Wide float, wide int.
+
+  } type;
+
+} typedef TypedRegister;
+
+struct Instruction {
+  enum {
+    MOV,  // NOTE: Includes rep
+    PUSH,
+    SUB,
+    POP,
+    ADD,
+  } name;
+
+  TypedRegister dst;
+  TypedRegister src;
+} typedef Instruction;
+
+struct Machine typedef Machine;
+
 // =========================
 // ======== Codegen ========
 // =========================
@@ -343,7 +376,7 @@ typedef enum EmitTarget_n {
 } EmitTarget;
 
 // Must be the same as g_registers.
-enum RegisterEnum {
+enum RegisterEnum {  // <- TODO: Keep going here. Move to x64
    Reg_RAX,
    Reg_RBX,
    Reg_RCX,
@@ -448,6 +481,7 @@ struct Codegen {
 
    u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 
+   Machine*    machine;
    // Constants
    AstNode* one;
 } typedef Codegen;

@@ -2,24 +2,6 @@
 static FILE* g_asm;
 
 
-static
-Register g_registers[] = {
-   { .reg = "rax", .reg_32 = "eax" , .reg_8 = "al" },
-   { .reg = "rbx", .reg_32 = "ebx" , .reg_8 = "bl" },
-   { .reg = "rcx", .reg_32 = "ecx" , .reg_8 = "cl" },
-   { .reg = "rdx", .reg_32 = "edx" , .reg_8 = "dl" },
-   { .reg = "rsi", .reg_32 = "esi" , .reg_8 = "ah" },
-   { .reg = "rdi", .reg_32 = "edi" , .reg_8 = "bh" },
-   { .reg = "r8" , .reg_32 = "r8d" , .reg_8 = "ch" },
-   { .reg = "r9" , .reg_32 = "r9d" , .reg_8 = NULL },
-   { .reg = "r10", .reg_32 = "r10d", .reg_8 = NULL },
-   { .reg = "r11", .reg_32 = "r11d", .reg_8 = NULL },
-   { .reg = "r12", .reg_32 = "r12d", .reg_8 = NULL },
-   { .reg = "r13", .reg_32 = "r13d", .reg_8 = NULL },
-   { .reg = "r14", .reg_32 = "r14d", .reg_8 = NULL },
-   { .reg = "r15", .reg_32 = "r15d", .reg_8 = NULL },
-};
-
 // TODO:
 //
 // In order to support floating point, we're going to have to abstract our
@@ -42,21 +24,6 @@ Register g_registers[] = {
 // This means that before going into implementing floats, we must first
 // abstract away our current code, moving all printf-style instructions to
 // their abstracted counterparts.
-
-#if 0
-Location
-accumFor(Ctype* t) {
-   Location loc = Zero;
-   loc.type = Location_REGISTER;
-   if (t->type & Type_REAL) {
-      loc.reg = Reg_XMM0;
-   }
-   if (t->type & Type_PEANO) {
-      loc.reg = Reg_RAX;
-   }
-   return loc;
-}
-#endif
 
 // Forward declaration for recursive calls.
 void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
@@ -87,36 +54,6 @@ findSymbol(Codegen* c, char* name) {
    return entry;
 
 }
-
-void
-setupVolatility(Codegen* c) {
-   int* volatile_regs = NULL;
-   if (   (c->config & Config_TARGET_MACOS)
-       || (c->config & Config_TARGET_LINUX)) {
-      // These are the non-volatile registers in macos
-      static int volatile_regs_systemv[] = {
-         Reg_RBX,
-         Reg_RSI,
-         Reg_RDI,
-         Reg_R12,
-         Reg_R13,
-         Reg_R14,
-         Reg_R15,
-      };
-      volatile_regs = volatile_regs_systemv;
-   }
-   else if (c->config & Config_TARGET_WIN) {
-      static int volatile_regs_win64[] = {
-         Reg_RAX, Reg_RCX, Reg_RDX, Reg_R8, Reg_R9, Reg_R10, Reg_R11
-                 // TODO: Floating point registers volatility.
-      };
-      volatile_regs = volatile_regs_win64;
-   }
-   for (int i = volatile_regs[0]; i < ArrayCount(volatile_regs); ++i) {
-      g_registers[i].is_volatile = true;
-   }
-}
-
 
 void
 codegenError(char* msg, ...) {
@@ -212,7 +149,7 @@ codegenInit(Codegen* c, char* outfile) {
 
    fwrite(prelude, 1, strlen(prelude), g_asm);
 
-   setupVolatility(c);
+   machineInit(c);
 
    // Constants
    c->one = makeAstNode(c->arena, Ast_NUMBER, 0,0);
