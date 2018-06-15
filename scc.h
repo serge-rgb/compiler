@@ -148,20 +148,6 @@ struct Arena {
 void* allocate(Arena* a, size_t num_bytes);
 void  deallocate(Arena* a);
 
-
-// ======================
-// ======== Html ========
-// ======================
-
-
-// TODO: Not very useful. Will probably get rid of this.
-
-typedef struct Html_s {
-   FILE* fd;
-   int instr_count;
-} Html;
-
-
 // =======================
 // ======== Ctype ========
 // =======================
@@ -337,13 +323,19 @@ struct TypedRegister {
   enum {
     TypedR_NONE,
 
+    TypedR_IMMEDIATE_INTEGER,
+    TypedR_IMMEDIATE_FLOAT,
+
+    TypedR_REGISTER, // <- threshold. never a value
+
     TypedR_INTEGER,
     TypedR_FLOAT,
     TypedR_STACK,
     TypedR_HEAP,
-    // TODO: Wide float, wide int.
 
   } type;
+
+  u32 value;
 
 } typedef TypedRegister;
 
@@ -360,23 +352,30 @@ struct Instruction {
   TypedRegister src;
 } typedef Instruction;
 
+
+// Special registers.
+TypedRegister tr_ACCUM;
+TypedRegister tr_HELPER;
+TypedRegister tr_SP;
+
 struct Machine typedef Machine;
+
+struct Codegen;
+void machineInit(struct Codegen* c);
+
+// tr* -- Typed Register functions
+TypedRegister trInt(u64 i);
+
+// ir* -- Push IR instruction.
+void ir(Instruction i, u32 bits);
+void irImm (Instruction i);
+
 
 // =========================
 // ======== Codegen ========
 // =========================
 
-
-typedef enum EmitTarget_n {
-   Target_TMP, // Using while I port to DDCG
-
-   Target_NONE,
-   Target_ACCUM,
-   Target_STACK,
-} EmitTarget;
-
-// Must be the same as g_registers.
-enum RegisterEnum {  // <- TODO: Keep going here. Move to x64
+typedef enum RegisterEnum {
    Reg_RAX,
    Reg_RBX,
    Reg_RCX,
@@ -393,7 +392,16 @@ enum RegisterEnum {  // <- TODO: Keep going here. Move to x64
    Reg_R15,
 
    Reg_Count,
-} typedef RegisterEnum;
+} RegisterEnum;
+
+enum EmitTarget {
+   Target_TMP, // Using while I port to DDCG
+
+   Target_NONE,
+   Target_ACCUM,
+   Target_STACK,
+} typedef EmitTarget;
+
 
 // TODO: Make Location fit in a register and use a hack to fit 64-bit values.
 struct Location {
@@ -420,13 +428,6 @@ struct Location {
       };
    };
 } typedef Location;
-
-struct Register {
-   char* reg;
-   char* reg_32;
-   char* reg_8;
-   b8    is_volatile;
-} typedef Register;
 
 struct ExprType {
    Ctype    c;
@@ -474,14 +475,13 @@ struct Codegen {
    Arena*      arena;
    Scope*      scope;
    char*       waiting;
-   Html*       html;
    char*       file_name;
    u64         last_line_number;
    u32         config;   // CodegenConfigFlags enum
 
    u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 
-   Machine*    machine;
+   Machine*    m;
    // Constants
    AstNode* one;
 } typedef Codegen;

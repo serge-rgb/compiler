@@ -7,8 +7,6 @@ compileTranslationUnit(char* file_name, char* outfile) {
 
    int result = 0;
 
-   Html html = {0};
-   htmlBegin(&html);
    FileStream file_stream = {0};
    if (!fileStreamInit(&file_stream, file_name)) {
       fprintf(stderr, "ERROR: Could not read file.\n");
@@ -26,7 +24,6 @@ compileTranslationUnit(char* file_name, char* outfile) {
 
       Codegen codegen = {0};
       codegen.file_name = file_name;
-      codegen.html = &html;
       codegen.arena = &tmp_parser_arena;
       codegen.config |= PlatformDefaultTarget;
 
@@ -41,7 +38,6 @@ compileTranslationUnit(char* file_name, char* outfile) {
       }
       deallocate(&tmp_parser_arena);
       fileStreamClose(&file_stream);
-      htmlEnd(&html);
    }
 
    return result;
