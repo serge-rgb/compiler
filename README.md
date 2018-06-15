@@ -20,6 +20,8 @@ Things that are (partially) implemented as of June 12, 2018:
 
 To-Do (short term):
 -------------------
+- machine abstraction
+- prefix addition & subtraction (++i, --i)
 - floating point
 - typedefs
 - arrays

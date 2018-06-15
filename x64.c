@@ -29,7 +29,8 @@ Register g_registers[] = {
 
 struct Machine
 {
-   int foo;
+   StackValue* stack;  // Stack allocation / de-allocation is done on a per-function basis.
+   u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 };
 
 void
@@ -101,7 +102,7 @@ locationString(Codegen* c, Location r, int bits) {
          snprintf(res, 128, "0x%x", (int)r.immediate_value);
       } break;
       case Location_STACK: {
-         u64 rsp_relative = c->stack_offset - r.offset;
+         u64 rsp_relative = c->m->stack_offset - r.offset;
 
 #define ResultSize 64
          res = allocate(c->scope->arena, ResultSize);
@@ -190,24 +191,24 @@ registerLocation(RegisterEnum reg) {
 void
 stackPushReg(Codegen* c, RegisterEnum reg) {
    instructionPrintf("push %s", locationString(c, registerLocation(reg), 64));
-   c->stack_offset += 8;
-   bufPush(c->stack, (StackValue){ .type = Stack_QWORD });
+   c->m->stack_offset += 8;
+   bufPush(c->m->stack, (StackValue){ .type = Stack_QWORD });
 }
 
 void
 stackPushImm(Codegen* c, i64 val) {
    instructionPrintf("push %d", val);
-   c->stack_offset += 8;
-   bufPush(c->stack, (StackValue){ .type = Stack_QWORD });
+   c->m->stack_offset += 8;
+   bufPush(c->m->stack, (StackValue){ .type = Stack_QWORD });
 }
 
 void
 stackPushOffset(Codegen* c, u64 bytes) {
    Assert(bytes);
    instructionPrintf("sub rsp, %d", bytes);
-   c->stack_offset += bytes;
+   c->m->stack_offset += bytes;
    StackValue val = { .type = Stack_OFFSET, .offset = bytes };
-   bufPush(c->stack, val);
+   bufPush(c->m->stack, val);
 }
 
 void
@@ -217,7 +218,7 @@ instructionReg(Codegen* c, char* asm_line, int bits, ...) {
    va_start(args, bits);
    RegisterEnum reg = Reg_RAX;
 
-   RegisterEnum regs[MaxRegs];
+   RegisterEnum regs[MaxRegs] = Zero;
    int n_regs = 0;
 
    for (char* c = asm_line; *c != '\0'; ++c) {
@@ -280,13 +281,13 @@ movOrCopy(Codegen* c, Location out, Location in, int bits) {
          }
          else if (in.type == Location_STACK) {
             instructionPrintf("mov rsi, rsp");
-            if (in.offset != c->stack_offset) {          // TODO lea
-               instructionPrintf("add rsi, %d", c->stack_offset - in.offset);
+            if (in.offset != c->m->stack_offset) {          // TODO lea
+               instructionPrintf("add rsi, %d", c->m->stack_offset - in.offset);
             }
          }
          instructionPrintf("mov rdi, rsp");
-         if (out.offset != c->stack_offset) {
-            instructionPrintf("add rdi, %d", c->stack_offset - out.offset);
+         if (out.offset != c->m->stack_offset) {
+            instructionPrintf("add rdi, %d", c->m->stack_offset - out.offset);
          }
          instructionPrintf("mov rcx, 0x%x", bytes);
          instructionPrintf("rep movsb");
@@ -300,14 +301,14 @@ movOrCopy(Codegen* c, Location out, Location in, int bits) {
 
 void
 stackPop(Codegen* c, RegisterEnum reg) {
-   StackValue s = bufPop(c->stack);
+   StackValue s = bufPop(c->m->stack);
    switch (s.type) {
       case Stack_QWORD: {
-         instructionReg(c, "pop %s", reg);
-         c->stack_offset -= 8;
+         instructionReg(c, "pop %s", 64, reg);
+         c->m->stack_offset -= 8;
       } break;
       case Stack_OFFSET: {
-         c->stack_offset -= s.offset;
+         c->m->stack_offset -= s.offset;
          instructionPrintf("add rsp, %d", s.offset);
       }
    }
@@ -391,7 +392,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
       else {
          stackPushOffset(c, typeBits(&etype->c) / 8);
          loc.type = Location_STACK;
-         loc.offset = c->stack_offset;
+         loc.offset = c->m->stack_offset;
       }
       movOrCopy(c, loc, etype->location, typeBits(&etype->c));
    }
@@ -421,7 +422,7 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
             }
          }
          else {
-            loc = (Location){ .type = Location_STACK, .offset = c->stack_offset - *offset };
+            loc = (Location){ .type = Location_STACK, .offset = c->m->stack_offset - *offset };
             *offset += typeBits(ctype);
          }
       }
@@ -438,13 +439,13 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
             }
          }
          else {
-            loc = (Location){ .type = Location_STACK, .offset = c->stack_offset - *offset };
+            loc = (Location){ .type = Location_STACK, .offset = c->m->stack_offset - *offset };
             *offset += typeBits(ctype);
          }
       }
    }
    else {
-      loc = (Location){ .type = Location_STACK, .offset = c->stack_offset - *offset };
+      loc = (Location){ .type = Location_STACK, .offset = c->m->stack_offset - *offset };
       *offset += typeBits(ctype);
    }
    return loc;
@@ -520,7 +521,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       if (target != Target_NONE) {
          instructionPrintf("mov rax, rsp");
          // TODO: LEA
-         instructionPrintf("add rax, %d", c->stack_offset - entry->location.offset);
+         instructionPrintf("add rax, %d", c->m->stack_offset - entry->location.offset);
          if (target == Target_STACK) {
             stackPushReg(c, Reg_RAX);
          }
@@ -717,7 +718,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
 
    AstNode* params = func->next;
 
-   u64 stack_top = bufCount(c->stack);
+   u64 stack_top = bufCount(c->m->stack);
 
    // Check count
    {
@@ -756,9 +757,9 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    }
 
    instructionPrintf("call %s", label);
-   c->stack_offset += pointerSizeBits() / 8;
+   c->m->stack_offset += pointerSizeBits() / 8;
 
-   while (bufCount(c->stack) != stack_top) {
+   while (bufCount(c->m->stack) != stack_top) {
       stackPop(c, Reg_RBX);
    }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
@@ -801,7 +802,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   stackPushImm(c, node->tok->value);
                   expr_type->location = (Location) {
                      .type = Location_STACK,
-                     .reg = c->stack_offset,
+                     .reg = c->m->stack_offset,
                   };
                } break;
                case Target_NONE: {
@@ -928,7 +929,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   case Location_STACK: {
                      // TODO lea
                      instructionPrintf("mov rax, rsp");
-                     instructionPrintf("add rax, %d", c->stack_offset - loc->offset);
+                     instructionPrintf("add rax, %d", c->m->stack_offset - loc->offset);
                   } break;
                   default: {
                      NotImplemented("Address of something not on the stack");
@@ -936,7 +937,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                }
                if (target == Target_STACK) {
                   stackPushReg(c, Reg_RAX);
-                  result.location = (Location){ .type = Location_STACK, .offset = c->stack_offset };
+                  result.location = (Location){ .type = Location_STACK, .offset = c->m->stack_offset };
                }
                else {
                   result.location = (Location){ .type = Location_REGISTER, .reg = Reg_RAX };
@@ -1130,7 +1131,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
                                   id_str,
                                   (ExprType){
                                      .c = Zero,
-                                     .location = { .type = Location_STACK, .offset = c->stack_offset },
+                                     .location = { .type = Location_STACK, .offset = c->m->stack_offset },
                                   });
 
       if (declarator->is_pointer) {
@@ -1373,6 +1374,7 @@ machineInit(Codegen* c)
    fwrite(prelude, 1, strlen(prelude), g_asm);
 
    setupVolatility(c);
+   c->m = AllocType(c->arena, Machine);
 }
 
 TypedRegister
@@ -1397,9 +1399,11 @@ trIsRegister(TypedRegister r) {
 
 
 void
-machFunctionPrelude(char* func_name) {
+machFunctionPrelude(Machine* m, char* func_name) {
    instructionPrintf("global %s", func_name);
    instructionPrintf("%s:", func_name);
    instructionPrintf("push rbp");
    instructionPrintf("mov rbp, rsp");
+
+   m->stack_offset += 8;
 }

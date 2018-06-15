@@ -32,7 +32,6 @@ exit 0
 #include "hashmap.c"
 #include "string.c"
 #include "lexer.c"
-#include "html.c"
 #include "tree.c"
 #include "semantics.c"
 #include "parse.c"

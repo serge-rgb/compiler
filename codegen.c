@@ -65,12 +65,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       }
 
 
-      machFunctionPrelude(func_name);
-      // TODO: Keep going here. Move stack offset to machine model.
-      c->stack_offset += 8;
-
-      // Helper when running in a debugger. Break on function entry.
-      // instructionPrintf(0, "int 3");
+      machFunctionPrelude(c->m, func_name);
 
       // Push
       pushScope(c);
@@ -123,7 +118,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       instructionPrintf(".func_end:");
 
-      while (bufCount(c->stack) > 0)  {
+      while (bufCount(c->m->stack) > 0)  {
          stackPop(c, Reg_RBX);
       }
 

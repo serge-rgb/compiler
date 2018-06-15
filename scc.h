@@ -470,16 +470,12 @@ enum CodegenConfigFlags {
 } typedef CodegenConfigFlags;
 
 struct Codegen {
-   StackValue* stack;  // Stack allocation / de-allocation is done on a per-function basis.
-
    Arena*      arena;
    Scope*      scope;
    char*       waiting;
    char*       file_name;
    u64         last_line_number;
    u32         config;   // CodegenConfigFlags enum
-
-   u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 
    Machine*    m;
    // Constants
