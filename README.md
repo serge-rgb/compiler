@@ -9,14 +9,20 @@ This is a work in progress. Still in the extremely-early stages.
 Things that are (partially) implemented as of June 12, 2018:
 ------------------------------------------------------------
 
-- Functions, no variable arguments yet.
-- Pointers
-- Ints / chars, but no floats.
-- Structs, but no unions.
-- Win64 ABI
-- System V (e.g. Mac & linux) ABI .
-- Laxer type compatibility rules. (types are compatible if their fields match)
+- functions (function definition / function call. no variable arguments yet)
+- pointers
+- ints / chars,
+- structs
+- win64 ABI
+- system V (e.g. Mac & linux) ABI .
+- assignment expressions. (=, +=, -=)
+- arithmetic expressions on ints. (+, -, *)
+- declarations for stack variables
+
+Deviations from the C spec.
+---------------------------
 - No `->` operator. Pointers to structs can be accessed with `.`.
+- Laxer type compatibility rules. (types are compatible if their fields match)
 
 To-Do (short term):
 -------------------
@@ -47,15 +53,14 @@ To-Do (long term):
 - hand-written assembler (drop nasm dependency)
 - hand-written linker (drop link.exe dependency)
 
-Maybe list
-----------
+Maybe, maybe not
+----------------
 - llvm or gcc backend (for when the-best-codegen is a necessity)
 - reflection (compiler-provided type info)
 - declarations inside if
 - "fat" pointers (lang support for pointers + lengths)
 - new preprocessor
 - type dispatch
-
 
 FAQ
 ---
@@ -76,7 +81,7 @@ expressing control flow with them. [ISPC](https://ispc.github.io/) is a huge
 inspiration for this, but I plan on attacking the problem from a more explicit
 angle, which may end up meaning lots of intrinsics, which are not technically a
 language feature. Not because I think ISPC's approach is wrong, but rather I
-want to try this out and see if it works.
+want to try something different and see where it goes.
 
 When?
 -----
