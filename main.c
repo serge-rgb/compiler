@@ -34,7 +34,7 @@ compileTranslationUnit(char* file_name, char* outfile) {
       else {
          codegenInit(&codegen, outfile);
          codegenTranslationUnit(&codegen, tree);
-         codegenFinish();
+         machFinish();
       }
       deallocate(&tmp_parser_arena);
       fileStreamClose(&file_stream);
