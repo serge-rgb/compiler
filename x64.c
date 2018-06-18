@@ -29,6 +29,8 @@ Register g_registers[] = {
 
 struct Machine
 {
+   u32         config;   // CodegenConfigFlags enum
+
    StackValue* stack;  // Stack allocation / de-allocation is done on a per-function basis.
    u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 };
@@ -50,10 +52,10 @@ codegenError(char* msg, ...) {
  ;
 
 void
-setupVolatility(Codegen* c) {
+setupVolatility(Machine* m) {
    int* volatile_regs = NULL;
-   if (   (c->config & Config_TARGET_MACOS)
-       || (c->config & Config_TARGET_LINUX)) {
+   if (   (m->config & Config_TARGET_MACOS)
+       || (m->config & Config_TARGET_LINUX)) {
       // These are the non-volatile registers in macos
       static int volatile_regs_systemv[] = {
          Reg_RBX,
@@ -66,7 +68,7 @@ setupVolatility(Codegen* c) {
       };
       volatile_regs = volatile_regs_systemv;
    }
-   else if (c->config & Config_TARGET_WIN) {
+   else if (m->config & Config_TARGET_WIN) {
       static int volatile_regs_win64[] = {
          Reg_RAX, Reg_RCX, Reg_RDX, Reg_R8, Reg_R9, Reg_R10, Reg_R11
                  // TODO: Floating point registers volatility.
@@ -354,7 +356,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
       NotImplemented("Floating parameters.");
    }
 
-   if ((c->config & Config_TARGET_LINUX) || (c->config & Config_TARGET_MACOS)) {
+   if ((m->config & Config_TARGET_LINUX) || (m->config & Config_TARGET_MACOS)) {
       RegisterEnum r = Reg_RDI;
       if (n_param < 6) {
          if (typeBits(&etype->c) <= 64) {
@@ -417,7 +419,7 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
    }
 
    if (typeBits(ctype) <= 64) {
-      if ((c->config & Config_TARGET_MACOS) || (c->config & Config_TARGET_LINUX)) {
+      if ((c->m->config & Config_TARGET_MACOS) || (c->m->config & Config_TARGET_LINUX)) {
          if (n_param < 6) {
             loc.type = Location_REGISTER;
             if (isIntegerType(ctype)) {
@@ -436,7 +438,7 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
             *offset += typeBits(ctype);
          }
       }
-      else if (c->config & Config_TARGET_WIN){
+      else if (c->m->config & Config_TARGET_WIN){
          if (n_param < 4) {
             if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
                loc.type = Location_REGISTER;
@@ -1125,7 +1127,7 @@ machFinish(void) {
 }
 
 void
-machInit(Codegen* c) {
+machInit(Machine* m) {
    char* prelude =
 #ifdef _WIN32
       "extern ExitProcess\n"
@@ -1154,8 +1156,7 @@ machInit(Codegen* c) {
 
    fwrite(prelude, 1, strlen(prelude), g_asm);
 
-   setupVolatility(c);
-   c->m = AllocType(c->arena, Machine);
+   setupVolatility(m);
 }
 
 void

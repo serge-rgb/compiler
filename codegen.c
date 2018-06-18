@@ -26,12 +26,14 @@
 //
 
 void
-codegenInit(Codegen* c, char* outfile) {
+codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    char asmfile [PathMax] = Zero;
    snprintf(asmfile, PathMax, "%s.asm", outfile);
    g_asm = fopen(asmfile, "w");
 
-   machInit(c);
+   c->m = AllocType(c->arena, Machine);
+   c->m->config = mflags;
+   machInit(c->m);
 
    // Constants
    c->one = makeAstNode(c->arena, Ast_NUMBER, 0,0);

@@ -319,57 +319,9 @@ struct Parser {
 // ======== Machine abstraction ========
 // =====================================
 
-struct TypedRegister {
-  enum {
-    TypedR_NONE,
-
-    TypedR_IMMEDIATE_INTEGER,
-    TypedR_IMMEDIATE_FLOAT,
-
-    TypedR_REGISTER, // <- threshold. never a value
-
-    TypedR_INTEGER,
-    TypedR_FLOAT,
-    TypedR_STACK,
-    TypedR_HEAP,
-
-  } type;
-
-  u32 value;
-
-} typedef TypedRegister;
-
-struct Instruction {
-  enum {
-    MOV,  // NOTE: Includes rep
-    PUSH,
-    SUB,
-    POP,
-    ADD,
-  } name;
-
-  TypedRegister dst;
-  TypedRegister src;
-} typedef Instruction;
-
-
-// Special registers.
-TypedRegister tr_ACCUM;
-TypedRegister tr_HELPER;
-TypedRegister tr_SP;
-
 struct Machine typedef Machine;
 
 struct Codegen;
-void machineInit(struct Codegen* c);
-
-// tr* -- Typed Register functions
-TypedRegister trInt(u64 i);
-
-// ir* -- Push IR instruction.
-void ir(Instruction i, u32 bits);
-void irImm (Instruction i);
-
 
 // =========================
 // ======== Codegen ========
@@ -401,7 +353,6 @@ enum EmitTarget {
    Target_ACCUM,
    Target_STACK,
 } typedef EmitTarget;
-
 
 // TODO: Make Location fit in a register and use a hack to fit 64-bit values.
 struct Location {
@@ -463,11 +414,11 @@ struct Scope {
    SymTable       symbol_table;
 } typedef Scope;
 
-enum CodegenConfigFlags {
+enum MachineConfigFlags {
    Config_TARGET_MACOS = (1<<0),
    Config_TARGET_LINUX = (1<<1),
    Config_TARGET_WIN   = (1<<2),
-} typedef CodegenConfigFlags;
+} typedef MachineConfigFlags;
 
 struct Codegen {
    Arena*      arena;
@@ -475,7 +426,6 @@ struct Codegen {
    char*       waiting;
    char*       file_name;
    u64         last_line_number;
-   u32         config;   // CodegenConfigFlags enum
 
    Machine*    m;
    // Constants

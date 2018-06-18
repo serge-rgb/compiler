@@ -25,14 +25,13 @@ compileTranslationUnit(char* file_name, char* outfile) {
       Codegen codegen = {0};
       codegen.file_name = file_name;
       codegen.arena = &tmp_parser_arena;
-      codegen.config |= PlatformDefaultTarget;
 
       AstNode* tree = parseTranslationUnit(&p);
       if (!tree) {
          parseError(&p, "Could not parse file.");
       }
       else {
-         codegenInit(&codegen, outfile);
+         codegenInit(&codegen, outfile, PlatformDefaultTarget);
          codegenTranslationUnit(&codegen, tree);
          machFinish();
       }
