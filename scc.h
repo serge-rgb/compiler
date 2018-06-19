@@ -30,6 +30,7 @@ typedef size_t sz;
 #define AsciiMax 128
 #define LineMax  256
 #define PathMax  256
+#define LabelMax 128
 
 #define MaxU64 0xffffffffffffffff
 

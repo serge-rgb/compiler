@@ -15,7 +15,7 @@ Things that are (partially) implemented as of June 12, 2018:
 - structs
 - win64 ABI
 - system V (e.g. Mac & linux) ABI .
-- assignment expressions. (=, +=, -=)
+- assignment expressions. (=, +=)
 - arithmetic expressions on ints. (+, -, *)
 - declarations for stack variables
 
