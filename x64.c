@@ -49,7 +49,6 @@ codegenError(char* msg, ...) {
    exit(-1);
 }
 
- ;
 
 void
 setupVolatility(Machine* m) {
@@ -134,40 +133,6 @@ locationString(Machine* m, Location r, int bits) {
 }
 
 
-ExprType*
-findTag(Codegen* c, char* name) {
-   ExprType* entry = NULL;
-   Scope* scope = c->scope;
-   while (scope) {
-      entry = symGet(&scope->tag_table, name);
-      if (entry) break;
-      else scope = scope->prev;
-   }
-
-   return entry;
-}
-
-ExprType*
-findSymbol(Codegen* c, char* name) {
-   ExprType* entry = NULL;
-   Scope* scope = c->scope;
-   while (scope) {
-      entry = symGet(&scope->symbol_table, name);
-      if (entry) break;
-      else scope = scope->prev;
-   }
-
-   return entry;
-
-}
-
-
-char*
-codegenHtmlHidden(Codegen* c, u64 line_number) {
-   char* hidden = allocate(c->arena, LineMax);
-   snprintf(hidden, LineMax, "%s: %" FORMAT_I64 , c->file_name, line_number);
-   return hidden;
-}
 
 
 void
@@ -205,10 +170,14 @@ stackPushReg(Machine* m, RegisterEnum reg) {
 }
 
 void
-stackPushImm(Codegen* c, i64 val) {
+stackPushImm(Codegen* c, ExprType* et, i64 val) {
    instructionPrintf("push %d", val);
    c->m->stack_offset += 8;
    bufPush(c->m->stack, (StackValue){ .type = Stack_QWORD });
+   et->location = (Location) {
+      .type = Location_STACK,
+      .reg = c->m->stack_offset,
+   };
 }
 
 void
@@ -261,6 +230,9 @@ instructionReg(Machine* m, char* asm_line, int bits, ...) {
 #undef MaxRegs
 }
 
+// Forward declarations. (TODO: are these still necessary after the x64 refactor?)
+ExprType* findTag(Codegen* c, char* name);
+ExprType* findSymbol(Codegen* c, char* name);
 
 Location
 locationFromId(Codegen* c, char* id) {
@@ -828,6 +800,11 @@ machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
    instructionPrintf("mov %s, %d",
                      locationString(m, registerLocation(Reg_RAX), typeBits(&et->c)),
                      rhs_tok->cast.int32);
+
+   et->location = (Location) {
+      .type = Location_REGISTER,
+      .reg = Reg_RAX,
+   };
 }
 
 void

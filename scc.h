@@ -348,8 +348,6 @@ typedef enum RegisterEnum {
 } RegisterEnum;
 
 enum EmitTarget {
-   Target_TMP, // Using while I port to DDCG
-
    Target_NONE,
    Target_ACCUM,
    Target_STACK,

@@ -1,30 +1,3 @@
-
-// TODO:
-//
-// In order to support floating point, we're going to have to abstract our
-// instruction-emitting code.
-//
-// Currently, we mostly printf whatever instruction we need, but now that we
-// are going to introduce different kinds of data we might find it useful to
-// introduce a "typed register".
-//
-// With our current stack-machine model, we only need two typed registers, but
-// later iterations of the code generator can probably build on this
-// abstraction.
-//
-// In the typed register model, a "mov(A, B)" abstraction would result in (for instance)
-// a conversion from float to int or vice versa, or simply an x86 mov, or a
-// wide SSE2 instruction for wide types. It will be useful to dispatch the
-// appropriate instruction from the abstraction function, instead of sprinkling
-// switch statements all over the code.
-//
-// This means that before going into implementing floats, we must first
-// abstract away our current code, moving all printf-style instructions to
-// their abstracted counterparts.
-//
-//
-//
-
 void
 codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    char asmfile [PathMax] = Zero;
@@ -40,6 +13,32 @@ codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    Token* one_tok = AllocType(c->arena, Token);
    one_tok->value = 1;
    c->one->tok = one_tok;
+}
+
+ExprType*
+findTag(Codegen* c, char* name) {
+   ExprType* entry = NULL;
+   Scope* scope = c->scope;
+   while (scope) {
+      entry = symGet(&scope->tag_table, name);
+      if (entry) break;
+      else scope = scope->prev;
+   }
+
+   return entry;
+}
+
+ExprType*
+findSymbol(Codegen* c, char* name) {
+   ExprType* entry = NULL;
+   Scope* scope = c->scope;
+   while (scope) {
+      entry = symGet(&scope->symbol_table, name);
+      if (entry) break;
+      else scope = scope->prev;
+   }
+
+   return entry;
 }
 
 void
@@ -61,30 +60,16 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                      .type = Type_INT,
                   };
 
-                  DevBreak("keep going here");
-
                   machMovAccum(c->m, expr_type, node->tok);
-
-                  expr_type->location = (Location) {
-                     .type = Location_REGISTER,
-                     .reg = Reg_RAX,
-                  };
                } break;
                case Target_STACK: {
-                  stackPushImm(c, node->tok->value);
-                  expr_type->location = (Location) {
-                     .type = Location_STACK,
-                     .reg = c->m->stack_offset,
-                  };
+                  stackPushImm(c, expr_type, node->tok->value);
                } break;
                case Target_NONE: {
                   expr_type->location = (Location) {
                      .type = Location_IMMEDIATE,
                      .immediate_value = node->tok->value,
                   };
-               } break;
-               case Target_TMP: {
-                  InvalidCodePath;  // Will remove this case later.
                } break;
             }
             expr_type->c.type = Type_INT;
@@ -626,7 +611,7 @@ codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
       emitCompoundStatement(c, node, target);
    }
    else {
-      emitStatement(c, node, Target_TMP);
+      emitStatement(c, node, target);
    }
 }
 
