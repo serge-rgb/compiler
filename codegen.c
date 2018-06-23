@@ -98,21 +98,23 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             else {
                Assert(bits < 64);
                // TODO: Check for arithmetic type here.
-               instructionPrintf("mov %s, %s",
-                                 locationString(m, registerLocation(Reg_RBX), bits),
-                                 locationString(m, lhs_type.location, bits));
+
+               machMov(m,
+                       machHelperInt32(), &lhs_type);
+
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
-                     instructionReg(c->m, "add %s, %s", bits, Reg_RBX, Reg_RAX);
+                     machAdd(c->m,
+                             machHelperInt32(), machAccumInt32());
+                     // instructionReg(c->m, "add %s, %s", bits, Reg_RBX, Reg_RAX);
                   } break;
                   default: {
                      NotImplemented("Different assignment expressions");
                   }
                }
 
-               instructionPrintf("mov %s, %s",
-                                 locationString(m, lhs_type.location, bits),
-                                 locationString(m, registerLocation(Reg_RBX), bits));
+               machMov(m,
+                       &lhs_type, machHelperInt32());
 
                if (target == Target_ACCUM) {
                   instructionPrintf("mov %s, %s",
@@ -392,7 +394,13 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       }
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
-         machMovStackTop(c->m, entry, rhs->tok);
+         if (isRealType(&entry->c) &&
+             rhs->tok->type != TType_FLOAT)  {
+            Assert (rhs->tok->type == TType_NUMBER);
+            rhs->tok->type = TType_FLOAT;
+            rhs->tok->cast.real64 = rhs->tok->cast.int32;
+         }
+         machMov(c->m, entry, machImmediateFromToken(rhs->tok));
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType type = Zero;

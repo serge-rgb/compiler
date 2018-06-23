@@ -22,6 +22,14 @@ isAggregateType(Ctype* ctype) {
    return is_aggr;
 }
 
+b32
+isImmediate(ExprType* src) {
+   b32 imm = false;
+   imm = src->location.type == Location_IMMEDIATE;
+   return imm;
+}
+
+
 u64
 typeBits(Ctype* ctype) {
    u64 bits = 0;

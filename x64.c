@@ -246,6 +246,7 @@ locationFromId(Codegen* c, char* id) {
 
 void
 movOrCopy(Machine* m, Location out, Location in, int bits) {
+   // TODO: We can put this inside machMov
    if (bits <= 64) {
       instructionPrintf("mov %s, %s",
                         locationString(m, out, bits),
@@ -795,6 +796,114 @@ machCmpJmp(Machine* m, AstType type, u32 bits, char* then, char* els) {
    instructionPrintf("jmp %s", els);
 }
 
+ExprType*
+machAccumInt32() {
+   static ExprType accum = {
+      .c = { .type = Type_INT },
+      .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+   };
+
+   return &accum;
+}
+
+ExprType*
+machAccumInt64() {
+   static ExprType accum = {
+      .c = { .type = Type_LONG },
+      .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+   };
+
+   return &accum;
+}
+
+// NOTE: Every use of the machImmediate* functions invalidates the previous call.
+
+ExprType*
+machImmediateFromToken(Token* tok) {
+   static ExprType imm = {
+      .c = { .type = Type_INT },
+      .location = { .type = Location_IMMEDIATE },
+   };
+
+   if (tok->type == TType_FLOAT) {  // Float lhs, integer literal rhs
+      imm.c.type = Type_DOUBLE;
+      imm.location.cast.real64 = tok->cast.real64;
+   }
+   else if (tok->type == TType_NUMBER)  {
+      imm.c.type = Type_INT;
+      imm.location.immediate_value= tok->value;
+   }
+   return &imm;
+}
+
+
+ExprType*
+machImmediateInt(u64 value) {
+   static ExprType imm = {
+      .c = { .type = Type_INT },
+      .location = { .type = Location_IMMEDIATE },
+   };
+   imm.location.immediate_value = value;
+   return &imm;
+}
+
+ExprType*
+machHelperInt32() {
+   static ExprType helper = {
+      .c = { .type = Type_INT },
+      .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+   };
+
+   return &helper;
+}
+
+ExprType*
+machHelperInt64() {
+   static ExprType helper = {
+      .c = { .type = Type_LONG },
+      .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+   };
+
+   return &helper;
+}
+
+void
+machMov(Machine* m, ExprType* dst, ExprType* src) {
+   u32 bits = typeBits(&dst->c);
+   Assert(bits);
+
+   if (isRealType(&dst->c) &&
+       isImmediate(src)) {
+      switch(typeBits(&dst->c)) {
+         case 64: {
+            instructionPrintf("mov %s, __float64__(%f)",
+                              locationString(m, dst->location, bits),
+                              src->location.cast.real64);
+         } break;
+         case 32: {
+            instructionPrintf("mov %s, __float32__(%f)",
+                              locationString(m, dst->location, bits),
+                              src->location.cast.real64);
+         } break;
+         default:
+            codegenError("Invalid floating point variable size");
+      }
+   }
+   else {
+      instructionPrintf("mov %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+   }
+}
+
+void
+machAdd(Machine* m, ExprType* dst, ExprType* src) {
+   u32 bits = typeBits(&dst->c);
+   instructionPrintf("add %s, %s",
+                     locationString(m, dst->location, bits),
+                     locationString(m, src->location, bits));
+}
+
 void
 machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
    instructionPrintf("mov %s, %d",
@@ -807,57 +916,11 @@ machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
    };
 }
 
+#if 0
 void
 machMovStackTop(Machine* m, ExprType* entry, Token* rhs_tok) {
-   // Entry is at the top of the stack. Move the immediate value represented by rhs_tok.
-   b32 is_integer = rhs_tok->type == TType_NUMBER;
-   if (is_integer) {
-      if (!isIntegerType(&entry->c) && entry->c.type != Type_POINTER) {
-         if (entry->c.type == Type_FLOAT) {  // Float lhs, integer literal rhs
-            switch (typeBits(&entry->c)) {
-               // NOTE: Nasm provides the conversion for us, and we
-               // probably don't need to think about floating point
-               // constants until we make our own assembler.
-               case 64: {
-                  instructionPrintf("mov QWORD [ rsp ], __float64__(%f)", rhs_tok->cast.real32);
-               } break;
-               case 32: {
-                  instructionPrintf("mov DWORD [ rsp ], __float32__(%f)", rhs_tok->cast.real32);
-               } break;
-               case 16:
-               case 8:
-               default: {
-                  codegenError("Cannot put a floating point value in less than 32 bits.");
-               } break;
-            }
-         }
-         else {
-            codegenError("Cannot convert integer literal to non-integer type.");
-         }
-      }
-      else {
-         int value = rhs_tok->value;
-
-         switch (typeBits(&entry->c)) {
-            case 64: {
-               instructionPrintf("mov QWORD [ rsp ], 0x%x", value);
-            } break;
-            case 32: {
-               instructionPrintf("mov DWORD [ rsp ], 0x%x", value);
-            } break;
-            case 16: {
-               instructionPrintf("mov WORD [ rsp ], 0x%x", value);
-            } break;
-            case 8: {
-               instructionPrintf("mov BYTE [ rsp ], 0x%x", value);
-            } break;
-            default: {
-               InvalidCodePath;
-            } break;
-         }
-      }
-   }
 }
+#endif
 
 void
 machFinish(void) {

@@ -169,19 +169,20 @@ struct Ctype {
       // Integer types
       Type_CHAR = Type_ARITH | Type_PEANO | (1<<3),
       Type_INT  = Type_ARITH | Type_PEANO | (1<<4),
+      Type_LONG = Type_ARITH | Type_PEANO | (1<<5),
 
       // Real types
-      Type_FLOAT = Type_ARITH | Type_REAL | (1<<5),
-      Type_DOUBLE = Type_ARITH | Type_REAL | (1<<6),
+      Type_FLOAT = Type_ARITH | Type_REAL | (1<<6),
+      Type_DOUBLE = Type_ARITH | Type_REAL | (1<<7),
 
-      Type_FUNC = (1<<7),
+      Type_FUNC = (1<<8),
 
       // Structs and unions
-      Type_AGGREGATE = (1<<8),
+      Type_AGGREGATE = (1<<9),
 
       // Pointers
-      Type_POINTER = (1<<9),
-      Type_ARRAY = (1<<10),
+      Type_POINTER = (1<<10),
+      Type_ARRAY = (1<<11),
       // TODO atomic
    } type;
 
@@ -231,6 +232,7 @@ enum TokType {
    TType_PUNCTUATOR,
    TType_STRING_LITERAL,
    TType_NUMBER,
+   TType_FLOAT,
    TType_ID,
    TType_KEYWORD = 0xF000,
 } typedef TokType;
@@ -369,7 +371,10 @@ struct Location {
          RegisterEnum reg;
       };
       // IMMEDIATE
-      struct {
+      union {
+         union {
+            f64 real64;
+         } cast;
          u64 immediate_value;  // Cast to appropriate value based on token type.
       };
       // STACK
