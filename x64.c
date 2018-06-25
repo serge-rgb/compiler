@@ -2,6 +2,20 @@ static Machine* g_mach;
 static FILE* g_asm;
 
 
+
+
+void        machStackPushReg(Machine* m, RegisterEnum reg);
+void        machStackPushImm(Machine* m, ExprType* et, i64 val);
+void        machStackPushOffset(Machine* m, u64 bytes);
+ExprType*   machHelperInt64();
+ExprType*   machHelperInt32();
+ExprType*   machImmediateFromToken(Token* tok);
+ExprType*   machImmediateInt(u64 value);
+ExprType*   machAccumInt32();
+ExprType*   machAccumInt64();
+ExprType*   machAccumInt();
+
+
 struct Register {
    char* reg;
    char* reg_32;
@@ -162,32 +176,6 @@ registerLocation(RegisterEnum reg) {
    return loc;
 }
 
-void
-stackPushReg(Machine* m, RegisterEnum reg) {
-   instructionPrintf("push %s", locationString(m, registerLocation(reg), 64));
-   m->stack_offset += 8;
-   bufPush(m->stack, (StackValue){ .type = Stack_QWORD });
-}
-
-void
-stackPushImm(Codegen* c, ExprType* et, i64 val) {
-   instructionPrintf("push %d", val);
-   c->m->stack_offset += 8;
-   bufPush(c->m->stack, (StackValue){ .type = Stack_QWORD });
-   et->location = (Location) {
-      .type = Location_STACK,
-      .reg = c->m->stack_offset,
-   };
-}
-
-void
-stackPushOffset(Codegen* c, u64 bytes) {
-   Assert(bytes);
-   instructionPrintf("sub rsp, %d", bytes);
-   c->m->stack_offset += bytes;
-   StackValue val = { .type = Stack_OFFSET, .offset = bytes };
-   bufPush(c->m->stack, val);
-}
 
 void
 instructionReg(Machine* m, char* asm_line, int bits, ...) {
@@ -282,11 +270,12 @@ movOrCopy(Machine* m, Location out, Location in, int bits) {
 
 
 void
-stackPop(Machine* m, RegisterEnum reg) {
+machStackPop(Machine* m, ExprType* et) {
+   Assert(et->location.type == Location_REGISTER);
    StackValue s = bufPop(m->stack);
    switch (s.type) {
       case Stack_QWORD: {
-         instructionReg(m, "pop %s", 64, reg);
+         instructionReg(m, "pop %s", 64, et->location.reg);
          m->stack_offset -= 8;
       } break;
       case Stack_OFFSET: {
@@ -375,7 +364,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
          }
       }
       else {
-         stackPushOffset(c, typeBits(&etype->c) / 8);
+         machStackPushOffset(c->m, typeBits(&etype->c) / 8);
          loc.type = Location_STACK;
          loc.offset = c->m->stack_offset;
       }
@@ -458,7 +447,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
       codegenError("Left operator in expression is not arithmetic type.");
    }
 
-   stackPop(m, Reg_RBX);
+   machStackPop(m, machHelperInt64());
 
    if (typeBits(&tleft.c) != typeBits(&tright.c) ||
        tleft.c.type != tright.c.type) {
@@ -488,7 +477,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 
    if (target == Target_STACK) {
-      stackPushReg(m, Reg_RAX);
+      machStackPushReg(m, Reg_RAX);
    }
 }
 
@@ -512,7 +501,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
          // TODO: LEA
          instructionPrintf("add rax, %d", c->m->stack_offset - entry->location.offset);
          if (target == Target_STACK) {
-            stackPushReg(m, Reg_RAX);
+            machStackPushReg(m, Reg_RAX);
          }
       }
 
@@ -545,7 +534,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
          movOrCopy(m, registerLocation(Reg_RAX), loc, typeBits(&entry->c));
 
          if (target == Target_STACK) {
-            stackPushReg(m, Reg_RAX);
+            machStackPushReg(m, Reg_RAX);
          }
       }
    }
@@ -609,7 +598,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
          movOrCopy(m, registerLocation(Reg_RAX), address, bits);
 
          if (target == Target_STACK) {
-            stackPushReg(m, Reg_RAX);
+            machStackPushReg(m, Reg_RAX);
          }
       }
    }
@@ -620,7 +609,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
                            g_registers[address.reg].reg,
                            member_offset);
          if (target == Target_STACK) {
-            stackPushReg(m, address.reg);
+            machStackPushReg(m, address.reg);
          }
       }
    }
@@ -752,12 +741,12 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    c->m->stack_offset += pointerSizeBits() / 8;
 
    while (bufCount(c->m->stack) != stack_top) {
-      stackPop(m, Reg_RBX);
+      machStackPop(m, machHelperInt64());
    }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
 
    if (target == Target_STACK) {
-      stackPushReg(m, Reg_RAX);
+      machStackPushReg(m, Reg_RAX);
    }
 
    AstNode* funcdef = sym->c.func.node;
@@ -782,7 +771,7 @@ machTestAndJump(Machine* m, u32 bits, char* then, char* els) {
 // Compare the accumulator with the top of the stack.
 void
 machCmpJmp(Machine* m, AstType type, u32 bits, char* then, char* els) {
-   stackPop(m, Reg_RBX);
+   machStackPop(m, machHelperInt64());
    instructionReg(m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
    switch (type) {
       case Ast_EQUALS:     { instructionPrintf("je %s", then); } break;
@@ -814,6 +803,23 @@ machAccumInt64() {
    };
 
    return &accum;
+}
+
+ExprType*
+machAccumInt(u32 bits) {
+   ExprType* result = NULL;
+   switch (bits) {
+      case 64: {
+         result = machAccumInt64();
+      } break;
+      case 32: {
+         result = machAccumInt32();
+      } break;
+      default: {
+         NotImplemented("machAccumInt()");
+      } break;
+   }
+   return result;
 }
 
 // NOTE: Every use of the machImmediate* functions invalidates the previous call.
@@ -916,11 +922,32 @@ machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
    };
 }
 
-#if 0
 void
-machMovStackTop(Machine* m, ExprType* entry, Token* rhs_tok) {
+machStackPushReg(Machine* m, RegisterEnum reg) {
+   instructionPrintf("push %s", locationString(m, registerLocation(reg), 64));
+   m->stack_offset += 8;
+   bufPush(m->stack, (StackValue){ .type = Stack_QWORD });
 }
-#endif
+
+void
+machStackPushImm(Machine* m, ExprType* et, i64 val) {
+   instructionPrintf("push %d", val);
+   m->stack_offset += 8;
+   bufPush(m->stack, (StackValue){ .type = Stack_QWORD });
+   et->location = (Location) {
+      .type = Location_STACK,
+      .reg = m->stack_offset,
+   };
+}
+
+void
+machStackPushOffset(Machine* m, u64 bytes) {
+   Assert(bytes);
+   instructionPrintf("sub rsp, %d", bytes);
+   m->stack_offset += bytes;
+   StackValue val = { .type = Stack_OFFSET, .offset = bytes };
+   bufPush(m->stack, val);
+}
 
 void
 machFinish(void) {
@@ -979,7 +1006,7 @@ machFunctionEpilogue(Machine* m) {
    instructionPrintf(".func_end:");
 
    while (bufCount(m->stack) > 0)  {
-      stackPop(m, Reg_RBX);
+      machStackPop(m, machHelperInt64());
    }
 
    // Restore non-volatile registers.

@@ -63,7 +63,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   machMovAccum(c->m, expr_type, node->tok);
                } break;
                case Target_STACK: {
-                  stackPushImm(c, expr_type, node->tok->value);
+                  machStackPushImm(c->m, expr_type, node->tok->value);
                } break;
                case Target_NONE: {
                   expr_type->location = (Location) {
@@ -99,52 +99,50 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                Assert(bits < 64);
                // TODO: Check for arithmetic type here.
 
-               machMov(m,
-                       machHelperInt32(), &lhs_type);
+               machMov(m, machHelperInt32(), &lhs_type);
 
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
                      machAdd(c->m,
                              machHelperInt32(), machAccumInt32());
-                     // instructionReg(c->m, "add %s, %s", bits, Reg_RBX, Reg_RAX);
                   } break;
                   default: {
                      NotImplemented("Different assignment expressions");
                   }
                }
 
-               machMov(m,
-                       &lhs_type, machHelperInt32());
+               machMov(m, &lhs_type, machHelperInt32());
 
                if (target == Target_ACCUM) {
-                  instructionPrintf("mov %s, %s",
-                                    locationString(m, registerLocation(Reg_RAX), bits),
-                                    locationString(m, lhs_type.location, bits));
+                  machMov(c->m, machAccumInt(bits), &lhs_type);
                }
             }
          } break;
          case Ast_POSTFIX_INC:
          case Ast_POSTFIX_DEC: {
-            // TODO: Check for type of postfix
             AstNode* expr = node->child;
             ExprType local_etype = Zero;
             emitExpression(c, expr, &local_etype, Target_STACK);
             if (local_etype.location.type == Location_IMMEDIATE) {
                codegenError("Attempting to increment an rvalue.");
             }
-            emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM);
 
-            Location var = local_etype.location;
+            switch (node->type) {
+               case Ast_POSTFIX_INC: { emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM); } break;
+               case Ast_POSTFIX_DEC: { emitArithBinaryExpr(c, Ast_SUB, NULL, expr, c->one, Target_ACCUM); } break;
+            }
 
-            instructionPrintf("mov %s, %s",
-                              locationString(m, var, typeBits(&local_etype.c)),
-                              locationString(m, registerLocation(Reg_RAX), typeBits(&local_etype.c)));
+            machMov(c->m, &local_etype, machAccumInt32());
+
             if (target == Target_STACK) {
                // Result is already on the stack.
             }
             else if (target == Target_ACCUM) {
                // Return old value.
-               stackPop(c->m, Reg_RAX);
+               machStackPop(c->m, machAccumInt64());
+            }
+            else if (target == Target_NONE) {
+               machStackPop(c->m, machHelperInt64());
             }
             if (expr_type) {
                *expr_type = local_etype;
@@ -195,11 +193,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   }
                }
                if (target == Target_STACK) {
-                  stackPushReg(c->m, Reg_RAX);
+                  machStackPushReg(c->m, machAccumInt64()->location.reg);
                   result.location = (Location){ .type = Location_STACK, .offset = c->m->stack_offset };
                }
                else {
-                  result.location = (Location){ .type = Location_REGISTER, .reg = Reg_RAX };
+                  result.location = machAccumInt64()->location;
                }
                *expr_type = result;
             }
@@ -225,7 +223,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                ExprType right_type = {0};
                codegenEmit(c, right, &right_type, Target_STACK);
                codegenEmit(c, left, &left_type, Target_ACCUM);
-               stackPop(c->m, Reg_RBX);
+               machStackPop(c->m, machHelperInt64());
 
                instructionReg(c->m, "cmp %s, %s", typeBits(&left_type.c), Reg_RAX, Reg_RBX);
 
@@ -242,7 +240,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                instructionReg(c->m, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
 
                if (target == Target_STACK) {
-                  stackPushReg(c->m, Reg_RAX);
+                  machStackPushReg(c->m, machAccumInt64()->location.reg);
                }
             }
             else {
@@ -339,7 +337,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
             Ctype* ctype = NULL;
             if (declarator->is_pointer) {
-               DevBreak("struct member is pointer");
+               NotImplemented("struct member is pointer");
             }
             else {
                ctype = &spec->ctype;
@@ -375,7 +373,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          codegenError("Symbol redeclared in scope");
       }
       // TODO: top level declarations
-      stackPushOffset(c, bits/8);
+      machStackPushOffset(c->m, bits/8);
 
       ExprType* entry = symInsert(&c->scope->symbol_table,
                                   id_str,
@@ -482,6 +480,8 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          machLabel(loop_label);
          if (!after_is_control) {
             emitConditionalJump(c, control, body_label, end_label);
+         } else {
+            NotImplemented("after is control");
          }
 
          machLabel(body_label);

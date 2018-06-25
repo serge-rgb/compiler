@@ -1,12 +1,9 @@
 int main() {
-   float doo = 1;
-   int foo=1;
-   if (foo)
-      foo += 3;
-   else
-      foo += 3;
-   for (int i = 0; i < 38; i += 1) {
+   int foo = 0;
+   for (int i = 0; i < 4; i++) {
       foo += 1;
+      foo--;
+      foo++;
    }
-   return foo == 42;
+   return foo == 4;
 }
