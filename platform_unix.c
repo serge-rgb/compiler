@@ -1,3 +1,4 @@
+#include "unistd.h"
 
 #define PRI_size "li"
 
@@ -26,3 +27,55 @@ extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format
 #define PlatformPrintString(...) snprintf(__VA_ARGS__)
 #define PlatformBreak __asm ("int $3")
 
+
+
+ErrorCode
+platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
+   ErrorCode ret = Ok;
+   // Call nasm from here.
+   char asm_file[PathMax] = {0};
+   snprintf(asm_file, PathMax, "%s.asm", outfile);
+   char obj_file[PathMax] = {0};
+   snprintf(obj_file, PathMax, "%s.o", outfile);
+   pid_t pid = fork();
+   printf("Running nasm\n");
+   int nasm_status = 0;
+   if (pid == 0) {
+      char* nasm_args[] = { "nasm", "-f", "macho64", asm_file };
+      // printargs(nasm_args, ArrayCount(nasm_args));
+      execve("/usr/local/bin/nasm", nasm_args, NULL);
+   }
+   else if (pid == wait(&nasm_status)) {
+      if (WIFEXITED(nasm_status) && WEXITSTATUS(nasm_status) == 0) {
+         printf("Running ld\n");
+         char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", outfile };
+         pid = fork();
+         if (pid == 0) {
+            // printargs(ld_args, ArrayCount(ld_args));
+            execve("/usr/bin/ld", ld_args, NULL);
+         }
+         else if (pid == wait(NULL)) {
+            printf("Running %s\n", outfile);
+            char* out_args[] = { outfile };
+            if (fork() == 0) {
+               execve(outfile, out_args, NULL);
+            }
+            int status = 0;
+            wait(&status);
+            if (WIFEXITED(status)) {
+               printf("Returned status: %d\n", WEXITSTATUS(status));
+               if (WEXITSTATUS(status) != 1) {
+                  printf("ERROR: test failed.\n");
+                  exit(1);
+               }
+            }
+            else {
+               printf("Program exited incorrectly.");
+            }
+         }
+      } else {
+         fprintf(stderr, "nasm failed\n");
+      }
+   }
+   return ret;
+}
