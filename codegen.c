@@ -103,8 +103,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
-                     machAdd(c->m,
-                             machHelperInt32(), machAccumInt32());
+                     machAdd(c->m, machHelperInt32(), machAccumInt32());
                   } break;
                   default: {
                      NotImplemented("Different assignment expressions");
@@ -182,22 +181,13 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             if (target != Target_NONE) {
                Location* loc = &result.c.pointer.pointee->location;
-               switch (loc->type) {
-                  case Location_STACK: {
-                     // TODO lea
-                     instructionPrintf("mov rax, rsp");
-                     instructionPrintf("add rax, %d", c->m->stack_offset - loc->offset);
-                  } break;
-                  default: {
-                     NotImplemented("Address of something not on the stack");
-                  }
-               }
+               machAddressOf(c->m, machAccumInt64(), loc);
                if (target == Target_STACK) {
                   machStackPushReg(c->m, machAccumInt64()->location.reg);
                   result.location = (Location){ .type = Location_STACK, .offset = c->m->stack_offset };
                }
                else {
-                  result.location = machAccumInt64()->location;
+                 result.location = machAccumInt64()->location;
                }
                *expr_type = result;
             }

@@ -1024,3 +1024,16 @@ void
 machJumpToLabel(char* label) {
    instructionPrintf("jmp %s", label);
 }
+
+void
+machAddressOf(Machine* m, ExprType* dst, Location* loc) {
+   switch (loc->type) {
+      case Location_STACK: {
+         instructionPrintf("mov rax, rsp");
+         instructionPrintf("add rax, %d", m->stack_offset - loc->offset);
+      } break;
+      default: {
+         NotImplemented("Address of something not on the stack");
+      }
+   }
+}
