@@ -1,16 +1,16 @@
-int
+ErrorCode
 compileTranslationUnit(char* file_name, char* outfile) {
    fprintf(stderr, "Compiling file %s\n", file_name);
 
    Arena a = {0};
    stringInit(&a);
 
-   int result = 0;
+   ErrorCode result = Ok;
 
    FileStream file_stream = {0};
    if (!fileStreamInit(&file_stream, file_name)) {
       fprintf(stderr, "ERROR: Could not read file.\n");
-      result = 1;
+      result = CouldNotReadFile;
    }
    else {
       Token* tokens = tokenize(&a, &file_stream);
@@ -101,9 +101,8 @@ main(int argc, char** argv) {
             }
          }
       }
-      if (0 != compileTranslationUnit(files[i], outfile)) {
+      if (Ok != (result = compileTranslationUnit(files[i], outfile))) {
          fprintf(stderr, "Could not compile file %s\n", files[i]);
-         result = CouldNotCompile;
       }
       else {
          result = platformCompileAndLinkAsmFile(outfile);

@@ -87,6 +87,8 @@ enum ErrorCode {
 
   Fail = 1,
 
+  CouldNotReadFile,
+
   IntParse,
   CouldNotAssemble,
   CouldNotLink,

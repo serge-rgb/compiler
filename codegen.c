@@ -42,6 +42,79 @@ findSymbol(Codegen* c, char* name) {
 }
 
 void
+emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+   Machine* m = c->m;
+   AstNode* func = node->child;
+   char* label = func->tok->cast.string;
+
+   ExprType* sym = findSymbol(c, label);
+   if (!sym) {
+      codegenError("Call to undefined function. %s", label);
+   }
+   Ctype* type = &sym->c;
+   if (type->type != Type_FUNC) {
+      codegenError("%s is not a function.", label);
+   }
+
+   AstNode* params = func->next;
+
+   u64 stack_top = bufCount(c->m->stack);
+
+   // Check count
+   {
+      u64 n_param = 0;
+      for (AstNode* param = params;
+           param != NULL;
+           param = param->next) {
+         n_param++;
+      }
+
+      u64 expected_nparam = funcNumParams(sym->c.func.node);
+      if (n_param != expected_nparam) {
+         codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
+                      label, expected_nparam, n_param);
+      }
+   }
+
+   // Put the parameters in registers and/or the stack.
+   u64 n_param = 0;
+
+   AstNode* expected_param = funcParams(sym->c.func.node);
+
+   for (AstNode* param = params;
+        param != NULL;
+        param = param->next) {
+      ExprType et = {0};
+      emitExpression(c, param, &et, Target_NONE);
+      ExprType expected_et = {0};
+      ExprType pointee = {0};
+      expected_et.c.pointer.pointee = &pointee;
+      if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
+         codegenError("Attempting to pass incompatible parameter to function.");
+      }
+      pushParameter(c, n_param++, &et);
+      expected_param = expected_param->next;
+   }
+
+   machCall(c->m, label);
+
+   while (bufCount(c->m->stack) != stack_top) {
+      machStackPop(m, machHelperInt64());
+   }
+   // TODO: Restore registers. Not necessary at the moment because of DDCG
+
+   if (target == Target_STACK) {
+      machStackPushReg(m, machAccumInt64()->location.reg);
+   }
+
+   AstNode* funcdef = sym->c.func.node;
+   Assert(funcdef->type == Ast_FUNCDEF);
+
+   expr_type->c = funcdef->child->ctype;
+   expr_type->location = machAccumInt64()->location;
+}
+
+void
 emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    Machine* m = c->m;
    if (nodeIsExpression(node)) {
@@ -215,19 +288,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                codegenEmit(c, left, &left_type, Target_ACCUM);
                machStackPop(c->m, machHelperInt64());
 
-               instructionReg(c->m, "cmp %s, %s", typeBits(&left_type.c), Reg_RAX, Reg_RBX);
+               machCmp(c->m, machAccumInt(typeBits(&left_type.c)), machHelperInt64());
 
-               char* instr = 0;
-               switch(node->type) {
-                  case Ast_EQUALS: { instr = "sete %s"; } break;
-                  case Ast_LESS: { instr = "setl %s"; } break;
-                  case Ast_LEQ: { instr = "setle %s"; } break;
-                  case Ast_GREATER: { instr = "setg %s"; } break;
-                  case Ast_GEQ: { instr = "setge %s"; } break;
-                  case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
-                  default: { InvalidCodePath; } break;
-               }
-               instructionReg(c->m, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
+               machCmpSetAccum(c->m, node->type);
 
                if (target == Target_STACK) {
                   machStackPushReg(c->m, machAccumInt64()->location.reg);
@@ -548,7 +611,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       if (params) {
          AstNode* p = params;
          u64 n_param = 0;
-         u64 offset = 16;  // TODO: get rid of this variable. probably after popParameter is abstracted.
+         u64 offset = 8;  // TODO: get rid of this variable. probably after popParameter is abstracted.
          while (p) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
@@ -585,8 +648,8 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       emitCompoundStatement(c, compound, Target_ACCUM);
 
       machFunctionEpilogue(c->m);
-
       popScope(c);
+      Assert (c->m->stack_offset == 0);
    }
    else {
       codegenError("Funcdef: Invalid node in the tree.");

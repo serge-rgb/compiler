@@ -682,81 +682,6 @@ typesAreCompatible(Codegen* c, Ctype a, Ctype b) {
    return compatible;
 }
 
-void
-emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
-   Machine* m = c->m;
-   AstNode* func = node->child;
-   char* label = func->tok->cast.string;
-
-   ExprType* sym = findSymbol(c, label);
-   if (!sym) {
-      codegenError("Call to undefined function. %s", label);
-   }
-   Ctype* type = &sym->c;
-   if (type->type != Type_FUNC) {
-      codegenError("%s is not a function.", label);
-   }
-
-   AstNode* params = func->next;
-
-   u64 stack_top = bufCount(c->m->stack);
-
-   // Check count
-   {
-      u64 n_param = 0;
-      for (AstNode* param = params;
-           param != NULL;
-           param = param->next) {
-         n_param++;
-      }
-
-      u64 expected_nparam = funcNumParams(sym->c.func.node);
-      if (n_param != expected_nparam) {
-         codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
-                      label, expected_nparam, n_param);
-      }
-   }
-
-   // Put the parameters in registers and/or the stack.
-   u64 n_param = 0;
-
-   AstNode* expected_param = funcParams(sym->c.func.node);
-
-   for (AstNode* param = params;
-        param != NULL;
-        param = param->next) {
-      ExprType et = {0};
-      emitExpression(c, param, &et, Target_NONE);
-      ExprType expected_et = {0};
-      ExprType pointee = {0};
-      expected_et.c.pointer.pointee = &pointee;
-      if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
-         codegenError("Attempting to pass incompatible parameter to function.");
-      }
-      pushParameter(c, n_param++, &et);
-      expected_param = expected_param->next;
-   }
-
-   instructionPrintf("call %s", label);
-   c->m->stack_offset += pointerSizeBits() / 8;
-
-   while (bufCount(c->m->stack) != stack_top) {
-      machStackPop(m, machHelperInt64());
-   }
-   // TODO: Restore registers. Not necessary at the moment because of DDCG
-
-   if (target == Target_STACK) {
-      machStackPushReg(m, Reg_RAX);
-   }
-
-   AstNode* funcdef = sym->c.func.node;
-   Assert(funcdef->type == Ast_FUNCDEF);
-
-   expr_type->c = funcdef->child->ctype;
-   expr_type->location = registerLocation(Reg_RAX);
-}
-
-
 // ==================================
 // TODO: Abstract away x86 code from functions above and move back to codegen.
 // ==================================
@@ -766,6 +691,14 @@ machTestAndJump(Machine* m, u32 bits, char* then, char* els) {
    instructionReg(m, "test %s, %s", bits, Reg_RAX, Reg_RAX);
    instructionPrintf("jne %s", then);
    instructionPrintf("jmp %s", els);
+}
+
+void
+machCmp(Machine* m, ExprType* dst, ExprType* src) {
+   u32 bits = typeBits(&dst->c);
+   instructionPrintf("cmp %s, %s",
+                     locationString(m, dst->location, bits),
+                     locationString(m, src->location, bits));
 }
 
 // Compare the accumulator with the top of the stack.
@@ -783,6 +716,21 @@ machCmpJmp(Machine* m, AstType type, u32 bits, char* then, char* els) {
       default:             { InvalidCodePath; }
    }
    instructionPrintf("jmp %s", els);
+}
+
+void
+machCmpSetAccum(Machine* m, AstType type) {
+   char* instr = 0;
+   switch(type) {
+      case Ast_EQUALS: { instr = "sete %s"; } break;
+      case Ast_LESS: { instr = "setl %s"; } break;
+      case Ast_LEQ: { instr = "setle %s"; } break;
+      case Ast_GREATER: { instr = "setg %s"; } break;
+      case Ast_GEQ: { instr = "setge %s"; } break;
+      case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
+      default: { InvalidCodePath; } break;
+   }
+   instructionReg(m, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
 }
 
 ExprType*
@@ -923,6 +871,12 @@ machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
 }
 
 void
+machCall(Machine* m, char* label) {
+   instructionPrintf("call %s", label);
+   m->stack_offset += pointerSizeBits() / 8;
+}
+
+void
 machStackPushReg(Machine* m, RegisterEnum reg) {
    instructionPrintf("push %s", locationString(m, registerLocation(reg), 64));
    m->stack_offset += 8;
@@ -986,6 +940,8 @@ machInit(Machine* m) {
 #endif
       ;
 
+   m->stack_offset += 8; // Call to main
+
    fwrite(prelude, 1, strlen(prelude), g_asm);
 
    setupVolatility(m);
@@ -1012,7 +968,10 @@ machFunctionEpilogue(Machine* m) {
    // Restore non-volatile registers.
 
    instructionPrintf("pop rbp");
+   m->stack_offset -= 8;
+
    instructionPrintf("ret");
+   m->stack_offset -= 8;
 }
 
 void

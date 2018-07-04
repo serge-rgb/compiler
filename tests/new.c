@@ -1,3 +1,7 @@
+int bar(int x) {
+   return x;
+}
+
 int main() {
    int foo = 0;
    for (int i = 0; i < 4; i++) {
@@ -5,5 +9,5 @@ int main() {
       foo--;
       foo++;
    }
-   return foo == 4;
+   return foo == bar(4);  // TODO: This comparison fails
 }
