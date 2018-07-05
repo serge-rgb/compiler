@@ -1,9 +1,7 @@
 static Machine* g_mach;
 static FILE* g_asm;
 
-
-
-
+void        machMov(Machine* m, ExprType* dst, ExprType* src);
 void        machStackPushReg(Machine* m, RegisterEnum reg);
 void        machStackPushImm(Machine* m, ExprType* et, i64 val);
 void        machStackPushOffset(Machine* m, u64 bytes);
@@ -14,7 +12,6 @@ ExprType*   machImmediateInt(u64 value);
 ExprType*   machAccumInt32();
 ExprType*   machAccumInt64();
 ExprType*   machAccumInt();
-
 
 struct Register {
    char* reg;
@@ -137,6 +134,23 @@ locationString(Machine* m, Location r, int bits) {
             InvalidCodePath;
          res = getString(tmp_string);
       } break;
+      case Location_STACK_FROM_REG: {
+#define ResultSize 64
+         char tmp_string[ResultSize] = {0};
+         char* reg_str = g_registers[r.reg].reg;
+         if (bits == 8)
+            snprintf(tmp_string, ArrayCount(tmp_string), "BYTE [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+         else if (bits == 16)
+            snprintf(tmp_string, ArrayCount(tmp_string), "WORD [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+         else if (bits == 32)
+            snprintf(tmp_string, ArrayCount(tmp_string), "DWORD [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+         else if (bits == 64)
+            snprintf(tmp_string, ArrayCount(tmp_string), "QWORD [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+         else
+            InvalidCodePath;
+         res = getString(tmp_string);
+
+      } break;
       default: {
          // WTF
          InvalidCodePath;
@@ -222,53 +236,6 @@ instructionReg(Machine* m, char* asm_line, int bits, ...) {
 ExprType* findTag(Codegen* c, char* name);
 ExprType* findSymbol(Codegen* c, char* name);
 
-Location
-locationFromId(Codegen* c, char* id) {
-   ExprType* entry = findSymbol(c, id);
-   if (!entry) {
-      codegenError("Use of undeclared identifier %s", id);
-   }
-   Location var = entry->location;
-   return var;
-}
-
-void
-movOrCopy(Machine* m, Location out, Location in, int bits) {
-   // TODO: We can put this inside machMov
-   if (bits <= 64) {
-      instructionPrintf("mov %s, %s",
-                        locationString(m, out, bits),
-                        locationString(m, in, bits));
-   }
-   else {
-      if (out.type == Location_REGISTER) {
-         NotImplemented("Big copy - into register.");
-      }
-      else if (out.type == Location_STACK) {
-         int bytes = bits/8;
-         if (in.type == Location_REGISTER) {
-            instructionReg(m, "mov rsi, %s", 64, in);
-         }
-         else if (in.type == Location_STACK) {
-            instructionPrintf("mov rsi, rsp");
-            if (in.offset != m->stack_offset) {          // TODO lea
-               instructionPrintf("add rsi, %d", m->stack_offset - in.offset);
-            }
-         }
-         instructionPrintf("mov rdi, rsp");
-         if (out.offset != m->stack_offset) {
-            instructionPrintf("add rdi, %d", m->stack_offset - out.offset);
-         }
-         instructionPrintf("mov rcx, 0x%x", bytes);
-         instructionPrintf("rep movsb");
-      }
-      else {
-         InvalidCodePath;
-      }
-   }
-}
-
-
 void
 machStackPop(Machine* m, ExprType* et) {
    Assert(et->location.type == Location_REGISTER);
@@ -331,7 +298,12 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
                case 5: { r = Reg_R9;  } break;
             }
          }
-         movOrCopy(m, registerLocation(r), registerLocation(Reg_RAX), typeBits(&etype->c));
+         ExprType reg = {
+            .c = etype->c,
+            .location = registerLocation(r),
+         };
+         Break;
+         machMov(m, &reg, machAccumInt64());
       }
       else {
          NotImplemented("More params.");
@@ -368,7 +340,11 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
          loc.type = Location_STACK;
          loc.offset = c->m->stack_offset;
       }
-      movOrCopy(m, loc, etype->location, typeBits(&etype->c));
+      ExprType reg = {
+         .c = etype->c,
+         .location = loc,
+      };
+      machMov(m, &reg, etype);
    }
 }
 
@@ -486,11 +462,12 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
    Machine* m = c->m;
    char* id_str = node->tok->cast.string;
    ExprType* entry = findSymbol(c, id_str);
-   Location loc = locationFromId(c, id_str);
 
    if (!entry) {
       codegenError("Use of undeclared identifier %s", node->tok->cast.string);
    }
+
+   Location loc = entry->location;
 
    char* size_str = NULL;
 
@@ -531,7 +508,11 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
                               locationString(m, registerLocation(Reg_RAX), 64),
                               locationString(m, registerLocation(Reg_RAX), 64));
          }
-         movOrCopy(m, registerLocation(Reg_RAX), loc, typeBits(&entry->c));
+         ExprType reg = {
+            .c = entry->c,
+            .location = registerLocation(Reg_RAX)
+         };
+         machMov(m, &reg, entry);
 
          if (target == Target_STACK) {
             machStackPushReg(m, Reg_RAX);
@@ -544,142 +525,6 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       expr_type->location = loc;
    }
 
-}
-
-void
-emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
-   Machine* m = c->m;
-
-   char* struct_str = node->child->tok->cast.string;
-   char* field_str = node->child->next->tok->cast.string;
-   ExprType* symbol_entry = findSymbol(c, struct_str);
-   if (!symbol_entry) {
-      codegenError("%s undeclared.", struct_str);
-   }
-
-   Ctype *ctype = NULL;
-   Location address = Zero;
-   if (symbol_entry->c.type == Type_POINTER) {
-      ctype = &symbol_entry->c.pointer.pointee->c;
-      address = symbol_entry->location;
-   }
-   else {
-      Assert(symbol_entry->c.type = Type_AGGREGATE);
-      ctype = &symbol_entry->c;
-      address = symbol_entry->location;
-   }
-
-   char* tag_str = ctype->aggr.tag;
-   ExprType* struct_entry = findTag(c, tag_str);
-   if (!struct_entry) {
-      codegenError("No struct named %s", tag_str);
-   }
-   struct StructMember* members = struct_entry->c.aggr.members;
-
-   u64 member_idx = MaxU64;
-   for (u64 i = 0; i < bufCount(members); ++i) {
-      if (!strcmp(members[i].id, field_str)) {
-         member_idx = i;
-         break;
-      }
-   }
-   if (member_idx == MaxU64) {
-      codegenError("Struct %s does not have %s member", tag_str, field_str);
-   }
-
-   struct StructMember* member = members + member_idx;
-   u64 member_offset = member->offset;
-   int bits = typeBits(member->ctype);
-
-   if (address.type == Location_STACK) {
-      address.offset = symbol_entry->location.offset - member_offset;
-
-      if (target != Target_NONE) {
-         movOrCopy(m, registerLocation(Reg_RAX), address, bits);
-
-         if (target == Target_STACK) {
-            machStackPushReg(m, Reg_RAX);
-         }
-      }
-   }
-   else if (address.type == Location_REGISTER) {
-      if (target != Target_NONE) {
-         instructionPrintf("mov %s, [%s + %d]",
-                           locationString(m, (Location){ .type=Location_REGISTER, .reg=Reg_RAX }, typeBits(member->ctype)),
-                           g_registers[address.reg].reg,
-                           member_offset);
-         if (target == Target_STACK) {
-            machStackPushReg(m, address.reg);
-         }
-      }
-   }
-   if (expr_type) {
-      expr_type->c = *(member->ctype);
-      expr_type->location = address;
-   }
-}
-
-void emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);  // forward decl
-
-b32
-typesAreCompatible(Codegen* c, Ctype a, Ctype b) {
-   b32 compatible = false;
-   if (a.type == b.type) {
-      if (a.type == Type_POINTER) {
-         compatible = typesAreCompatible(c,
-                                         a.pointer.pointee->c,
-                                         b.pointer.pointee->c);
-      }
-      else {
-         switch (a.type) {
-            case Type_AGGREGATE: {
-               // TODO: Anonymous structs
-               if ((a.aggr.tag && b.aggr.tag)) {
-                  ExprType* aggr_a = findTag(c, a.aggr.tag);
-                  ExprType* aggr_b = findTag(c, b.aggr.tag);
-                  // TODO: We could return here by just having the same tag. C
-                  // spec says (6.7.2) that when two types have the same tag,
-                  // defined in different translation units, they must have:
-                  //    - The same number of parameters.
-                  //    - Every corresponding parameter is compatible.
-                  if (aggr_a == aggr_b) {
-                     compatible = true;
-                  }
-                  // SPEC: We deviate from the spec by always considering two
-                  // structs with the same layout as compatible.
-                  else {
-                     u64 n_a = bufCount(aggr_a->c.aggr.members);
-                     u64 n_b = bufCount(aggr_b->c.aggr.members);
-                     if (n_a == n_b) {
-                        compatible = true;
-                        for (u64 i = 0; i < n_a; ++i) {
-                           // TODO: Alignment check.
-                           if (!typesAreCompatible(c,
-                                                   *aggr_a->c.aggr.members[i].ctype,
-                                                   *aggr_b->c.aggr.members[i].ctype)) {
-                              compatible = false;
-                              break;
-                           }
-                        }
-                     }
-                  }
-               }
-            } break;
-            default: {
-               compatible = true;
-            } break;
-         }
-      }
-   }
-   else {
-      if (a.type == Type_POINTER || b.type == Type_POINTER) {
-         compatible = false;
-      }
-      else {
-         NotImplemented("Compatibility rules");
-      }
-   }
-   return compatible;
 }
 
 // ==================================
@@ -826,27 +671,55 @@ machMov(Machine* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    Assert(bits);
 
-   if (isRealType(&dst->c) &&
-       isImmediate(src)) {
-      switch(typeBits(&dst->c)) {
-         case 64: {
-            instructionPrintf("mov %s, __float64__(%f)",
-                              locationString(m, dst->location, bits),
-                              src->location.cast.real64);
-         } break;
-         case 32: {
-            instructionPrintf("mov %s, __float32__(%f)",
-                              locationString(m, dst->location, bits),
-                              src->location.cast.real64);
-         } break;
-         default:
-            codegenError("Invalid floating point variable size");
+   if (bits <= 64) {
+      if (isRealType(&dst->c) &&
+          isImmediate(src)) {
+         switch(typeBits(&dst->c)) {
+            case 64: {
+               instructionPrintf("mov %s, __float64__(%f)",
+                                 locationString(m, dst->location, bits),
+                                 src->location.cast.real64);
+            } break;
+            case 32: {
+               instructionPrintf("mov %s, __float32__(%f)",
+                                 locationString(m, dst->location, bits),
+                                 src->location.cast.real64);
+            } break;
+            default:
+               codegenError("Invalid floating point variable size");
+         }
+      }
+      else {
+         instructionPrintf("mov %s, %s",
+                           locationString(m, dst->location, bits),
+                           locationString(m, src->location, bits));
       }
    }
-   else {
-      instructionPrintf("mov %s, %s",
-                        locationString(m, dst->location, bits),
-                        locationString(m, src->location, bits));
+   else /* bits > 64*/ {
+      if (dst->location.type == Location_REGISTER) {
+         NotImplemented("Big copy - into register.");
+      }
+      else if (dst->location.type == Location_STACK) {
+         int bytes = bits/8;
+         if (src->location.type == Location_REGISTER) {
+            instructionReg(m, "mov rsi, %s", 64, src->location);
+         }
+         else if (src->location.type == Location_STACK) {
+            instructionPrintf("mov rsi, rsp");
+            if (src->location.offset != m->stack_offset) {          // TODO lea
+               instructionPrintf("add rsi, %d", m->stack_offset - src->location.offset);
+            }
+         }
+         instructionPrintf("mov rdi, rsp");
+         if (dst->location.offset != m->stack_offset) {
+            instructionPrintf("add rdi, %d", m->stack_offset - dst->location.offset);
+         }
+         instructionPrintf("mov rcx, 0x%x", bytes);
+         instructionPrintf("rep movsb");
+      }
+      else {
+         InvalidCodePath;
+      }
    }
 }
 

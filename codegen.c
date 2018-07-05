@@ -42,6 +42,159 @@ findSymbol(Codegen* c, char* name) {
 }
 
 void
+emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+   Machine* m = c->m;
+
+   char* struct_str = node->child->tok->cast.string;
+   char* field_str = node->child->next->tok->cast.string;
+   ExprType* symbol_entry = findSymbol(c, struct_str);
+   if (!symbol_entry) {
+      codegenError("%s undeclared.", struct_str);
+   }
+
+   Ctype *ctype = NULL;
+   Location address = Zero;
+   if (symbol_entry->c.type == Type_POINTER) {
+      ctype = &symbol_entry->c.pointer.pointee->c;
+      address = symbol_entry->location;
+   }
+   else {
+      Assert(symbol_entry->c.type = Type_AGGREGATE);
+      ctype = &symbol_entry->c;
+      address = symbol_entry->location;
+   }
+
+   char* tag_str = ctype->aggr.tag;
+   ExprType* struct_entry = findTag(c, tag_str);
+   if (!struct_entry) {
+      codegenError("No struct named %s", tag_str);
+   }
+   struct StructMember* members = struct_entry->c.aggr.members;
+
+   u64 member_idx = MaxU64;
+   for (u64 i = 0; i < bufCount(members); ++i) {
+      if (!strcmp(members[i].id, field_str)) {
+         member_idx = i;
+         break;
+      }
+   }
+   if (member_idx == MaxU64) {
+      codegenError("Struct %s does not have %s member", tag_str, field_str);
+   }
+
+   struct StructMember* member = members + member_idx;
+   u64 member_offset = member->offset;
+   int bits = typeBits(member->ctype);
+
+   if (address.type == Location_STACK) {
+      address.offset = symbol_entry->location.offset + member_offset;
+
+      if (target != Target_NONE) {
+         ExprType reg = {
+            .c = *member->ctype,
+            .location = address,
+         };
+         machMov(m, machAccumInt(bits), &reg);
+
+         if (target == Target_STACK) {
+            machStackPushReg(m, Reg_RAX);
+         }
+      }
+   }
+   else if (address.type == Location_REGISTER) {
+      if (target != Target_NONE) {
+         u32 bits = typeBits(member->ctype);
+#if 1
+         ExprType reg = {
+            .c = *member->ctype,
+            .location = (Location){
+               .type = Location_STACK_FROM_REG,
+               .reg = address.reg,
+               .reg_offset = member_offset,
+            },
+         };
+         machMov(m, machAccumInt(bits), &reg);
+#else
+         instructionPrintf("mov %s, [%s + %d]",
+                           locationString(m, machAccumInt(bits)->location, bits),
+                           g_registers[address.reg].reg,
+                           member_offset);
+#endif
+         if (target == Target_STACK) {
+            machStackPushReg(m, address.reg);
+         }
+      }
+   }
+   if (expr_type) {
+      expr_type->c = *(member->ctype);
+      expr_type->location = address;
+   }
+}
+
+b32
+typesAreCompatible(Codegen* c, Ctype a, Ctype b) {
+   b32 compatible = false;
+   if (a.type == b.type) {
+      if (a.type == Type_POINTER) {
+         compatible = typesAreCompatible(c,
+                                         a.pointer.pointee->c,
+                                         b.pointer.pointee->c);
+      }
+      else {
+         switch (a.type) {
+            case Type_AGGREGATE: {
+               // TODO: Anonymous structs
+               if ((a.aggr.tag && b.aggr.tag)) {
+                  ExprType* aggr_a = findTag(c, a.aggr.tag);
+                  ExprType* aggr_b = findTag(c, b.aggr.tag);
+                  // TODO: We could return here by just having the same tag. C
+                  // spec says (6.7.2) that when two types have the same tag,
+                  // defined in different translation units, they must have:
+                  //    - The same number of parameters.
+                  //    - Every corresponding parameter is compatible.
+                  if (aggr_a == aggr_b) {
+                     compatible = true;
+                  }
+                  // SPEC: We deviate from the spec by always considering two
+                  // structs with the same layout as compatible.
+                  else {
+                     u64 n_a = bufCount(aggr_a->c.aggr.members);
+                     u64 n_b = bufCount(aggr_b->c.aggr.members);
+                     if (n_a == n_b) {
+                        compatible = true;
+                        for (u64 i = 0; i < n_a; ++i) {
+                           // TODO: Alignment check.
+                           if (!typesAreCompatible(c,
+                                                   *aggr_a->c.aggr.members[i].ctype,
+                                                   *aggr_b->c.aggr.members[i].ctype)) {
+                              compatible = false;
+                              break;
+                           }
+                        }
+                     }
+                  }
+               }
+            } break;
+            default: {
+               compatible = true;
+            } break;
+         }
+      }
+   }
+   else {
+      if (a.type == Type_POINTER || b.type == Type_POINTER) {
+         compatible = false;
+      }
+      else {
+         NotImplemented("Compatibility rules");
+      }
+   }
+   return compatible;
+}
+
+void emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target); // Forward decl.
+
+void
 emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    Machine* m = c->m;
    AstNode* func = node->child;
@@ -166,7 +319,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
             Assert (typeBits(&lhs_type.c) == typeBits(&rhs_type.c));
             if (op->value == '=') {
-               movOrCopy(c->m, lhs_type.location, rhs_type.location, bits);
+               machMov(c->m, &lhs_type, &rhs_type);
             }
             else {
                Assert(bits < 64);
@@ -456,7 +609,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType type = Zero;
          emitExpression(c, rhs, &type, Target_ACCUM);
-         movOrCopy(c->m, entry->location, type.location, typeBits(&type.c));
+         machMov(c->m, entry, &type);
       }
       else {
          // TODO: scc initializes to zero by default.
