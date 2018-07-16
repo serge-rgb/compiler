@@ -97,14 +97,13 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
          machMov(m, machAccumInt(bits), &reg);
 
          if (target == Target_STACK) {
-            machStackPushReg(m, Reg_RAX);
+            machStackPushReg(m, machAccumInt64()->location.reg);
          }
       }
    }
    else if (address.type == Location_REGISTER) {
       if (target != Target_NONE) {
          u32 bits = typeBits(member->ctype);
-#if 1
          ExprType reg = {
             .c = *member->ctype,
             .location = (Location){
@@ -114,12 +113,6 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
             },
          };
          machMov(m, machAccumInt(bits), &reg);
-#else
-         instructionPrintf("mov %s, [%s + %d]",
-                           locationString(m, machAccumInt(bits)->location, bits),
-                           g_registers[address.reg].reg,
-                           member_offset);
-#endif
          if (target == Target_STACK) {
             machStackPushReg(m, address.reg);
          }

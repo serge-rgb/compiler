@@ -4,10 +4,8 @@ int bar(int x) {
 
 int main() {
    int foo = 0;
-   for (int i = 0; i < 4; i++) {
+   for (int i = 0; i < 42; i++) {
       foo += 1;
-      foo--;
-      foo++;
    }
-   return foo == bar(4);  // TODO: This comparison fails
+   return foo == bar(42);  // TODO: This comparison fails
 }
