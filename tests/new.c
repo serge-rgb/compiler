@@ -2,10 +2,17 @@ int bar(int x) {
    return x;
 }
 
+struct Foo {
+   int i;
+   int j;
+   int k;
+   int l;
+};
+
 int main() {
-   int foo = 0;
-   for (int i = 0; i < 42; i++) {
-      foo += 1;
-   }
-   return foo == bar(42);
+   struct Foo foo;
+   foo.i = 1;
+   struct Foo bar;
+   bar = foo;
+   return bar.i;
 }
