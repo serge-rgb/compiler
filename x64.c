@@ -746,7 +746,6 @@ machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
 void
 machCall(Machine* m, char* label) {
    instructionPrintf("call %s", label);
-   m->stack_offset += pointerSizeBits() / 8;
 }
 
 void
@@ -813,8 +812,6 @@ machInit(Machine* m) {
 #endif
       ;
 
-   m->stack_offset += 8; // Call to main
-
    fwrite(prelude, 1, strlen(prelude), g_asm);
 
    setupVolatility(m);
@@ -827,7 +824,7 @@ machFunctionPrelude(Machine* m, char* func_name) {
    instructionPrintf("push rbp");
    instructionPrintf("mov rbp, rsp");
 
-   m->stack_offset += 8;
+   m->stack_offset += 16;  // 8 for rbp. 8 for return address from call
 }
 
 void

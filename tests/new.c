@@ -7,5 +7,5 @@ int main() {
    for (int i = 0; i < 42; i++) {
       foo += 1;
    }
-   return foo == bar(42);  // TODO: This comparison fails
+   return foo == bar(42);
 }

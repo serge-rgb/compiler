@@ -4,6 +4,8 @@
 // ======== Common ========
 // ========================
 
+#define Debug 1
+
 typedef uint8_t  u8;
 typedef uint8_t  b8;
 typedef uint16_t u16;
@@ -292,6 +294,10 @@ struct AstNode {
    struct AstNode* next;
 
    u64 line_number;
+
+#if Debug
+   u32 debug_tag;
+#endif
 } typedef AstNode;
 
 
