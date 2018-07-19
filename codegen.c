@@ -53,44 +53,17 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
 
    Location loc = entry->location;
 
-   char* size_str = NULL;
-
    if (typeBits(&entry->c) > 64) {
-      Assert(entry->location.type == Location_STACK);
       if (target != Target_NONE) {
-         Break;
-         instructionPrintf("lea rax, [rsp + %d]", c->m->stack_offset - entry->location.offset);
+         machStackAddressInAccum(m, entry);
          if (target == Target_STACK) {
-            machStackPushReg(m, Reg_RAX);
+            machStackPushReg(m, machAccumInt64()->location.reg);
          }
       }
 
    }
    else {
-      switch (typeBits(&entry->c)) {
-         case 64: {
-            size_str = "QWORD";
-         } break;
-         case 32: {
-            size_str = "DWORD";
-         } break;
-         case 16: {
-            size_str = "WORD";
-         } break;
-         case 8: {
-            size_str = "BYTE";
-         } break;
-         case 0:{
-            InvalidCodePath;
-         }
-      }
-
-      if (target != Target_NONE) {
-         if (typeBits(&entry->c) <= 16) {
-            instructionPrintf("xor %s, %s",
-                              locationString(m, registerLocation(Reg_RAX), 64),
-                              locationString(m, registerLocation(Reg_RAX), 64));
-         }
+      if (target != Target_NONE) {         
          ExprType reg = {
             .c = entry->c,
             .location = registerLocation(Reg_RAX)

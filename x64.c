@@ -333,8 +333,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
          }
          else {
             NotImplemented("more than 4 params");
-         }
-      }
+         }      }
       else {
          machStackPushOffset(c->m, typeBits(&etype->c) / 8);
          loc.type = Location_STACK;
@@ -602,6 +601,13 @@ machMov(Machine* m, ExprType* dst, ExprType* src) {
    Assert(bits);
 
    if (bits <= 64) {
+      if (dst->location.type == Location_REGISTER
+          && bits <= 16) {
+         Assert (!isRealType(&dst->c));
+         instructionPrintf("xor %s, %s",
+                           locationString(m, dst->location, 64),
+                           locationString(m, dst->location, 64));
+      }
       if (isRealType(&dst->c) &&
           isImmediate(src)) {
          switch(typeBits(&dst->c)) {
@@ -668,6 +674,13 @@ machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
       .type = Location_REGISTER,
       .reg = Reg_RAX,
    };
+}
+
+// Puts the stack address in the accumulator.
+void
+machStackAddressInAccum(Machine* m, ExprType* entry) {
+   Assert(entry->location.type == Location_STACK);
+   instructionPrintf("lea rax, [rsp + %d]", m->stack_offset - entry->location.offset);
 }
 
 void

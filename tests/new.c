@@ -10,9 +10,6 @@ struct Foo {
 };
 
 int main() {
-   struct Foo foo;
-   foo.i = 1;
-   struct Foo bar;
-   bar = foo;
-   return bar.i;
+   char foo = 1;
+   return foo + foo;
 }
