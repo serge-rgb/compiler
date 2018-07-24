@@ -61,7 +61,6 @@ codegenError(char* msg, ...) {
    exit(-1);
 }
 
-
 void
 setupVolatility(Machine* m) {
    int* volatile_regs = NULL;
@@ -160,9 +159,6 @@ locationString(Machine* m, Location r, int bits) {
    Assert(res);
    return res;
 }
-
-
-
 
 void
 instructionPrintf(char* asm_line, ...) {
@@ -400,14 +396,6 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
    }
    return loc;
 }
-
-// Forward declaration for recursive calls.
-void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
-
-
-// ==================================
-// TODO: Abstract away x86 code from functions above and move back to codegen.
-// ==================================
 
 void
 machTestAndJump(Machine* m, u32 bits, char* then, char* els) {

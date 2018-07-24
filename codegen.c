@@ -41,6 +41,8 @@ findSymbol(Codegen* c, char* name) {
    return entry;
 }
 
+// Forward declaration for recursive calls.
+void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
 
 void
 emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
