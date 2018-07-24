@@ -41,6 +41,60 @@ findSymbol(Codegen* c, char* name) {
    return entry;
 }
 
+
+void
+emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
+                    AstNode* left, AstNode* right, EmitTarget target) {
+
+   Machine* m = c->m;
+
+   ExprType tleft = {0};
+   ExprType tright = {0};
+
+   codegenEmit(c, right, &tright, Target_STACK);
+   codegenEmit(c, left, &tleft, Target_ACCUM);
+
+   if ( !isArithmeticType(tleft.c) ) {
+      codegenError("Left operator in binary expression is not arithmetic type.");
+   }
+   else if ( !isArithmeticType(tright.c) ) {
+      codegenError("Left operator in expression is not arithmetic type.");
+   }
+
+   machStackPop(m, machHelperInt64());
+
+   if (typeBits(&tleft.c) != typeBits(&tright.c) ||
+       tleft.c.type != tright.c.type) {
+      // If both are integer types, then apply integer promotion rules.
+      if (isIntegerType(&tleft.c) && isIntegerType(&tright.c)) {
+         // ExprType* smaller = typeBits(&tleft.c) < typeBits(&tright.c) ? &tleft  : &tright;
+         // ExprType* bigger  = typeBits(&tleft.c) < typeBits(&tright.c) ? &tright : &tleft;
+
+         NotImplemented("Int promotion");
+      }
+      //
+      // If one of them is floating point... do floating point conversion.
+      // TODO: Implement floating point conversion rules.
+   }
+
+   if (expr_type) {
+      *expr_type = tleft;
+   }
+
+   int bits = typeBits(&tleft.c);
+   switch (type) {
+      case Ast_ADD: { machAdd(m, machAccumInt(bits), machHelperInt(bits)); } break;
+      case Ast_SUB: { machSub(m, machAccumInt(bits), machHelperInt(bits)); } break;
+      case Ast_MUL: { machMul(m, machAccumInt(bits), machHelperInt(bits)); } break;
+      case Ast_DIV: { machDiv(m, machAccumInt(bits), machHelperInt(bits)); } break;
+      default: break;
+   }
+
+   if (target == Target_STACK) {
+      machStackPushReg(m, machAccumInt64()->location.reg);
+   }
+}
+
 void
 emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    Machine* m = c->m;
@@ -63,7 +117,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
 
    }
    else {
-      if (target != Target_NONE) {         
+      if (target != Target_NONE) {
          ExprType reg = {
             .c = entry->c,
             .location = registerLocation(Reg_RAX)

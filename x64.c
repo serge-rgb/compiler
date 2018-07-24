@@ -7,6 +7,7 @@ void        machStackPushImm(Machine* m, ExprType* et, i64 val);
 void        machStackPushOffset(Machine* m, u64 bytes);
 ExprType*   machHelperInt64();
 ExprType*   machHelperInt32();
+ExprType*   machHelperInt();
 ExprType*   machImmediateFromToken(Token* tok);
 ExprType*   machImmediateInt(u64 value);
 ExprType*   machAccumInt32();
@@ -403,58 +404,6 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
 // Forward declaration for recursive calls.
 void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
 
-void
-emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
-                    AstNode* left, AstNode* right, EmitTarget target) {
-
-   Machine* m = c->m;
-
-   ExprType tleft = {0};
-   ExprType tright = {0};
-
-   codegenEmit(c, right, &tright, Target_STACK);
-   codegenEmit(c, left, &tleft, Target_ACCUM);
-
-   if ( !isArithmeticType(tleft.c) ) {
-      codegenError("Left operator in binary expression is not arithmetic type.");
-   }
-   else if ( !isArithmeticType(tright.c) ) {
-      codegenError("Left operator in expression is not arithmetic type.");
-   }
-
-   machStackPop(m, machHelperInt64());
-
-   if (typeBits(&tleft.c) != typeBits(&tright.c) ||
-       tleft.c.type != tright.c.type) {
-      // If both are integer types, then apply integer promotion rules.
-      if (isIntegerType(&tleft.c) && isIntegerType(&tright.c)) {
-         // ExprType* smaller = typeBits(&tleft.c) < typeBits(&tright.c) ? &tleft  : &tright;
-         // ExprType* bigger  = typeBits(&tleft.c) < typeBits(&tright.c) ? &tright : &tleft;
-
-         NotImplemented("Int promotion");
-      }
-      //
-      // If one of them is floating point... do floating point conversion.
-      // TODO: Implement floating point conversion rules.
-   }
-
-   if (expr_type) {
-      *expr_type = tleft;
-   }
-
-   int bits = typeBits(&tleft.c);
-   switch (type) {
-      case Ast_ADD: { instructionReg(m, "add %s, %s", bits, Reg_RAX, Reg_RBX); } break;
-      case Ast_SUB: { instructionReg(m, "sub %s, %s", bits, Reg_RAX, Reg_RBX); } break;
-      case Ast_MUL: { instructionReg(m, "imul %s", bits, Reg_RBX); } break;
-      case Ast_DIV: { instructionReg(m, "idiv %s", bits, Reg_RBX); } break;
-      default: break;
-   }
-
-   if (target == Target_STACK) {
-      machStackPushReg(m, Reg_RAX);
-   }
-}
 
 // ==================================
 // TODO: Abstract away x86 code from functions above and move back to codegen.
@@ -508,6 +457,16 @@ machCmpSetAccum(Machine* m, AstType type) {
 }
 
 ExprType*
+machAccumInt8() {
+   static ExprType accum = {
+      .c = { .type = Type_CHAR },
+      .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+   };
+
+   return &accum;
+}
+
+ExprType*
 machAccumInt32() {
    static ExprType accum = {
       .c = { .type = Type_INT },
@@ -536,6 +495,9 @@ machAccumInt(u32 bits) {
       } break;
       case 32: {
          result = machAccumInt32();
+      } break;
+      case 8: {
+         result = machAccumInt8();
       } break;
       default: {
          NotImplemented("machAccumInt()");
@@ -576,6 +538,16 @@ machImmediateInt(u64 value) {
 }
 
 ExprType*
+machHelperInt8() {
+   static ExprType helper = {
+      .c = { .type = Type_CHAR },
+      .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+   };
+
+   return &helper;
+}
+
+ExprType*
 machHelperInt32() {
    static ExprType helper = {
       .c = { .type = Type_INT },
@@ -593,6 +565,26 @@ machHelperInt64() {
    };
 
    return &helper;
+}
+
+ExprType*
+machHelperInt(u32 bits) {
+   ExprType* helper = NULL;
+   switch (bits) {
+      case 8: {
+         helper = machHelperInt8();
+      } break;
+      case 32: {
+         helper = machHelperInt32();
+      } break;
+      case 64: {
+         helper = machHelperInt32();
+      } break;
+      default: {
+         NotImplemented("machHelperInt()");
+      }
+   }
+   return helper;
 }
 
 void
@@ -659,9 +651,47 @@ machMov(Machine* m, ExprType* dst, ExprType* src) {
 void
 machAdd(Machine* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
+   Assert(!isRealType(&dst->c));
    instructionPrintf("add %s, %s",
                      locationString(m, dst->location, bits),
                      locationString(m, src->location, bits));
+}
+
+void
+machSub(Machine* m, ExprType* dst, ExprType* src) {
+   u32 bits = typeBits(&dst->c);
+   Assert(!isRealType(&dst->c));
+   instructionPrintf("sub %s, %s",
+                     locationString(m, dst->location, bits),
+                     locationString(m, src->location, bits));
+}
+
+void
+machMul(Machine* m, ExprType* dst, ExprType* src) {
+   u32 bits = typeBits(&dst->c);
+   if (!isRealType(&dst->c)) {
+      instructionPrintf("imul %s, %s",
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+
+   }
+   else {
+      NotImplemented("float mul");
+   }
+}
+
+void
+machDiv(Machine* m, ExprType* dst, ExprType* src) {
+   u32 bits = typeBits(&dst->c);
+   if (!isRealType(&dst->c)) {
+      instructionPrintf("idiv %s, %s",
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+
+   }
+   else {
+      NotImplemented("float div");
+   }
 }
 
 void
