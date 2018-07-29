@@ -1,4 +1,5 @@
 #include "unistd.h"
+#include "dirent.h"
 
 #define PRI_size "li"
 
@@ -30,13 +31,13 @@ extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format
 
 
 ErrorCode
-platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
+platformCompileAndLinkAsmFile(char* filename_without_extension) {
    ErrorCode ret = Ok;
    // Call nasm from here.
    char asm_file[PathMax] = {0};
-   snprintf(asm_file, PathMax, "%s.asm", outfile);
+   snprintf(asm_file, PathMax, "%s.asm", filename_without_extension);
    char obj_file[PathMax] = {0};
-   snprintf(obj_file, PathMax, "%s.o", outfile);
+   snprintf(obj_file, PathMax, "%s.o", filename_without_extension);
    pid_t pid = fork();
    printf("Running nasm\n");
    int nasm_status = 0;
@@ -48,17 +49,17 @@ platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
    else if (pid == wait(&nasm_status)) {
       if (WIFEXITED(nasm_status) && WEXITSTATUS(nasm_status) == 0) {
          printf("Running ld\n");
-         char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", outfile };
+         char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", filename_without_extension };
          pid = fork();
          if (pid == 0) {
             // printargs(ld_args, ArrayCount(ld_args));
             execve("/usr/bin/ld", ld_args, NULL);
          }
          else if (pid == wait(NULL)) {
-            printf("Running %s\n", outfile);
-            char* out_args[] = { outfile };
+            printf("Running %s\n", filename_without_extension);
+            char* out_args[] = { filename_without_extension };
             if (fork() == 0) {
-               execve(outfile, out_args, NULL);
+               execve(filename_without_extension, out_args, NULL);
             }
             int status = 0;
             wait(&status);
@@ -78,4 +79,26 @@ platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
       }
    }
    return ret;
+}
+
+ErrorCode
+platformListDirectory(char** out_files, char* dirname, b32 (*filter)(char*)) {
+   ErrorCode err = Ok;
+   DIR* dir = opendir(dirname);
+   if (!dir) {
+      err = CouldNotOpenDir;
+   }
+   else {
+      struct dirent* entry = NULL;
+      while ((entry = readdir(dir))) {
+         char* name = entry->d_name;
+         if (name[0] != '.') {
+            if (filter(name)) {
+               bufPush(out_files, getString(name));
+            }
+         }
+      }
+      closedir(dir);
+   }
+   return err;
 }

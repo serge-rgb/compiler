@@ -11,5 +11,5 @@ struct Foo {
 
 int main() {
    char foo = 1;
-   return foo + foo;
+   return foo + foo - foo;
 }

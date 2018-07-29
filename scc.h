@@ -1,5 +1,30 @@
 #pragma once
 
+// ==============================
+// ======== Error codes =========
+// ==============================
+
+enum ErrorCode {
+  Ok = 0,
+  Fail = 1,
+
+  CouldNotReadFile,
+  CouldNotOpenDir,
+  WrongNumberOfArguments,
+  InvalidArgument,
+
+  // Argument parsing.
+  Filename,
+  Flag,
+
+  // Compiler work flow
+  IntParse,
+  CouldNotAssemble,
+  CouldNotLink,
+} typedef ErrorCode;
+
+static char* SccErrorMessage;
+
 // ========================
 // ======== Common ========
 // ========================
@@ -62,55 +87,39 @@ typedef size_t sz;
 
 #define ArrayError(f, l) ArrayErrorDefault(f, l)
 #define ArrayPush(arr, e)                  \
-        if (ArrayCount(arr) > n_##arr) {   \
-           (arr)[n_##arr++] = e;           \
-        } else {                           \
-           ArrayError(__FILE__, __LINE__); \
-        }
+   if (ArrayCount(arr) > n_##arr) {   \
+      (arr)[n_##arr++] = e;           \
+   } else {                           \
+      ArrayError(__FILE__, __LINE__); \
+   }
 
 #define Break PlatformBreak
 
 #define DevBreak(message) \
-        fprintf(stderr, "Compiler dev: Keep going here [%s]\n", message); \
-        Break;
+   fprintf(stderr, "Compiler dev: Keep going here [%s]\n", message); \
+   Break;
 
 #define NotImplemented(message)                          \
-        do {                                             \
-        printf("Not Implemented! -- [%s]\n", message);   \
-        Assert(!"Not implemented.");                                \
-        } while (0)
+   printf("Not Implemented! -- [%s]\n", message);   \
+   Assert(0);
 
-// ==============================
-// ======== Error codes =========
-// ==============================
+// ========================
+// ======== String ========
+// ========================
+char* getString(char* orig);
 
-enum ErrorCode {
-  Ok = 0,
-
-  Fail = 1,
-
-  CouldNotReadFile,
-
-  IntParse,
-  CouldNotAssemble,
-  CouldNotLink,
-} typedef ErrorCode;
 
 // ==========================
 // ======== Platform ========
 // ==========================
 
 #if defined(_WIN32)
-   #include "platform_windows.c"
+   #include "platform_windows.h"
 #else
-   #include "platform_unix.c"
-
-   #if defined(__APPLE__) && defined(__MACH__)
-      #include "platform_macos.c"
-   #elif defined(__linux__)
-      #include "platform_linux.c"
-   #endif
+   #include "platform_unix.h"
 #endif
+
+ErrorCode platformCompileAndLinkAsmFile(char* filename_without_extension);
 
 
 // ========================
@@ -446,3 +455,11 @@ struct Codegen {
    // Constants
    AstNode* one;
 } typedef Codegen;
+
+// ======================
+// ======== User ========
+// ======================
+
+enum CompilerFlag {
+   CompilerFlag_TEST_ALL = (1<<0),
+} typedef CompilerFlag;

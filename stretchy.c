@@ -35,3 +35,9 @@ bufMaybeResize(void** ptr, sz count, sz element_size) {
 #define _bufCrashIfZero(ptr) \
         (bufCount(ptr) > 0  ? \
          0 : (*(volatile u8*)0 = 0))
+
+#define bufFree(ptr) \
+        if (ptr) {   \
+           free(bufHdr(ptr)); \
+           ptr = NULL; \
+        }

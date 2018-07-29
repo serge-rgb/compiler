@@ -42,24 +42,44 @@ compileTranslationUnit(char* file_name, char* outfile) {
    return result;
 }
 
-enum {
-   Arg_FILENAME,
-   Arg_NOTHING,
-};
-int
-parseArgument(char* txt) {
-   if (txt[0] == '-') {
-      NotImplemented("Compiler opts");
+ErrorCode
+parseArgument(void** out, char** argv, int i, int argc) {
+   ErrorCode result = Fail;
+
+   char* arg = argv[i];
+   if (arg[0] == '-') {
+      if (strlen(arg) != 2) {
+         result = InvalidArgument;
+         SccErrorMessage = "SCC flags must be single-character";
+      }
+      else {
+         switch (arg[1]) {
+            case 'a': {
+               result = Flag;
+               (*out) = (void*)CompilerFlag_TEST_ALL;
+            } break;
+            default: {
+               result = InvalidArgument;
+               SccErrorMessage = "Unrecognized flag";
+            } break;
+         }
+      }
    }
    else {
-      return Arg_FILENAME;
+      result = Filename;
+      (*out) = arg;
    }
-   return Arg_NOTHING;
+   return result;
 }
 
 void
 printHelp() {
-   printf("Usage: scc {filename}+");
+   printf("Usage: scc {filename}+\n");
+}
+
+b32
+filterCFiles(char* n) {
+   return 1;
 }
 
 int
@@ -70,20 +90,63 @@ main(int argc, char** argv) {
    } result = Ok;
 
    char** files = 0;
+   CompilerFlag* compiler_flags = NULL;
 
    if (argc < 2) {
       printHelp();
-      return 42;
+      return WrongNumberOfArguments;
    }
 
    for (int i = 1; i < argc; ++i) {
       printf("Arg %d, [ %s ]\n", i, argv[i]);
-      switch (parseArgument(argv[i])) {
-         case Arg_FILENAME: {
+      void* out = 0;
+      switch (parseArgument(&out, argv, i, argc)) {
+         case Filename: {
             bufPush(files, argv[i]);
          } break;
+         case Flag: {
+            CompilerFlag flag = (CompilerFlag)out;
+            bufPush(compiler_flags, flag);
+         } break;
+         case InvalidArgument: {
+            fprintf(stderr, "Error when processing arguments: %s\n", SccErrorMessage);
+         } break;
+         default: {
+            fprintf(stderr, "Unhandled error during argument parsing.\n");
+         }
       }
    }
+
+   enum {
+      Action_COMPILE_FILE,
+      Action_TEST_ALL,
+
+   } action = Action_COMPILE_FILE;
+
+   for (sz i = 0; i < bufCount(compiler_flags); ++i) {
+      if (compiler_flags[i] == CompilerFlag_TEST_ALL) {
+         action = Action_TEST_ALL;
+      }
+   }
+
+   switch (action) {
+      case Action_TEST_ALL: {
+         if (bufCount(files)) {
+            fprintf(stderr, "Invalid file name input when testing compiler.\n");
+            exit(Fail);
+         }
+         char** test_files = NULL;
+         char test_dir[PathMax] = "tests";
+         platformPathAtBinary(test_dir, ArrayCount(test_dir));
+         platformListDirectory(test_files, test_dir, filterCFiles);
+         for (sz i = 0; i < bufCount(test_files); ++i) {
+
+         }
+         bufFree(test_files);
+      } break;
+   }
+
+   bufFree(compiler_flags);
 
    if (bufCount(files) > 1) {
       NotImplemented("More than one file.");

@@ -10,7 +10,7 @@ elif [ `uname` = "MSYS_NT-10.0" ]; then
 else  # Assume it's macOS
    echo `uname`
    comment_for_cleanup="-Wno-switch"
-   clang -g -Wall -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address $comment_for_cleanup compiler.c -o compiler # && ./compiler -t all
+   clang -g -Wall -ObjC -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address $comment_for_cleanup compiler.c -o compiler # && ./compiler -t all
 fi
 
 exit 0
@@ -28,8 +28,20 @@ exit 0
 
 #include "scc.h"
 
+
 #include "memory.c"
 #include "stretchy.c"
+#if defined(_WIN32)
+   #include "platform_windows.c"
+#else
+   #include "platform_unix.c"
+
+   #if defined(__APPLE__) && defined(__MACH__)
+      #include "platform_macos.c"
+   #elif defined(__linux__)
+      #include "platform_linux.c"
+   #endif
+#endif
 #include "hashmap.c"
 #include "string.c"
 #include "lexer.c"
