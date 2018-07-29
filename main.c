@@ -3,8 +3,6 @@ compileTranslationUnit(char* file_name, char* outfile) {
    fprintf(stderr, "Compiling file %s\n", file_name);
 
    Arena a = {0};
-   stringInit(&a);
-
    ErrorCode result = Ok;
 
    FileStream file_stream = {0};
@@ -79,15 +77,44 @@ printHelp() {
 
 b32
 filterCFiles(char* n) {
-   return 1;
+   b32 result = false;
+   i64 len = strlen(n);
+   if (len > 3 &&
+       n[len-1] == 'c' &&
+       n[len-2] == '.')  {
+      result = true;
+   }
+   return result;
 }
 
-int
+ErrorCode
+processSingleFile(char* file) {
+   ErrorCode err = Ok;
+   char outfile[PathMax] = Zero; {
+      int written = snprintf(outfile, PathMax, "%s", file);
+      for (int i = written-1;
+           i >= 0;
+           --i) {
+         if (outfile[i] == '.') {
+            outfile[i] = '\0';
+            break;
+         }
+      }
+   }
+   if (Ok != (err = compileTranslationUnit(file, outfile))) {
+      fprintf(stderr, "Could not compile file %s\n", file);
+   }
+   else {
+      err = platformCompileAndLinkAsmFile(outfile);
+   }
+   return err;
+}
+
+ErrorCode
 main(int argc, char** argv) {
-   enum {
-      Ok = 0,
-      CouldNotCompile = 1,
-   } result = Ok;
+   ErrorCode result = Ok;
+
+   stringInit(&(Arena){0});
 
    char** files = 0;
    CompilerFlag* compiler_flags = NULL;
@@ -138,9 +165,10 @@ main(int argc, char** argv) {
          char** test_files = NULL;
          char test_dir[PathMax] = "tests";
          platformPathAtBinary(test_dir, ArrayCount(test_dir));
-         platformListDirectory(test_files, test_dir, filterCFiles);
+         platformListDirectory(&test_files, test_dir, filterCFiles);
          for (sz i = 0; i < bufCount(test_files); ++i) {
-
+            printf("Test file %s\n", test_files[i]);
+            processSingleFile(test_files[i]);
          }
          bufFree(test_files);
       } break;
@@ -153,24 +181,7 @@ main(int argc, char** argv) {
    }
 
    for (sz i = 0 ; i < bufCount(files); ++i) {
-      char outfile[PathMax] = Zero; {
-         int written = snprintf(outfile, PathMax, "%s", files[i]);
-         for (int i = written-1;
-              i >= 0;
-              --i) {
-            if (outfile[i] == '.') {
-               outfile[i] = '\0';
-               break;
-            }
-         }
-      }
-      if (Ok != (result = compileTranslationUnit(files[i], outfile))) {
-         fprintf(stderr, "Could not compile file %s\n", files[i]);
-      }
-      else {
-         result = platformCompileAndLinkAsmFile(outfile);
-      }
-
+      result = processSingleFile(files[i]);
    }
    return result;
 }

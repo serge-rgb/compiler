@@ -82,7 +82,7 @@ platformCompileAndLinkAsmFile(char* filename_without_extension) {
 }
 
 ErrorCode
-platformListDirectory(char** out_files, char* dirname, b32 (*filter)(char*)) {
+platformListDirectory(char*** out_files, char* dirname, b32 (*filter)(char*)) {
    ErrorCode err = Ok;
    DIR* dir = opendir(dirname);
    if (!dir) {

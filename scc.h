@@ -10,6 +10,7 @@ enum ErrorCode {
 
   CouldNotReadFile,
   CouldNotOpenDir,
+  NotADirectory,
   WrongNumberOfArguments,
   InvalidArgument,
 
@@ -119,6 +120,7 @@ char* getString(char* orig);
    #include "platform_unix.h"
 #endif
 
+ErrorCode platformListDirectory(char*** out_files, char* dirname, b32 (*filter)(char*));
 ErrorCode platformCompileAndLinkAsmFile(char* filename_without_extension);
 
 

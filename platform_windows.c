@@ -13,43 +13,25 @@
 #endif
 #endif
 
-#pragma warning(push, 0)
-#include <Windows.h>
-#pragma warning(pop)
-
-#define PlatformDefaultTarget Config_TARGET_WIN
-
-#define PlatformAssert(expr) do { if (!(expr)) { MessageBox(0, \
-                                                            "Assertion failed: " # expr, \
-                                                            "Assertion",  \
-                                                            MB_OK ); \
-                                                 __debugbreak(); } }  while(0)
-#define PlatformPrintString(...) sprintf_s(__VA_ARGS__)
-
-#define PlatformBreak __debugbreak()
 
 
 void
 winPrintError(int err_code) {
-    char* msg = 0;
-    char display [PathMax] = Zero;
+   char* msg = 0;
+   char display [PathMax] = Zero;
 
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                  FORMAT_MESSAGE_FROM_SYSTEM |
-                  FORMAT_MESSAGE_IGNORE_INSERTS,
-                  NULL,
-                  err_code,
-                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                  (LPTSTR) &msg,
-                  0, NULL );
-
-    snprintf(display, PathMax, "Error: %s", msg);
-
-    // MessageBoxA(NULL, (LPCTSTR)display, "Error", MB_OK);
-
-    fprintf(stderr, "%s\n", display);
-
-    LocalFree(msg);
+   FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                 FORMAT_MESSAGE_FROM_SYSTEM |
+                 FORMAT_MESSAGE_IGNORE_INSERTS,
+                 NULL,
+                 err_code,
+                 MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                 (LPTSTR) &msg,
+                 0, NULL );
+   snprintf(display, PathMax, "Error: %s", msg);
+   // MessageBoxA(NULL, (LPCTSTR)display, "Error", MB_OK);
+   fprintf(stderr, "%s\n", display);
+   LocalFree(msg);
 }
 
 ErrorCode
@@ -145,8 +127,7 @@ platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
       }
       char* args[] = {
          // "link.exe",
-         "\"c:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.10.25017\\bin\\HostX64\\x64\\link.exe\""
-                 "/PDB:out.pdb",
+         "\"c:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.14.26428\\bin\\HostX64\\x64\\link.exe\"",
          objfile,
          exearg,
          "/DEBUG",
@@ -162,4 +143,56 @@ platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
    return result;
 }
 
+ErrorCode
+platformListDirectory(char*** out_files, char* dirname, b32 (*filter)(char*)) {
+   ErrorCode err = Ok;
+   WIN32_FIND_DATAA data = {0};
+   char glob[PathMax] = {0};
+   strncat(glob, dirname, PathMax);
+   strncat(glob, "\\*", PathMax);
+   HANDLE h = FindFirstFileA(glob, &data);
+   if (h) {
+      if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+         err = NotADirectory;
+      }
+      else {
+         while (FindNextFileA(h, &data)) {
+            if (data.cFileName[0] != '.') {
+               if (filter(data.cFileName)) {
+                  char file[PathMax] = {0};
+                  strncat(file, dirname, PathMax);
+                  strncat(file, "\\", PathMax);
+                  strncat(file, data.cFileName, PathMax);
 
+                  bufPush(*out_files, getString(file));
+               }
+            }
+         }
+      }
+   }
+   return err;
+}
+
+void
+platformPathAtBinary(char* path, sz size) {
+   char* tmp = (char*)calloc(1, size);
+   strcpy(tmp, path);
+
+   // TODO: Wide char paths on Windows..
+   GetModuleFileNameA(NULL, path, (DWORD)size);
+
+   {  // Remove the exe name
+     char* last_slash = path;
+     for ( char* iter = path;
+       *iter != '\0';
+       ++iter ) {
+       if ( *iter == '\\' ) {
+         last_slash = iter;
+       }
+     }
+     *(last_slash+1) = '\0';
+   }
+
+   strcat(path, tmp);
+   free(tmp);
+}
