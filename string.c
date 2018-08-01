@@ -75,3 +75,23 @@ getString(char* orig) {
 
    return result;
 }
+
+char*
+cloneString(Arena* a, char* input) {
+   size_t len = strlen(input) + 1;
+   char* result = AllocArray(a, char, len);
+   memcpy(result, input, len-1);
+   return result;
+}
+
+char*
+appendString(Arena* a, char* x, char* y) {
+   size_t len = strlen(x) + strlen(x) + 1;
+   char* result = AllocArray(a, char, len);
+
+   char* copy = result;
+
+   if (x) while (((*copy++ = *x++), *x)) {}
+   if (y) while (*copy++ = *y++) {}
+   return result;
+}

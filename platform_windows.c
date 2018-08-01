@@ -35,7 +35,7 @@ winPrintError(int err_code) {
 }
 
 ErrorCode
-platformCreateProcess(char** args, sz n_args) {
+platformRunProcess(char** args, sz n_args, i32 expected_return) {
    ErrorCode result = Fail;
 
    if (n_args != 0) {
@@ -78,7 +78,7 @@ platformCreateProcess(char** args, sz n_args) {
          if (wait_res == WAIT_OBJECT_0) {
             DWORD exit_code = 0;
             GetExitCodeProcess(proc_info.hProcess, &exit_code);
-            if (exit_code != 0) {
+            if (exit_code != (DWORD)expected_return) {
                fprintf(stderr, "Program failed with error code %ld\n", exit_code);
             }
             else {
@@ -111,7 +111,7 @@ platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
       "-f win64",
       "-F cv8"
    };
-   if (0 != platformCreateProcess(args, ArrayCount(args))) {
+   if (Ok != platformRunProcess(args, ArrayCount(args), 0)) {
       fprintf(stderr, "Failure running nasm. %s\n", asmfile);
       result = CouldNotAssemble;
    }
@@ -135,7 +135,7 @@ platformCompileAndLinkAsmFile(char* outfile /*Filename without extension*/) {
          "/ENTRY:_start",
          "/SUBSYSTEM:CONSOLE", "kernel32.lib"
       };
-      if ( 0 != platformCreateProcess(args, ArrayCount(args))) {
+      if ( Ok != platformRunProcess(args, ArrayCount(args), 0)) {
          fprintf(stderr, "Link fail\n");
          result = CouldNotLink;
       }

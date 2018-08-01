@@ -112,6 +112,8 @@ processSingleFile(char* file) {
 
 ErrorCode
 main(int argc, char** argv) {
+   Arena temp_arena = {0};
+
    ErrorCode result = Ok;
 
    stringInit(&(Arena){0});
@@ -169,6 +171,23 @@ main(int argc, char** argv) {
          for (sz i = 0; i < bufCount(test_files); ++i) {
             printf("Test file %s\n", test_files[i]);
             processSingleFile(test_files[i]);
+
+
+            char* trimmed = cloneString(&temp_arena, test_files[i]);
+            size_t len = strlen(trimmed);
+            for (i64 i = len-1; i >= 1; --i) {
+               if (trimmed[i] == '.') {
+                  trimmed[i] = '\0';
+                  break;
+               }
+            }
+
+            char* exe = appendString(&temp_arena, trimmed, ".exe");
+
+            if (platformRunProcess(&exe, 1, 1) != Ok) {
+               fprintf(stderr, "Test failed\n");
+               break;
+            }
          }
          bufFree(test_files);
       } break;
@@ -183,6 +202,8 @@ main(int argc, char** argv) {
    for (sz i = 0 ; i < bufCount(files); ++i) {
       result = processSingleFile(files[i]);
    }
+
+   deallocate(&temp_arena);
    return result;
 }
 

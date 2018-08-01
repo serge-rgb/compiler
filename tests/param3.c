@@ -4,7 +4,6 @@ struct veci {
    int z;
 };
 
-// This is starting to look like something useful!
 int proc_struct(struct veci foo) {
    return 10*foo.x + foo.y;
 }
