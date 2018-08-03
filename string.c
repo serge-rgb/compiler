@@ -92,6 +92,6 @@ appendString(Arena* a, char* x, char* y) {
    char* copy = result;
 
    if (x) while (((*copy++ = *x++), *x)) {}
-   if (y) while (*copy++ = *y++) {}
+   if (y) while ((*copy++ = *y++)) {}
    return result;
 }

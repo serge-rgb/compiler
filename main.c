@@ -110,7 +110,7 @@ processSingleFile(char* file) {
    return err;
 }
 
-ErrorCode
+/*ErrorCode*/int
 main(int argc, char** argv) {
    Arena temp_arena = {0};
 

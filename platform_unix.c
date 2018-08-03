@@ -94,11 +94,16 @@ platformListDirectory(char*** out_files, char* dirname, b32 (*filter)(char*)) {
          char* name = entry->d_name;
          if (name[0] != '.') {
             if (filter(name)) {
-               bufPush(out_files, getString(name));
+               bufPush(*out_files, getString(name));
             }
          }
       }
       closedir(dir);
    }
    return err;
+}
+
+ErrorCode
+platformRunProcess(char** args, sz n_args, i32 expected_return) {
+   return Fail;  // TODO: Fix this :)
 }
