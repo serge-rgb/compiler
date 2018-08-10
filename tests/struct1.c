@@ -11,5 +11,5 @@ main() {
    myvar.y = 2;
    myvar.z = 3;
    struct foo myothervar = myvar;
-   return myothervar.y;
+   return myothervar.y == 2;
 }

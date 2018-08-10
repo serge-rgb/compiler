@@ -6,9 +6,9 @@ struct veci {
 };
 
 
-//int proc_struct(struct veci* foo) {
-   // return foo->y
-//}
+int proc_struct(struct veci* foo) {
+   return foo.y;
+}
 
 int main() {
    struct veci foo;
@@ -18,6 +18,5 @@ int main() {
 
    struct veci *pfoo = &foo;
 
-   // return proc_struct(foo);
-   return 0;
+   return proc_struct(pfoo) == 2;
 }

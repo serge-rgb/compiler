@@ -323,7 +323,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
       if (typeBits(&etype->c) <= 64) {
          loc.type = Location_REGISTER;
          if (n_param < 4) {
-            if (isIntegerType(&etype->c) || etype->c.type == Type_POINTER) {
+            if (!isRealType(&etype->c)) {
                switch(n_param) {
                   case 0: { loc.reg = Reg_RCX; } break;
                   case 1: { loc.reg = Reg_RDX; } break;
@@ -608,14 +608,29 @@ machMov(Machine* m, ExprType* dst, ExprType* src) {
                                  locationString(m, dst->location, bits),
                                  src->location.cast.real64);
             } break;
-            default:
+            default: {
                codegenError("Invalid floating point variable size");
+            }
          }
       }
       else {
-         instructionPrintf("mov %s, %s",
-                           locationString(m, dst->location, bits),
-                           locationString(m, src->location, bits));
+         // If both locations are on the stack, use the accumulator as a temp register.
+         if (   (dst->location.type == Location_STACK || dst->location.type == Location_STACK_FROM_REG)
+             && (src->location.type == Location_STACK || src->location.type == Location_STACK_FROM_REG)) {
+            instructionPrintf("mov %s, %s",
+                              locationString(m, machAccumInt(bits)->location, bits),
+                              locationString(m, src->location, bits));
+
+            instructionPrintf("mov %s, %s",
+                              locationString(m, dst->location, bits),
+                              locationString(m, machAccumInt(bits)->location, bits));
+
+         }
+         else {
+            instructionPrintf("mov %s, %s",
+                              locationString(m, dst->location, bits),
+                              locationString(m, src->location, bits));
+         }
       }
    }
    else /* bits > 64*/ {

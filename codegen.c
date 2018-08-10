@@ -837,7 +837,8 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       ExprType* entry = findSymbol(c, func_name);
       if (entry) {
          codegenError("Redefining function %s", func_name);
-      } else {
+      }
+      else {
          // TODO: function ctype. grab pointer from declarator and type from specifier
          symInsert(&c->scope->symbol_table,
                    func_name,
