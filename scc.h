@@ -216,7 +216,7 @@ struct Ctype {
          struct StructMember {
             char* id;
             struct Ctype* ctype;
-            u64 offset;
+            i64 offset;
          } * members;
       } aggr;
 
@@ -401,7 +401,7 @@ struct Location {
       };
       // STACK
       struct {
-         u64 offset;
+         i64 offset;
       };
    };
 } typedef Location;

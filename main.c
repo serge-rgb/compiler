@@ -186,6 +186,9 @@ main(int argc, char** argv) {
 
             if (platformRunProcess(&exe, 1, 1) != Ok) {
                fprintf(stderr, "Test failed\n");
+               Break;
+               // Run it again, probably under a debugger.
+               processSingleFile(test_files[i]);
                break;
             }
          }

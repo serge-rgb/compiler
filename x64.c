@@ -44,7 +44,7 @@ struct Machine
    u32         config;   // CodegenConfigFlags enum
 
    StackValue* stack;  // Stack allocation / de-allocation is done on a per-function basis.
-   u64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
+   i64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 };
 
 void
@@ -58,7 +58,11 @@ codegenError(char* msg, ...) {
 
    Assert (!"Codegen error");
 
-   exit(-1);
+   volatile b32 fatal = true;  // Set to false in debugger
+
+   if (fatal) {
+      exit(-1);
+   }
 }
 
 void
@@ -118,6 +122,9 @@ locationString(Machine* m, Location r, int bits) {
          res = getString(tmp_string);
       } break;
       case Location_STACK: {
+         if (r.offset > m->stack_offset) {
+            codegenError("A stack variable has an invalid offset.");
+         }
          u64 rsp_relative = m->stack_offset - r.offset;
 
 #define ResultSize 64

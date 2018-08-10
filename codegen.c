@@ -185,7 +185,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    int bits = typeBits(member->ctype);
 
    if (address.type == Location_STACK) {
-      address.offset = symbol_entry->location.offset + member_offset;
+      address.offset = symbol_entry->location.offset - member_offset;
 
       if (target != Target_NONE) {
          ExprType reg = {
@@ -404,6 +404,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             Token* op = node->tok;
 
             ExprType lhs_type = Zero;
+
             codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
             int bits = typeBits(&lhs_type.c);
             ExprType rhs_type = Zero;
@@ -846,7 +847,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
                    });
       }
 
-      machFunctionPrelude(c->m, func_name);
 
       // Push
       pushScope(c);
@@ -855,7 +855,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       if (params) {
          AstNode* p = params;
          u64 n_param = 0;
-         u64 offset = 8;  // TODO: get rid of this variable. probably after popParameter is abstracted.
+         u64 offset = 0;
          while (p) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
@@ -888,6 +888,10 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             p = p->next;
          }
       }
+
+      // NOTE: The prelude goes after popping parameters, since it's easier to
+      // handle them when we know they are at the top of the stack.
+      machFunctionPrelude(c->m, func_name);
 
       emitCompoundStatement(c, compound, Target_ACCUM);
 
