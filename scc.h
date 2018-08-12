@@ -365,6 +365,10 @@ typedef enum RegisterEnum {
    Reg_R14,
    Reg_R15,
 
+   // Floating point registers.
+   Reg_XMM0,
+   Reg_XMM1,
+
    Reg_Count,
 } RegisterEnum;
 

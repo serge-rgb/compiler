@@ -63,7 +63,8 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
       codegenError("Left operator in expression is not arithmetic type.");
    }
 
-   machStackPop(m, machHelperInt64());
+   int bits = typeBits(&tleft.c);
+   machStackPop(m, machHelper(Type_INT, bits));
 
    if (typeBits(&tleft.c) != typeBits(&tright.c) ||
        tleft.c.type != tright.c.type) {
@@ -83,17 +84,16 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
       *expr_type = tleft;
    }
 
-   int bits = typeBits(&tleft.c);
    switch (type) {
-      case Ast_ADD: { machAdd(m, machAccumInt(bits), machHelperInt(bits)); } break;
-      case Ast_SUB: { machSub(m, machAccumInt(bits), machHelperInt(bits)); } break;
-      case Ast_MUL: { machMul(m, machAccumInt(bits), machHelperInt(bits)); } break;
-      case Ast_DIV: { machDiv(m, machAccumInt(bits), machHelperInt(bits)); } break;
+      case Ast_ADD: { machAdd(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
+      case Ast_SUB: { machSub(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
+      case Ast_MUL: { machMul(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
+      case Ast_DIV: { machDiv(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
       default: break;
    }
 
    if (target == Target_STACK) {
-      machStackPushReg(m, machAccumInt64()->location.reg);
+      machStackPushReg(m, machAccum(tleft.c.type, bits)->location.reg);
    }
 }
 
@@ -113,7 +113,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       if (target != Target_NONE) {
          machStackAddressInAccum(m, entry);
          if (target == Target_STACK) {
-            machStackPushReg(m, machAccumInt64()->location.reg);
+            machStackPushReg(m, machAccumC(expr_type->c)->location.reg);
          }
       }
 
@@ -182,7 +182,6 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
 
    struct StructMember* member = members + member_idx;
    u64 member_offset = member->offset;
-   int bits = typeBits(member->ctype);
 
    if (address.type == Location_STACK) {
       address.offset = symbol_entry->location.offset - member_offset;
@@ -192,16 +191,16 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
             .c = *member->ctype,
             .location = address,
          };
-         machMov(m, machAccumInt(bits), &reg);
+         ExprType* accum = machAccumC(*member->ctype);
+         machMov(m, accum, &reg);
 
          if (target == Target_STACK) {
-            machStackPushReg(m, machAccumInt64()->location.reg);
+            machStackPushReg(m, accum->location.reg);
          }
       }
    }
    else if (address.type == Location_REGISTER) {
       if (target != Target_NONE) {
-         u32 bits = typeBits(member->ctype);
          ExprType reg = {
             .c = *member->ctype,
             .location = (Location){
@@ -210,7 +209,10 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
                .reg_offset = member_offset,
             },
          };
-         machMov(m, machAccumInt(bits), &reg);
+         ExprType* accum = machAccumC(*member->ctype);
+
+
+         machMov(m, accum, &reg);
          if (target == Target_STACK) {
             machStackPushReg(m, address.reg);
          }
@@ -343,19 +345,20 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    machCall(c->m, label);
 
    while (bufCount(c->m->stack) != stack_top) {
-      machStackPop(m, machHelperInt64());
+      machStackPop(m, machHelper64(Type_INT /*Doesn't really matter*/));
    }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
 
+   Ctype return_type = funcReturnType(sym->c.func.node);
    if (target == Target_STACK) {
-      machStackPushReg(m, machAccumInt64()->location.reg);
+      machStackPushReg(m, machAccumC(return_type)->location.reg);
    }
 
    AstNode* funcdef = sym->c.func.node;
    Assert(funcdef->type == Ast_FUNCDEF);
 
    expr_type->c = funcdef->child->ctype;
-   expr_type->location = machAccumInt64()->location;
+   expr_type->location = machAccumC(return_type)->location;
 }
 
 void
@@ -417,21 +420,22 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                Assert(bits < 64);
                // TODO: Check for arithmetic type here.
 
-               machMov(m, machHelperInt32(), &lhs_type);
+               ExprType* helper = machHelper32(lhs_type.c.type);
+               machMov(m, helper, &lhs_type);
 
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
-                     machAdd(c->m, machHelperInt32(), machAccumInt32());
+                     machAdd(c->m, helper, machAccum32(rhs_type.c.type));
                   } break;
                   default: {
                      NotImplemented("Different assignment expressions");
                   }
                }
 
-               machMov(m, &lhs_type, machHelperInt32());
+               machMov(m, &lhs_type, helper);
 
                if (target == Target_ACCUM) {
-                  machMov(c->m, machAccumInt(bits), &lhs_type);
+                  machMov(c->m, machAccumC(lhs_type.c), &lhs_type);
                }
             }
          } break;
@@ -449,17 +453,18 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                case Ast_POSTFIX_DEC: { emitArithBinaryExpr(c, Ast_SUB, NULL, expr, c->one, Target_ACCUM); } break;
             }
 
-            machMov(c->m, &local_etype, machAccumInt32());
+            ExprType* accum = machAccumC(local_etype.c);
+            machMov(c->m, &local_etype, accum);
 
             if (target == Target_STACK) {
                // Result is already on the stack.
             }
             else if (target == Target_ACCUM) {
                // Return old value.
-               machStackPop(c->m, machAccumInt64());
+               machStackPop(c->m, accum);
             }
             else if (target == Target_NONE) {
-               machStackPop(c->m, machHelperInt64());
+               machStackPop(c->m, machHelper64(Type_INT));
             }
             if (expr_type) {
                *expr_type = local_etype;
@@ -499,13 +504,13 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             if (target != Target_NONE) {
                Location* loc = &result.c.pointer.pointee->location;
-               machAddressOf(c->m, machAccumInt64(), loc);
+               machAddressOf(c->m, MaChAcCuMInT64(), loc);
                if (target == Target_STACK) {
-                  machStackPushReg(c->m, machAccumInt64()->location.reg);
+                  machStackPushReg(c->m, platformRunProcess()->location.reg);
                   result.location = (Location){ .type = Location_STACK, .offset = c->m->stack_offset };
                }
                else {
-                 result.location = machAccumInt64()->location;
+                 result.location = MaChAcCuMInT64()->location;
                }
                *expr_type = result;
             }
@@ -533,12 +538,12 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                codegenEmit(c, left, &left_type, Target_ACCUM);
                machStackPop(c->m, machHelperInt64());
 
-               machCmp(c->m, machAccumInt(typeBits(&left_type.c)), machHelperInt64());
+               machCmp(c->m, MaChAcCuMInT(typeBits(&left_type.c)), machHelperInt64());
 
                machCmpSetAccum(c->m, node->type);
 
                if (target == Target_STACK) {
-                  machStackPushReg(c->m, machAccumInt64()->location.reg);
+                  machStackPushReg(c->m, MaChAcCuMInT64()->location.reg);
                }
             }
             else {
@@ -574,7 +579,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
             NotImplemented("Promotion rules");
          }
 
-         machCmpJmp(c->m, cond->type, typeBits(&left_type.c), then, els);
+         machCmpJmp(c->m, cond->type, &left_type.c, then, els);
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);

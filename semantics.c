@@ -146,6 +146,12 @@ funcNumParams(AstNode* node) {
    return nparam;
 }
 
+Ctype
+funcReturnType(AstNode* node) {
+   Assert (node->type == Ast_FUNCDEF);
+   return funcDeclarationSpecifier(node)->ctype;
+}
+
 void
 paramType(Ctype* out, AstNode* node) {
    Assert(node->type == Ast_PARAMETER);

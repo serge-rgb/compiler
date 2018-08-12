@@ -5,14 +5,11 @@ void        machMov(Machine* m, ExprType* dst, ExprType* src);
 void        machStackPushReg(Machine* m, RegisterEnum reg);
 void        machStackPushImm(Machine* m, ExprType* et, i64 val);
 void        machStackPushOffset(Machine* m, u64 bytes);
-ExprType*   machHelperInt64();
-ExprType*   machHelperInt32();
-ExprType*   machHelperInt();
 ExprType*   machImmediateFromToken(Token* tok);
 ExprType*   machImmediateInt(u64 value);
-ExprType*   machAccumInt32();
-ExprType*   machAccumInt64();
-ExprType*   machAccumInt();
+ExprType*   machAccum64(int type /*Ctype.type*/ );
+ExprType*   machHelper64(int type /*Ctype.type*/ );
+
 
 struct Register {
    char* reg;
@@ -37,6 +34,9 @@ Register g_registers[] = {
    { .reg = "r13", .reg_32 = "r13d", .reg_8 = NULL },
    { .reg = "r14", .reg_32 = "r14d", .reg_8 = NULL },
    { .reg = "r15", .reg_32 = "r15d", .reg_8 = NULL },
+
+   { .reg = "xmm0", .reg_32 = "xmm0", .reg_8 = NULL },
+   { .reg = "xmm1", .reg_32 = "xmm1", .reg_8 = NULL },
 };
 
 struct Machine
@@ -307,7 +307,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
             .location = registerLocation(r),
          };
          Break;
-         machMov(m, &reg, machAccumInt64());
+         machMov(m, &reg, machAccum64(etype->c.type));
       }
       else {
          NotImplemented("More params.");
@@ -421,10 +421,10 @@ machCmp(Machine* m, ExprType* dst, ExprType* src) {
 
 // Compare the accumulator with the top of the stack.
 void
-machCmpJmp(Machine* m, AstType type, u32 bits, char* then, char* els) {
-   machStackPop(m, machHelperInt64());
+machCmpJmp(Machine* m, ExprType* type, u32 bits, char* then, char* els) {
+   machStackPop(m, machHelper64(typeBits(&type->c)));
    instructionReg(m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
-   switch (type) {
+   switch (type->c.type) {
       case Ast_EQUALS:     { instructionPrintf("je %s", then); } break;
       case Ast_LESS:       { instructionPrintf("jl %s", then); } break;
       case Ast_LEQ:        { instructionPrintf("jle %s", then); } break;
@@ -543,7 +543,113 @@ machHelperInt8() {
 }
 
 ExprType*
-machHelperInt32() {
+machAccum64(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      static ExprType helper = {
+         .c = { .type = Type_DOUBLE },
+         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
+      };
+
+      result = &helper;
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_LONG },
+         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
+machAccum32(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      static ExprType helper = {
+         .c = { .type = Type_FLOAT },
+         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
+      };
+
+      result = &helper;
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_INT },
+         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
+machAccum(int type /*Ctype.type*/, u32 bits) {
+   ExprType* result = NULL;
+   switch (bits) {
+      case 32: {
+         result = machAccum32(type);
+      } break;
+      default: {
+         NotImplemented("Non-32-bit helper.");
+      } break;
+   }
+   Assert (result);
+   return result;
+}
+
+ExprType*
+machAccumC(Ctype c) {
+   u32 bits = typeBits(&c);
+   ExprType* result = machAccum(c.type, bits);
+   return result;
+}
+
+ExprType*
+machHelper32(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      static ExprType helper = {
+         .c = { .type = Type_FLOAT },
+         .location = { .type = Location_REGISTER, .reg = Reg_XMM1 },
+      };
+
+      result = &helper;
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_INT },
+         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
+machHelper(int type /*Ctype.type*/, u32 bits) {
+   ExprType* result = NULL;
+   switch (bits) {
+      case 32: {
+         result = machHelper32(type);
+      } break;
+      default: {
+         NotImplemented("Non-32-bit helper.");
+      } break;
+   }
+   Assert (result);
+   return result;
+}
+
+ExprType*
+machHelperInt32_() {
    static ExprType helper = {
       .c = { .type = Type_INT },
       .location = { .type = Location_REGISTER, .reg = Reg_RBX },
@@ -553,7 +659,7 @@ machHelperInt32() {
 }
 
 ExprType*
-machHelperInt64() {
+machHelperInt64_() {
    static ExprType helper = {
       .c = { .type = Type_LONG },
       .location = { .type = Location_REGISTER, .reg = Reg_RBX },
@@ -563,17 +669,17 @@ machHelperInt64() {
 }
 
 ExprType*
-machHelperInt(u32 bits) {
+machHelperInt_(u32 bits) {
    ExprType* helper = NULL;
    switch (bits) {
       case 8: {
          helper = machHelperInt8();
       } break;
       case 32: {
-         helper = machHelperInt32();
+         helper = machHelperInt32_();
       } break;
       case 64: {
-         helper = machHelperInt32();
+         helper = machHelperInt32_();
       } break;
       default: {
          NotImplemented("machHelperInt()");
@@ -661,19 +767,31 @@ machMov(Machine* m, ExprType* dst, ExprType* src) {
 void
 machAdd(Machine* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
-   Assert(!isRealType(&dst->c));
-   instructionPrintf("add %s, %s",
-                     locationString(m, dst->location, bits),
-                     locationString(m, src->location, bits));
+   if (!isRealType(&dst->c)) {
+      instructionPrintf("add %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+   }
+   else {
+      instructionPrintf("addps %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+   }
 }
 
 void
 machSub(Machine* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
-   Assert(!isRealType(&dst->c));
-   instructionPrintf("sub %s, %s",
-                     locationString(m, dst->location, bits),
-                     locationString(m, src->location, bits));
+   if (!isRealType(&dst->c)) {
+      instructionPrintf("sub %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+   }
+   else {
+      instructionPrintf("subps %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+   }
 }
 
 void
@@ -812,7 +930,7 @@ machFunctionEpilogue(Machine* m) {
    instructionPrintf(".func_end:");
 
    while (bufCount(m->stack) > 0)  {
-      machStackPop(m, machHelperInt64());
+      machStackPop(m, machHelper64(Type_INT));
    }
 
    // Restore non-volatile registers.

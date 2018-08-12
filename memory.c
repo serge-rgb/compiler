@@ -41,10 +41,6 @@ allocate(Arena* a, size_t num_bytes) {
 void
 deallocate(Arena* a) {
    u8* block = a->block;
-   if (!block) {
-      Break;
-      fprintf(stderr, "WARNING: deallocating an arena with NULL block. (Double free?)\n");
-   }
 
    *a = (Arena){0};
    while (block) {
