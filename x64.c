@@ -423,7 +423,7 @@ machCmp(Machine* m, ExprType* dst, ExprType* src) {
 void
 machCmpJmp(Machine* m, AstType ast_type, ExprType* type, char* then, char* els) {
    u32 bits = typeBits(&type->c);
-   machStackPop(m, machHelper64(bits));
+   machStackPop(m, machHelper64(type->c.type));
    instructionReg(m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
    switch (ast_type) {
       case Ast_EQUALS:     { instructionPrintf("je %s", then); } break;
@@ -590,14 +590,70 @@ machAccum32(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
+machAccum8(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      static ExprType helper = {
+         .c = { .type = Type_FLOAT },
+         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
+      };
+
+      Assert(!"Floating point 8-bit register!");
+
+      result = &helper;
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_CHAR },
+         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
+machAccum16(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      static ExprType helper = {
+         .c = { .type = Type_FLOAT },
+         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
+      };
+
+      Assert(!"Floating point 16-bit register!");
+
+      result = &helper;
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_SHORT },
+         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
 machAccum(int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
+      case 8: {
+         result = machAccum8(type);
+      } break;
       case 32: {
          result = machAccum32(type);
       } break;
+      case 64: {
+         result = machAccum64(type);
+      } break;
       default: {
-         NotImplemented("Non-32-bit helper.");
+         NotImplemented("Unhandled size for accum register.");
       } break;
    }
    Assert (result);
@@ -664,8 +720,11 @@ machHelper(int type /*Ctype.type*/, u32 bits) {
       case 32: {
          result = machHelper32(type);
       } break;
+      case 64: {
+         result = machHelper64(type);
+      } break;
       default: {
-         NotImplemented("Non-32-bit helper.");
+         NotImplemented("Unhandled size for helper register.");
       } break;
    }
    Assert (result);
