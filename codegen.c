@@ -504,13 +504,14 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             if (target != Target_NONE) {
                Location* loc = &result.c.pointer.pointee->location;
-               machAddressOf(c->m, MaChAcCuMInT64(), loc);
+               machAddressOf(c->m, loc);
+               ExprType* accum = machAccum64(Type_INT);
                if (target == Target_STACK) {
-                  machStackPushReg(c->m, platformRunProcess()->location.reg);
+                  machStackPushReg(c->m, accum->location.reg);
                   result.location = (Location){ .type = Location_STACK, .offset = c->m->stack_offset };
                }
                else {
-                 result.location = MaChAcCuMInT64()->location;
+                 result.location = accum->location;
                }
                *expr_type = result;
             }
@@ -536,14 +537,18 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                ExprType right_type = {0};
                codegenEmit(c, right, &right_type, Target_STACK);
                codegenEmit(c, left, &left_type, Target_ACCUM);
-               machStackPop(c->m, machHelperInt64());
 
-               machCmp(c->m, MaChAcCuMInT(typeBits(&left_type.c)), machHelperInt64());
+               ExprType* accum = machAccumC(left_type.c);
+               ExprType* helper = machHelperC(right_type.c);
+
+               machStackPop(c->m, helper);
+
+               machCmp(c->m, accum, helper);
 
                machCmpSetAccum(c->m, node->type);
 
                if (target == Target_STACK) {
-                  machStackPushReg(c->m, MaChAcCuMInT64()->location.reg);
+                  machStackPushReg(c->m, accum->location.reg);
                }
             }
             else {
@@ -579,7 +584,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
             NotImplemented("Promotion rules");
          }
 
-         machCmpJmp(c->m, cond->type, &left_type.c, then, els);
+         machCmpJmp(c->m, cond->type, &left_type, then, els);
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);

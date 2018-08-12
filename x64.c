@@ -421,10 +421,11 @@ machCmp(Machine* m, ExprType* dst, ExprType* src) {
 
 // Compare the accumulator with the top of the stack.
 void
-machCmpJmp(Machine* m, ExprType* type, u32 bits, char* then, char* els) {
-   machStackPop(m, machHelper64(typeBits(&type->c)));
+machCmpJmp(Machine* m, AstType ast_type, ExprType* type, char* then, char* els) {
+   u32 bits = typeBits(&type->c);
+   machStackPop(m, machHelper64(bits));
    instructionReg(m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
-   switch (type->c.type) {
+   switch (ast_type) {
       case Ast_EQUALS:     { instructionPrintf("je %s", then); } break;
       case Ast_LESS:       { instructionPrintf("jl %s", then); } break;
       case Ast_LEQ:        { instructionPrintf("jle %s", then); } break;
@@ -634,6 +635,29 @@ machHelper32(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
+machHelper64(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      static ExprType helper = {
+         .c = { .type = Type_DOUBLE },
+         .location = { .type = Location_REGISTER, .reg = Reg_XMM1 },
+      };
+
+      result = &helper;
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_LONG },
+         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
 machHelper(int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
@@ -645,6 +669,13 @@ machHelper(int type /*Ctype.type*/, u32 bits) {
       } break;
    }
    Assert (result);
+   return result;
+}
+
+ExprType*
+machHelperC(Ctype c) {
+   u32 bits = typeBits(&c);
+   ExprType* result = machHelper(c.type, bits);
    return result;
 }
 
@@ -953,7 +984,7 @@ machJumpToLabel(char* label) {
 }
 
 void
-machAddressOf(Machine* m, ExprType* dst, Location* loc) {
+machAddressOf(Machine* m, Location* loc) {
    switch (loc->type) {
       case Location_STACK: {
          instructionPrintf("mov rax, rsp");
