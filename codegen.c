@@ -739,7 +739,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          if (stmt->child) {
             ExprType et = {0};
             emitExpression(c, stmt->child, &et, Target_ACCUM);
-            machJumpToLabel(".func_end");
+            Call(m, jmp, ".func_end");
          }
       } break;
       case Ast_DECLARATION: {
@@ -767,7 +767,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          else {
             codegenError("No then after if");
          }
-         machJumpToLabel(end_label);
+         Call(m, jmp, end_label);
          Call(m, label, else_label);
          if (els) {
             codegenEmit(c, els, &et, Target_NONE);
@@ -807,7 +807,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          if (after->type != Ast_NONE) {
             emitStatement(c, after, Target_ACCUM);
          }
-         machJumpToLabel(loop_label);
+         Call(m, jmp, loop_label);
          Call(m, label, end_label);
          popScope(c);
       } break;

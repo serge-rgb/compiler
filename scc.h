@@ -473,7 +473,6 @@ struct Codegen {
 // =====================================
 
 struct Machine {
-
    void Poly(stackPop, ExprType* et);
    void Poly(stackPushReg, RegisterEnum reg);
    void Poly(stackPushImm, ExprType* et, i64 value);
@@ -500,6 +499,7 @@ struct Machine {
 
    void Poly(cmpJmp, AstType ast_type, ExprType* type, char* then, char* els);
    void Poly(testAndJump, u32 bits, char* then, char* els);
+   void Poly(jmp, char* label);
 
    void Poly(label, char* label);
    void Poly(call, char* func);

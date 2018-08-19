@@ -1003,7 +1003,7 @@ x64Label(MachineX64* m, char* label) {
 }
 
 void
-machJumpToLabel(char* label) {
+x64Jmp(MachineX64* m, char* label) {
    instructionPrintf("jmp %s", label);
 }
 
@@ -1085,6 +1085,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
    m->cmpSetAccum = x64CmpSetAccum;
    m->cmpJmp = x64CmpJmp;
    m->testAndJump = x64TestAndJump;
+   m->jmp = x64Jmp;
    m->label = x64Label;
    m->call = x64Call;
 
