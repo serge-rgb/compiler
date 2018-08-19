@@ -1,15 +1,21 @@
 static Machine* g_mach;
 static FILE* g_asm;
 
-void        machMov(Machine* m, ExprType* dst, ExprType* src);
-void        machStackPushReg(Machine* m, RegisterEnum reg);
-void        machStackPushImm(Machine* m, ExprType* et, i64 val);
-void        machStackPushOffset(Machine* m, u64 bytes);
-ExprType*   machImmediateFromToken(Token* tok);
-ExprType*   machImmediateInt(u64 value);
-ExprType*   machAccum64(int type /*Ctype.type*/ );
-ExprType*   machHelper64(int type /*Ctype.type*/ );
+struct MachineX64 {
+   Machine machine;  // Space for function pointers.
 
+   u32         config;   // MachineConfigFlags
+   StackValue* s_stack;  // Stack allocation / de-allocation is done on a per-function basis.
+   i64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
+} typedef MachineX64;
+
+void        x64Mov(MachineX64* m, ExprType* dst, ExprType* src);
+void        x64StackPushReg(MachineX64* m, RegisterEnum reg);
+void        x64StackPushImm(MachineX64* m, ExprType* et, i64 val);
+void        x64StackPushOffset(MachineX64* m, u64 bytes);
+ExprType*   x64ImmediateInt(u64 value);
+ExprType*   x64Accum64(int type /*Ctype.type*/ );
+ExprType*   x64Helper64(int type /*Ctype.type*/ );
 
 struct Register {
    char* reg;
@@ -39,13 +45,6 @@ Register g_registers[] = {
    { .reg = "xmm1", .reg_32 = "xmm1", .reg_8 = NULL },
 };
 
-struct Machine
-{
-   u32         config;   // CodegenConfigFlags enum
-
-   StackValue* stack;  // Stack allocation / de-allocation is done on a per-function basis.
-   i64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
-};
 
 void
 codegenError(char* msg, ...) {
@@ -66,7 +65,7 @@ codegenError(char* msg, ...) {
 }
 
 void
-setupVolatility(Machine* m) {
+setupVolatility(MachineX64* m) {
    int* volatile_regs = NULL;
    if (   (m->config & Config_TARGET_MACOS)
        || (m->config & Config_TARGET_LINUX)) {
@@ -95,7 +94,7 @@ setupVolatility(Machine* m) {
 }
 
 char*
-locationString(Machine* m, Location r, int bits) {
+locationString(MachineX64* m, Location r, int bits) {
    char *res = NULL;
    switch(r.type) {
       case Location_REGISTER: {
@@ -196,7 +195,7 @@ registerLocation(RegisterEnum reg) {
 
 
 void
-instructionReg(Machine* m, char* asm_line, int bits, ...) {
+instructionReg(MachineX64* m, char* asm_line, int bits, ...) {
 #define MaxRegs 2
    va_list args;
    va_start(args, bits);
@@ -241,9 +240,9 @@ ExprType* findTag(Codegen* c, char* name);
 ExprType* findSymbol(Codegen* c, char* name);
 
 void
-machStackPop(Machine* m, ExprType* et) {
+x64StackPop(MachineX64* m, ExprType* et) {
    Assert(et->location.type == Location_REGISTER);
-   StackValue s = bufPop(m->stack);
+   StackValue s = bufPop(m->s_stack);
    switch (s.type) {
       case Stack_QWORD: {
          instructionReg(m, "pop %s", 64, et->location.reg);
@@ -281,10 +280,7 @@ popScope(Codegen* c) {
 }
 
 void
-pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
-
-   Machine* m = c->m;
-
+x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
    if (isRealType(&etype->c)) {
       NotImplemented("Floating parameters.");
    }
@@ -307,7 +303,7 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
             .location = registerLocation(r),
          };
          Break;
-         machMov(m, &reg, machAccum64(etype->c.type));
+         x64Mov(m, &reg, x64Accum64(etype->c.type));
       }
       else {
          NotImplemented("More params.");
@@ -339,20 +335,20 @@ pushParameter(Codegen* c, u64 n_param, ExprType* etype) {
             NotImplemented("more than 4 params");
          }      }
       else {
-         machStackPushOffset(c->m, typeBits(&etype->c) / 8);
+         x64StackPushOffset(m, typeBits(&etype->c) / 8);
          loc.type = Location_STACK;
-         loc.offset = c->m->stack_offset;
+         loc.offset = m->stack_offset;
       }
       ExprType reg = {
          .c = etype->c,
          .location = loc,
       };
-      machMov(m, &reg, etype);
+      x64Mov(m, &reg, etype);
    }
 }
 
 Location
-popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
+x64PopParameter(MachineX64* m, Ctype* ctype, u64 n_param, u64* offset) {
    Location loc = Zero;
 
    if (isRealType(ctype)) {
@@ -360,7 +356,7 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
    }
 
    if (typeBits(ctype) <= 64) {
-      if ((c->m->config & Config_TARGET_MACOS) || (c->m->config & Config_TARGET_LINUX)) {
+      if ((m->config & Config_TARGET_MACOS) || (m->config & Config_TARGET_LINUX)) {
          if (n_param < 6) {
             loc.type = Location_REGISTER;
             if (isIntegerType(ctype)) {
@@ -375,11 +371,11 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
             }
          }
          else {
-            loc = (Location){ .type = Location_STACK, .offset = c->m->stack_offset - *offset };
+            loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
             *offset += typeBits(ctype);
          }
       }
-      else if (c->m->config & Config_TARGET_WIN){
+      else if (m->config & Config_TARGET_WIN){
          if (n_param < 4) {
             if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
                loc.type = Location_REGISTER;
@@ -392,27 +388,27 @@ popParameter(Codegen* c, Ctype* ctype, u64 n_param, u64* offset) {
             }
          }
          else {
-            loc = (Location){ .type = Location_STACK, .offset = c->m->stack_offset - *offset };
+            loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
             *offset += typeBits(ctype);
          }
       }
    }
    else {
-      loc = (Location){ .type = Location_STACK, .offset = c->m->stack_offset - *offset };
+      loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
       *offset += typeBits(ctype);
    }
    return loc;
 }
 
 void
-machTestAndJump(Machine* m, u32 bits, char* then, char* els) {
+x64TestAndJump(MachineX64* m, u32 bits, char* then, char* els) {
    instructionReg(m, "test %s, %s", bits, Reg_RAX, Reg_RAX);
    instructionPrintf("jne %s", then);
    instructionPrintf("jmp %s", els);
 }
 
 void
-machCmp(Machine* m, ExprType* dst, ExprType* src) {
+x64Cmp(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    instructionPrintf("cmp %s, %s",
                      locationString(m, dst->location, bits),
@@ -421,10 +417,11 @@ machCmp(Machine* m, ExprType* dst, ExprType* src) {
 
 // Compare the accumulator with the top of the stack.
 void
-machCmpJmp(Machine* m, AstType ast_type, ExprType* type, char* then, char* els) {
+x64CmpJmp(Machine* m, AstType ast_type, ExprType* type, char* then, char* els) {
    u32 bits = typeBits(&type->c);
-   machStackPop(m, machHelper64(type->c.type));
-   instructionReg(m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
+   m->stackPop(m, x64Helper64(type->c.type));
+
+   instructionReg((MachineX64*)m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
    switch (ast_type) {
       case Ast_EQUALS:     { instructionPrintf("je %s", then); } break;
       case Ast_LESS:       { instructionPrintf("jl %s", then); } break;
@@ -438,7 +435,7 @@ machCmpJmp(Machine* m, AstType ast_type, ExprType* type, char* then, char* els) 
 }
 
 void
-machCmpSetAccum(Machine* m, AstType type) {
+x64CmpSetAccum(MachineX64* m, AstType type) {
    char* instr = 0;
    switch(type) {
       case Ast_EQUALS: { instr = "sete %s"; } break;
@@ -453,7 +450,7 @@ machCmpSetAccum(Machine* m, AstType type) {
 }
 
 ExprType*
-machAccumInt8() {
+x64AccumInt8() {
    static ExprType accum = {
       .c = { .type = Type_CHAR },
       .location = { .type = Location_REGISTER, .reg = Reg_RAX },
@@ -463,7 +460,7 @@ machAccumInt8() {
 }
 
 ExprType*
-machAccumInt32() {
+x64AccumInt32() {
    static ExprType accum = {
       .c = { .type = Type_INT },
       .location = { .type = Location_REGISTER, .reg = Reg_RAX },
@@ -473,7 +470,7 @@ machAccumInt32() {
 }
 
 ExprType*
-machAccumInt64() {
+x64AccumInt64() {
    static ExprType accum = {
       .c = { .type = Type_LONG },
       .location = { .type = Location_REGISTER, .reg = Reg_RAX },
@@ -483,20 +480,20 @@ machAccumInt64() {
 }
 
 ExprType*
-machAccumInt(u32 bits) {
+x64AccumInt(u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
       case 64: {
-         result = machAccumInt64();
+         result = x64AccumInt64();
       } break;
       case 32: {
-         result = machAccumInt32();
+         result = x64AccumInt32();
       } break;
       case 8: {
-         result = machAccumInt8();
+         result = x64AccumInt8();
       } break;
       default: {
-         NotImplemented("machAccumInt()");
+         NotImplemented("x64AccumInt()");
       } break;
    }
    return result;
@@ -505,7 +502,7 @@ machAccumInt(u32 bits) {
 // NOTE: Every use of the machImmediate* functions invalidates the previous call.
 
 ExprType*
-machImmediateFromToken(Token* tok) {
+x64ImmediateFromToken(MachineX64* m, Token* tok) {
    static ExprType imm = {
       .c = { .type = Type_INT },
       .location = { .type = Location_IMMEDIATE },
@@ -524,7 +521,7 @@ machImmediateFromToken(Token* tok) {
 
 
 ExprType*
-machImmediateInt(u64 value) {
+x64ImmediateInt(u64 value) {
    static ExprType imm = {
       .c = { .type = Type_INT },
       .location = { .type = Location_IMMEDIATE },
@@ -534,7 +531,7 @@ machImmediateInt(u64 value) {
 }
 
 ExprType*
-machHelperInt8() {
+x64HelperInt8() {
    static ExprType helper = {
       .c = { .type = Type_CHAR },
       .location = { .type = Location_REGISTER, .reg = Reg_RBX },
@@ -544,7 +541,7 @@ machHelperInt8() {
 }
 
 ExprType*
-machAccum64(int type /*Ctype.type*/ ) {
+x64Accum64(int type /*Ctype.type*/ ) {
    ExprType* result = NULL;
    if (type & Type_REAL) {
       static ExprType helper = {
@@ -567,7 +564,7 @@ machAccum64(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
-machAccum32(int type /*Ctype.type*/ ) {
+x64Accum32(int type /*Ctype.type*/ ) {
    ExprType* result = NULL;
    if (type & Type_REAL) {
       static ExprType helper = {
@@ -590,7 +587,7 @@ machAccum32(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
-machAccum8(int type /*Ctype.type*/ ) {
+x64Accum8(int type /*Ctype.type*/ ) {
    ExprType* result = NULL;
    if (type & Type_REAL) {
       static ExprType helper = {
@@ -615,7 +612,7 @@ machAccum8(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
-machAccum16(int type /*Ctype.type*/ ) {
+x64Accum16(int type /*Ctype.type*/ ) {
    ExprType* result = NULL;
    if (type & Type_REAL) {
       static ExprType helper = {
@@ -640,17 +637,17 @@ machAccum16(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
-machAccum(int type /*Ctype.type*/, u32 bits) {
+x64Accum(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
       case 8: {
-         result = machAccum8(type);
+         result = x64Accum8(type);
       } break;
       case 32: {
-         result = machAccum32(type);
+         result = x64Accum32(type);
       } break;
       case 64: {
-         result = machAccum64(type);
+         result = x64Accum64(type);
       } break;
       default: {
          NotImplemented("Unhandled size for accum register.");
@@ -661,14 +658,14 @@ machAccum(int type /*Ctype.type*/, u32 bits) {
 }
 
 ExprType*
-machAccumC(Ctype c) {
+x64AccumC(MachineX64* m, Ctype c) {
    u32 bits = typeBits(&c);
-   ExprType* result = machAccum(c.type, bits);
+   ExprType* result = x64Accum(m, c.type, bits);
    return result;
 }
 
 ExprType*
-machHelper32(int type /*Ctype.type*/ ) {
+x64Helper32(int type /*Ctype.type*/ ) {
    ExprType* result = NULL;
    if (type & Type_REAL) {
       static ExprType helper = {
@@ -691,7 +688,7 @@ machHelper32(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
-machHelper64(int type /*Ctype.type*/ ) {
+x64Helper64(int type /*Ctype.type*/ ) {
    ExprType* result = NULL;
    if (type & Type_REAL) {
       static ExprType helper = {
@@ -714,14 +711,14 @@ machHelper64(int type /*Ctype.type*/ ) {
 }
 
 ExprType*
-machHelper(int type /*Ctype.type*/, u32 bits) {
+x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
       case 32: {
-         result = machHelper32(type);
+         result = x64Helper32(type);
       } break;
       case 64: {
-         result = machHelper64(type);
+         result = x64Helper64(type);
       } break;
       default: {
          NotImplemented("Unhandled size for helper register.");
@@ -732,14 +729,14 @@ machHelper(int type /*Ctype.type*/, u32 bits) {
 }
 
 ExprType*
-machHelperC(Ctype c) {
+x64HelperC(MachineX64* m, Ctype c) {
    u32 bits = typeBits(&c);
-   ExprType* result = machHelper(c.type, bits);
+   ExprType* result = x64Helper(m, c.type, bits);
    return result;
 }
 
 ExprType*
-machHelperInt32_() {
+x64HelperInt32() {
    static ExprType helper = {
       .c = { .type = Type_INT },
       .location = { .type = Location_REGISTER, .reg = Reg_RBX },
@@ -749,7 +746,7 @@ machHelperInt32_() {
 }
 
 ExprType*
-machHelperInt64_() {
+x64HelperInt64() {
    static ExprType helper = {
       .c = { .type = Type_LONG },
       .location = { .type = Location_REGISTER, .reg = Reg_RBX },
@@ -759,27 +756,27 @@ machHelperInt64_() {
 }
 
 ExprType*
-machHelperInt_(u32 bits) {
+x64HelperInt_(u32 bits) {
    ExprType* helper = NULL;
    switch (bits) {
       case 8: {
-         helper = machHelperInt8();
+         helper = x64HelperInt8();
       } break;
       case 32: {
-         helper = machHelperInt32_();
+         helper = x64HelperInt32();
       } break;
       case 64: {
-         helper = machHelperInt32_();
+         helper = x64HelperInt64();
       } break;
       default: {
-         NotImplemented("machHelperInt()");
+         NotImplemented("x64HelperInt()");
       }
    }
    return helper;
 }
 
 void
-machMov(Machine* m, ExprType* dst, ExprType* src) {
+x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    Assert(bits);
 
@@ -814,12 +811,12 @@ machMov(Machine* m, ExprType* dst, ExprType* src) {
          if (   (dst->location.type == Location_STACK || dst->location.type == Location_STACK_FROM_REG)
              && (src->location.type == Location_STACK || src->location.type == Location_STACK_FROM_REG)) {
             instructionPrintf("mov %s, %s",
-                              locationString(m, machAccumInt(bits)->location, bits),
+                              locationString(m, x64AccumInt(bits)->location, bits),
                               locationString(m, src->location, bits));
 
             instructionPrintf("mov %s, %s",
                               locationString(m, dst->location, bits),
-                              locationString(m, machAccumInt(bits)->location, bits));
+                              locationString(m, x64AccumInt(bits)->location, bits));
 
          }
          else {
@@ -855,7 +852,7 @@ machMov(Machine* m, ExprType* dst, ExprType* src) {
 }
 
 void
-machAdd(Machine* m, ExprType* dst, ExprType* src) {
+x64Add(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
       instructionPrintf("add %s, %s",
@@ -870,7 +867,7 @@ machAdd(Machine* m, ExprType* dst, ExprType* src) {
 }
 
 void
-machSub(Machine* m, ExprType* dst, ExprType* src) {
+x64Sub(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
       instructionPrintf("sub %s, %s",
@@ -885,7 +882,7 @@ machSub(Machine* m, ExprType* dst, ExprType* src) {
 }
 
 void
-machMul(Machine* m, ExprType* dst, ExprType* src) {
+x64Mul(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
       instructionPrintf("imul %s, %s",
@@ -899,7 +896,7 @@ machMul(Machine* m, ExprType* dst, ExprType* src) {
 }
 
 void
-machDiv(Machine* m, ExprType* dst, ExprType* src) {
+x64Div(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
       instructionPrintf("idiv %s, %s",
@@ -913,7 +910,7 @@ machDiv(Machine* m, ExprType* dst, ExprType* src) {
 }
 
 void
-machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
+x64MovAccum(MachineX64* m, ExprType* et , Token* rhs_tok)  {
    instructionPrintf("mov %s, %d",
                      locationString(m, registerLocation(Reg_RAX), typeBits(&et->c)),
                      rhs_tok->cast.int32);
@@ -926,28 +923,28 @@ machMovAccum(Machine* m, ExprType* et , Token* rhs_tok)  {
 
 // Puts the stack address in the accumulator.
 void
-machStackAddressInAccum(Machine* m, ExprType* entry) {
+x64StackAddressInAccum(MachineX64* m, ExprType* entry) {
    Assert(entry->location.type == Location_STACK);
    instructionPrintf("lea rax, [rsp + %d]", m->stack_offset - entry->location.offset);
 }
 
 void
-machCall(Machine* m, char* label) {
+x64Call(MachineX64* m, char* label) {
    instructionPrintf("call %s", label);
 }
 
 void
-machStackPushReg(Machine* m, RegisterEnum reg) {
+x64StackPushReg(MachineX64* m, RegisterEnum reg) {
    instructionPrintf("push %s", locationString(m, registerLocation(reg), 64));
    m->stack_offset += 8;
-   bufPush(m->stack, (StackValue){ .type = Stack_QWORD });
+   bufPush(m->s_stack, (StackValue){ .type = Stack_QWORD });
 }
 
 void
-machStackPushImm(Machine* m, ExprType* et, i64 val) {
+x64StackPushImm(MachineX64* m, ExprType* et, i64 val) {
    instructionPrintf("push %d", val);
    m->stack_offset += 8;
-   bufPush(m->stack, (StackValue){ .type = Stack_QWORD });
+   bufPush(m->s_stack, (StackValue){ .type = Stack_QWORD });
    et->location = (Location) {
       .type = Location_STACK,
       .reg = m->stack_offset,
@@ -955,16 +952,16 @@ machStackPushImm(Machine* m, ExprType* et, i64 val) {
 }
 
 void
-machStackPushOffset(Machine* m, u64 bytes) {
+x64StackPushOffset(MachineX64* m, u64 bytes) {
    Assert(bytes);
    instructionPrintf("sub rsp, %d", bytes);
    m->stack_offset += bytes;
    StackValue val = { .type = Stack_OFFSET, .offset = bytes };
-   bufPush(m->stack, val);
+   bufPush(m->s_stack, val);
 }
 
 void
-machFinish(void) {
+x64Finish(MachineX64* m) {
    char* end =
       "int 3\n"
       "ret\n";
@@ -972,8 +969,65 @@ machFinish(void) {
    fclose(g_asm);
 }
 
+
 void
-machInit(Machine* m) {
+x64FunctionPrelude(MachineX64* m, char* func_name) {
+   instructionPrintf("global %s", func_name);
+   instructionPrintf("%s:", func_name);
+   instructionPrintf("push rbp");
+   instructionPrintf("mov rbp, rsp");
+
+   m->stack_offset += 16;  // 8 for rbp. 8 for return address from call
+}
+
+void
+x64FunctionEpilogue(MachineX64* m) {
+   instructionPrintf(".func_end:");
+
+   while (bufCount(m->s_stack) > 0)  {
+      m->machine.stackPop(m, x64Helper64(Type_INT));
+   }
+
+   // Restore non-volatile registers.
+
+   instructionPrintf("pop rbp");
+   m->stack_offset -= 8;
+
+   instructionPrintf("ret");
+   m->stack_offset -= 8;
+}
+
+void
+x64Label(MachineX64* m, char* label) {
+   instructionPrintf("%s:", label);
+}
+
+void
+machJumpToLabel(char* label) {
+   instructionPrintf("jmp %s", label);
+}
+
+void
+x64AddressOf(MachineX64* m, Location* loc) {
+   switch (loc->type) {
+      case Location_STACK: {
+         instructionPrintf("mov rax, rsp");
+         instructionPrintf("add rax, %d", m->stack_offset - loc->offset);
+      } break;
+      default: {
+         NotImplemented("Address of something not on the stack");
+      }
+   }
+}
+
+
+
+Machine*
+makeMachineX64(Arena* a, MachineConfigFlags mflags) {
+   MachineX64* m64 = AllocType(a, MachineX64);
+
+   m64->config = mflags;
+
    char* prelude =
 #ifdef _WIN32
       "extern ExitProcess\n"
@@ -1002,55 +1056,46 @@ machInit(Machine* m) {
 
    fwrite(prelude, 1, strlen(prelude), g_asm);
 
-   setupVolatility(m);
-}
+   setupVolatility(m64);
 
-void
-machFunctionPrelude(Machine* m, char* func_name) {
-   instructionPrintf("global %s", func_name);
-   instructionPrintf("%s:", func_name);
-   instructionPrintf("push rbp");
-   instructionPrintf("mov rbp, rsp");
+   // Function pointers
+   Machine* m = &m64->machine;
+   m->stackPop = x64StackPop;
 
-   m->stack_offset += 16;  // 8 for rbp. 8 for return address from call
-}
 
-void
-machFunctionEpilogue(Machine* m) {
-   instructionPrintf(".func_end:");
+   m->immediateFromToken = x64ImmediateFromToken;
 
-   while (bufCount(m->stack) > 0)  {
-      machStackPop(m, machHelper64(Type_INT));
-   }
+   m->stackPop = x64StackPop;
+   m->stackPushReg = x64StackPushReg;
+   m->stackPushImm = x64StackPushImm;
+   m->stackPushOffset = x64StackPushOffset;
+   m->stackAddressInAccum = x64StackAddressInAccum;
+   m->addressOf = x64AddressOf;
+   m->functionPrelude = x64FunctionPrelude;
+   m->pushParameter = x64PushParameter;
+   m->popParameter = x64PopParameter;
+   m->functionEpilogue = x64FunctionEpilogue;
+   m->mov = x64Mov;
+   m->movAccum = x64MovAccum;
+   m->add = x64Add;
+   m->sub = x64Sub;
+   m->mul = x64Mul;
+   m->div = x64Div;
+   m->cmp = x64Cmp;
+   m->cmpSetAccum = x64CmpSetAccum;
+   m->cmpJmp = x64CmpJmp;
+   m->testAndJump = x64TestAndJump;
+   m->label = x64Label;
+   m->call = x64Call;
 
-   // Restore non-volatile registers.
+   m->helper = x64Helper;
+   m->helperC = x64HelperC;
 
-   instructionPrintf("pop rbp");
-   m->stack_offset -= 8;
+   m->accum = x64Accum;
+   m->accumC = x64AccumC;
 
-   instructionPrintf("ret");
-   m->stack_offset -= 8;
-}
+   m->finish = x64Finish;
 
-void
-machLabel(char* label) {
-   instructionPrintf("%s:", label);
-}
 
-void
-machJumpToLabel(char* label) {
-   instructionPrintf("jmp %s", label);
-}
-
-void
-machAddressOf(Machine* m, Location* loc) {
-   switch (loc->type) {
-      case Location_STACK: {
-         instructionPrintf("mov rax, rsp");
-         instructionPrintf("add rax, %d", m->stack_offset - loc->offset);
-      } break;
-      default: {
-         NotImplemented("Address of something not on the stack");
-      }
-   }
+   return m;
 }

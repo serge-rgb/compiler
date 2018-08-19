@@ -1,4 +1,9 @@
-#pragma once
+
+// ====================================
+// ======== Hungarian notation ========
+// ====================================
+
+// s_*  - stretchy buffer
 
 // ==============================
 // ======== Error codes =========
@@ -104,11 +109,17 @@ typedef size_t sz;
    printf("Not Implemented! -- [%s]\n", message);   \
    Assert(0);
 
+// =====================================
+// ======== Polymorphic methods ========
+// =====================================
+
+#define Poly(name, ...) (*name)(void*, __VA_ARGS__)
+#define Call(obj, method, ...) (obj)->method(obj, __VA_ARGS__)
+
 // ========================
 // ======== String ========
 // ========================
 char* getString(char* orig);
-
 
 // ==========================
 // ======== Platform ========
@@ -218,7 +229,7 @@ struct Ctype {
             char* id;
             struct Ctype* ctype;
             i64 offset;
-         } * members;
+         } * s_members;
       } aggr;
 
       struct CtypeFunc {
@@ -337,15 +348,6 @@ struct Parser {
    } flags;
 } typedef Parser;
 
-
-// =====================================
-// ======== Machine abstraction ========
-// =====================================
-
-struct Machine typedef Machine;
-
-struct Codegen;
-
 // =========================
 // ======== Codegen ========
 // =========================
@@ -451,6 +453,8 @@ enum MachineConfigFlags {
    Config_TARGET_WIN   = (1<<2),
 } typedef MachineConfigFlags;
 
+struct Machine typedef Machine;
+
 struct Codegen {
    Arena*      arena;
    Scope*      scope;
@@ -462,6 +466,59 @@ struct Codegen {
    // Constants
    AstNode* one;
 } typedef Codegen;
+
+
+// =====================================
+// ======== Machine abstraction ========
+// =====================================
+
+struct Machine {
+
+   void Poly(stackPop, ExprType* et);
+   void Poly(stackPushReg, RegisterEnum reg);
+   void Poly(stackPushImm, ExprType* et, i64 value);
+   void Poly(stackPushOffset, u64 bytes);
+
+   void Poly(stackAddressInAccum, ExprType* entry);
+
+   void Poly(addressOf, Location* loc);
+
+   void Poly(functionPrelude, char* func_name);
+   void Poly(pushParameter, u64 n_param, ExprType* etype);
+   Location Poly(popParameter, Ctype* ctype, u64 n_param, u64* offset);
+   void Poly(functionEpilogue);
+
+   void Poly(mov, ExprType* dst, ExprType* src);
+   void Poly(movAccum, ExprType* dst, Token* rhs_tok);
+
+   void Poly(add, ExprType* dst, ExprType* src);
+   void Poly(sub, ExprType* dst, ExprType* src);
+   void Poly(mul, ExprType* dst, ExprType* src);
+   void Poly(div, ExprType* dst, ExprType* src);
+   void Poly(cmp, ExprType* dst, ExprType* src);
+   void Poly(cmpSetAccum, AstType type);
+
+   void Poly(cmpJmp, AstType ast_type, ExprType* type, char* then, char* els);
+   void Poly(testAndJump, u32 bits, char* then, char* els);
+
+   void Poly(label, char* label);
+   void Poly(call, char* func);
+
+   void Poly(finish);
+
+   // Registers
+
+   ExprType* Poly(immediateFromToken, Token* tok);
+
+   ExprType* Poly(helper, int type /*Ctype.type*/, u32 bits);
+   ExprType* Poly(helperC, Ctype c);
+   ExprType* Poly(accum, int type /*Ctype.type*/, u32 bits);
+   ExprType* Poly(accumC, Ctype c);
+};
+
+Machine* makeMachineX64(Arena* a, MachineConfigFlags mflags);
+
+struct Codegen;
 
 // ======================
 // ======== User ========

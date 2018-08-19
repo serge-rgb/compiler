@@ -31,7 +31,6 @@ compileTranslationUnit(char* file_name, char* outfile) {
       else {
          codegenInit(&codegen, outfile, PlatformDefaultTarget);
          codegenTranslationUnit(&codegen, tree);
-         machFinish();
       }
       deallocate(&tmp_parser_arena);
       fileStreamClose(&file_stream);
@@ -119,7 +118,7 @@ main(int argc, char** argv) {
 
    stringInit(&(Arena){0});
 
-   char** files = 0;
+   char** s_files = 0;
    CompilerFlag* compiler_flags = NULL;
 
    if (argc < 2) {
@@ -132,7 +131,7 @@ main(int argc, char** argv) {
       void* out = 0;
       switch (parseArgument(&out, argv, i, argc)) {
          case Filename: {
-            bufPush(files, argv[i]);
+            bufPush(s_files, argv[i]);
          } break;
          case Flag: {
             CompilerFlag flag = (CompilerFlag)out;
@@ -161,7 +160,7 @@ main(int argc, char** argv) {
 
    switch (action) {
       case Action_TEST_ALL: {
-         if (bufCount(files)) {
+         if (bufCount(s_files)) {
             fprintf(stderr, "Invalid file name input when testing compiler.\n");
             exit(Fail);
          }
@@ -199,12 +198,12 @@ main(int argc, char** argv) {
 
    bufFree(compiler_flags);
 
-   if (bufCount(files) > 1) {
+   if (bufCount(s_files) > 1) {
       NotImplemented("More than one file.");
    }
 
-   for (sz i = 0 ; i < bufCount(files); ++i) {
-      result = processSingleFile(files[i]);
+   for (sz i = 0 ; i < bufCount(s_files); ++i) {
+      result = processSingleFile(s_files[i]);
    }
 
    deallocate(&temp_arena);

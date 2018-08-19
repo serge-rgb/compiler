@@ -4,9 +4,8 @@ codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    snprintf(asmfile, PathMax, "%s.asm", outfile);
    g_asm = fopen(asmfile, "w");
 
-   c->m = AllocType(c->arena, Machine);
-   c->m->config = mflags;
-   machInit(c->m);
+
+   c->m = makeMachineX64(c->arena, mflags);
 
    // Constants
    c->one = makeAstNode(c->arena, Ast_NUMBER, 0,0);
@@ -64,7 +63,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 
    int bits = typeBits(&tleft.c);
-   machStackPop(m, machHelper(Type_INT, bits));
+   m->stackPop(m, Call(m, helper, Type_INT, bits));
 
    if (typeBits(&tleft.c) != typeBits(&tright.c) ||
        tleft.c.type != tright.c.type) {
@@ -85,15 +84,15 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 
    switch (type) {
-      case Ast_ADD: { machAdd(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
-      case Ast_SUB: { machSub(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
-      case Ast_MUL: { machMul(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
-      case Ast_DIV: { machDiv(m, machAccum(tleft.c.type, bits), machHelper(tright.c.type, bits)); } break;
+      case Ast_ADD: { m->add(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
+      case Ast_SUB: { m->sub(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
+      case Ast_MUL: { m->mul(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
+      case Ast_DIV: { m->div(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
       default: break;
    }
 
    if (target == Target_STACK) {
-      machStackPushReg(m, machAccum(tleft.c.type, bits)->location.reg);
+      Call(m, stackPushReg, Call(m, accum, tleft.c.type, bits)->location.reg);
    }
 }
 
@@ -111,9 +110,9 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
 
    if (typeBits(&entry->c) > 64) {
       if (target != Target_NONE) {
-         machStackAddressInAccum(m, entry);
+         m->stackAddressInAccum(m, entry);
          if (target == Target_STACK) {
-            machStackPushReg(m, machAccumC(expr_type->c)->location.reg);
+            Call(m, stackPushReg, Call(m, accumC, expr_type->c)->location.reg);
          }
       }
 
@@ -124,10 +123,10 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
             .c = entry->c,
             .location = registerLocation(Reg_RAX)
          };
-         machMov(m, &reg, entry);
+         m->mov(m, &reg, entry);
 
          if (target == Target_STACK) {
-            machStackPushReg(m, Reg_RAX);
+            Call(m, stackPushReg, Reg_RAX);
          }
       }
    }
@@ -167,11 +166,11 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    if (!struct_entry) {
       codegenError("No struct named %s", tag_str);
    }
-   struct StructMember* members = struct_entry->c.aggr.members;
+   struct StructMember* s_members = struct_entry->c.aggr.s_members;
 
    u64 member_idx = MaxU64;
-   for (u64 i = 0; i < bufCount(members); ++i) {
-      if (!strcmp(members[i].id, field_str)) {
+   for (u64 i = 0; i < bufCount(s_members); ++i) {
+      if (!strcmp(s_members[i].id, field_str)) {
          member_idx = i;
          break;
       }
@@ -180,7 +179,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
       codegenError("Struct %s does not have %s member", tag_str, field_str);
    }
 
-   struct StructMember* member = members + member_idx;
+   struct StructMember* member = s_members + member_idx;
    u64 member_offset = member->offset;
 
    if (address.type == Location_STACK) {
@@ -191,11 +190,11 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
             .c = *member->ctype,
             .location = address,
          };
-         ExprType* accum = machAccumC(*member->ctype);
-         machMov(m, accum, &reg);
+         ExprType* accum = Call(m, accumC, *member->ctype);
+         m->mov(m, accum, &reg);
 
          if (target == Target_STACK) {
-            machStackPushReg(m, accum->location.reg);
+            Call(m, stackPushReg, accum->location.reg);
          }
       }
    }
@@ -209,12 +208,12 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
                .reg_offset = member_offset,
             },
          };
-         ExprType* accum = machAccumC(*member->ctype);
+         ExprType* accum = Call(m, accumC, *member->ctype);
 
 
-         machMov(m, accum, &reg);
+         m->mov(m, accum, &reg);
          if (target == Target_STACK) {
-            machStackPushReg(m, address.reg);
+            Call(m, stackPushReg, address.reg);
          }
       }
    }
@@ -251,15 +250,15 @@ typesAreCompatible(Codegen* c, Ctype a, Ctype b) {
                   // SPEC: We deviate from the spec by always considering two
                   // structs with the same layout as compatible.
                   else {
-                     u64 n_a = bufCount(aggr_a->c.aggr.members);
-                     u64 n_b = bufCount(aggr_b->c.aggr.members);
+                     u64 n_a = bufCount(aggr_a->c.aggr.s_members);
+                     u64 n_b = bufCount(aggr_b->c.aggr.s_members);
                      if (n_a == n_b) {
                         compatible = true;
                         for (u64 i = 0; i < n_a; ++i) {
                            // TODO: Alignment check.
                            if (!typesAreCompatible(c,
-                                                   *aggr_a->c.aggr.members[i].ctype,
-                                                   *aggr_b->c.aggr.members[i].ctype)) {
+                                                   *aggr_a->c.aggr.s_members[i].ctype,
+                                                   *aggr_b->c.aggr.s_members[i].ctype)) {
                               compatible = false;
                               break;
                            }
@@ -304,7 +303,9 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
 
    AstNode* params = func->next;
 
-   u64 stack_top = bufCount(c->m->stack);
+   // TODO: Remove reference to MachineX64
+   MachineX64* m_totally_temp = (MachineX64*)c->m;
+   u64 stack_top = bufCount(m_totally_temp->s_stack);
 
    // Check count
    {
@@ -338,27 +339,29 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
       if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
          codegenError("Attempting to pass incompatible parameter to function.");
       }
-      pushParameter(c, n_param++, &et);
+
+      m->pushParameter(m, n_param++, &et);
       expected_param = expected_param->next;
    }
 
-   machCall(c->m, label);
+   Call(c->m, call, label);
 
-   while (bufCount(c->m->stack) != stack_top) {
-      machStackPop(m, machHelper64(Type_INT /*Doesn't really matter*/));
+   while (bufCount(m_totally_temp->s_stack) != stack_top) {
+      ExprType* helper = Call(m, helper, Type_INT, 64);
+      Call(m, stackPop, helper);
    }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
 
    Ctype return_type = funcReturnType(sym->c.func.node);
    if (target == Target_STACK) {
-      machStackPushReg(m, machAccumC(return_type)->location.reg);
+      Call(m, stackPushReg, Call(m, accumC, return_type)->location.reg);
    }
 
    AstNode* funcdef = sym->c.func.node;
    Assert(funcdef->type == Ast_FUNCDEF);
 
    expr_type->c = funcdef->child->ctype;
-   expr_type->location = machAccumC(return_type)->location;
+   expr_type->location = Call(m, accumC, return_type)->location;
 }
 
 void
@@ -379,11 +382,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   expr_type->c = (Ctype) {
                      .type = Type_INT,
                   };
-
-                  machMovAccum(c->m, expr_type, node->tok);
+                  Call(m, movAccum, expr_type, node->tok);
                } break;
                case Target_STACK: {
-                  machStackPushImm(c->m, expr_type, node->tok->value);
+                  Call(m, stackPushImm, expr_type, node->tok->value);
                } break;
                case Target_NONE: {
                   expr_type->location = (Location) {
@@ -414,28 +416,28 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
             Assert (typeBits(&lhs_type.c) == typeBits(&rhs_type.c));
             if (op->value == '=') {
-               machMov(c->m, &lhs_type, &rhs_type);
+               m->mov(c->m, &lhs_type, &rhs_type);
             }
             else {
                Assert(bits < 64);
                // TODO: Check for arithmetic type here.
 
-               ExprType* helper = machHelper32(lhs_type.c.type);
-               machMov(m, helper, &lhs_type);
+               ExprType* helper = Call(m, helper, lhs_type.c.type, 32);
+               m->mov(m, helper, &lhs_type);
 
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
-                     machAdd(c->m, helper, machAccum32(rhs_type.c.type));
+                     Call(m, add, helper, Call(m, accum, rhs_type.c.type, 32));
                   } break;
                   default: {
                      NotImplemented("Different assignment expressions");
                   }
                }
 
-               machMov(m, &lhs_type, helper);
+               m->mov(m, &lhs_type, helper);
 
                if (target == Target_ACCUM) {
-                  machMov(c->m, machAccumC(lhs_type.c), &lhs_type);
+                  m->mov(c->m, Call(m, accumC, lhs_type.c), &lhs_type);
                }
             }
          } break;
@@ -453,18 +455,18 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                case Ast_POSTFIX_DEC: { emitArithBinaryExpr(c, Ast_SUB, NULL, expr, c->one, Target_ACCUM); } break;
             }
 
-            ExprType* accum = machAccumC(local_etype.c);
-            machMov(c->m, &local_etype, accum);
+            ExprType* accum = Call(m, accumC, local_etype.c);
+            m->mov(c->m, &local_etype, accum);
 
             if (target == Target_STACK) {
                // Result is already on the stack.
             }
             else if (target == Target_ACCUM) {
                // Return old value.
-               machStackPop(c->m, accum);
+               Call(m, stackPop, accum);
             }
             else if (target == Target_NONE) {
-               machStackPop(c->m, machHelper64(Type_INT));
+               Call(m, stackPop, Call(m, helper, Type_INT, 64));
             }
             if (expr_type) {
                *expr_type = local_etype;
@@ -504,11 +506,13 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             if (target != Target_NONE) {
                Location* loc = &result.c.pointer.pointee->location;
-               machAddressOf(c->m, loc);
-               ExprType* accum = machAccum64(Type_INT);
+               Call(c->m, addressOf, loc);
+               ExprType* accum = Call(m, accum, Type_INT, 64);
                if (target == Target_STACK) {
-                  machStackPushReg(c->m, accum->location.reg);
-                  result.location = (Location){ .type = Location_STACK, .offset = c->m->stack_offset };
+                  Call(m, stackPushReg, accum->location.reg);
+
+                  MachineX64* m_totally_temp = (MachineX64*)c->m;
+                  result.location = (Location){ .type = Location_STACK, .offset = m_totally_temp->stack_offset };
                }
                else {
                  result.location = accum->location;
@@ -538,17 +542,15 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                codegenEmit(c, right, &right_type, Target_STACK);
                codegenEmit(c, left, &left_type, Target_ACCUM);
 
-               ExprType* accum = machAccumC(left_type.c);
-               ExprType* helper = machHelperC(right_type.c);
+               ExprType* accum = Call(m, accumC, left_type.c);
+               ExprType* helper = Call(m, helperC, right_type.c);
 
-               machStackPop(c->m, helper);
-
-               machCmp(c->m, accum, helper);
-
-               machCmpSetAccum(c->m, node->type);
+               Call(m, stackPop, helper);
+               Call(m, cmp, accum, helper);
+               Call(m, cmpSetAccum, node->type);
 
                if (target == Target_STACK) {
-                  machStackPushReg(c->m, accum->location.reg);
+                  Call(m, stackPushReg, accum->location.reg);
                }
             }
             else {
@@ -584,11 +586,11 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
             NotImplemented("Promotion rules");
          }
 
-         machCmpJmp(c->m, cond->type, &left_type, then, els);
+         Call(c->m, cmpJmp, cond->type, &left_type, then, els);
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);
-         machTestAndJump(c->m, typeBits(&expr_type.c), then, els);
+         Call(c->m, testAndJump, typeBits(&expr_type.c), then, els);
       } break;
    }
 }
@@ -641,7 +643,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
             Assert(offset % 8 == 0);
             struct StructMember member = { member_id, &spec->ctype, offset/8 };
-            bufPush(entry.c.aggr.members, member);
+            bufPush(entry.c.aggr.s_members, member);
 
             Ctype* ctype = NULL;
             if (declarator->is_pointer) {
@@ -681,13 +683,16 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          codegenError("Symbol redeclared in scope");
       }
       // TODO: top level declarations
-      machStackPushOffset(c->m, bits/8);
+
+      Call(c->m, stackPushOffset, bits/8);
+
+      MachineX64* m_totally_temp = (MachineX64*)c->m;
 
       ExprType* entry = symInsert(&c->scope->symbol_table,
                                   id_str,
                                   (ExprType){
                                      .c = Zero,
-                                     .location = { .type = Location_STACK, .offset = c->m->stack_offset },
+                                     .location = { .type = Location_STACK, .offset = m_totally_temp->stack_offset },
                                   });
 
       if (declarator->is_pointer) {
@@ -706,12 +711,14 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             rhs->tok->type = TType_FLOAT;
             rhs->tok->cast.real64 = rhs->tok->cast.int32;
          }
-         machMov(c->m, entry, machImmediateFromToken(rhs->tok));
+         ExprType* imm = Call(c->m, immediateFromToken, rhs->tok);
+
+         Call(c->m, mov, entry, imm);
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType type = Zero;
          emitExpression(c, rhs, &type, Target_ACCUM);
-         machMov(c->m, entry, &type);
+         Call(c->m, mov, entry, &type);
       }
       else {
          // TODO: scc initializes to zero by default.
@@ -722,6 +729,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
 void
 emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
+   Machine* m = c->m;
    switch (stmt->type) {
       case Ast_COMPOUND_STMT : {
          emitCompoundStatement(c, stmt, target);
@@ -750,7 +758,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
 
          emitConditionalJump(c, cond, then_label, else_label);
 
-         machLabel(then_label);
+         Call(c->m, label, then_label);
 
          ExprType et = Zero;
          if (then) {
@@ -760,11 +768,11 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             codegenError("No then after if");
          }
          machJumpToLabel(end_label);
-         machLabel(else_label);
+         Call(m, label, else_label);
          if (els) {
             codegenEmit(c, els, &et, Target_NONE);
          }
-         machLabel(end_label);
+         Call(m, label, end_label);
       } break;
       case Ast_ITERATION: {
          int loop_id = c->scope->if_count++;
@@ -785,14 +793,14 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          b32 after_is_control = (control->type == Ast_NONE);
          if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
 
-         machLabel(loop_label);
+         Call(m, label, loop_label);
          if (!after_is_control) {
             emitConditionalJump(c, control, body_label, end_label);
          } else {
             NotImplemented("after is control");
          }
 
-         machLabel(body_label);
+         Call(m, label, body_label);
          if (body->type != Ast_NONE) {
             emitStatement(c, body, Target_ACCUM);
          }
@@ -800,7 +808,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             emitStatement(c, after, Target_ACCUM);
          }
          machJumpToLabel(loop_label);
-         machLabel(end_label);
+         Call(m, label, end_label);
          popScope(c);
       } break;
       default: {
@@ -886,7 +894,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
                param_type = param_type_spec->ctype;
             }
 
-            Location param_loc = popParameter(c, &param_type, n_param++, &offset);
+            Location param_loc = Call(c->m, popParameter, &param_type, n_param++, &offset);
 
             symInsert(&c->scope->symbol_table,
                                         id_str,
@@ -902,13 +910,16 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       // NOTE: The prelude goes after popping parameters, since it's easier to
       // handle them when we know they are at the top of the stack.
-      machFunctionPrelude(c->m, func_name);
+      Call(c->m, functionPrelude, func_name);
 
       emitCompoundStatement(c, compound, Target_ACCUM);
 
-      machFunctionEpilogue(c->m);
+      Call(c->m, functionEpilogue);
+
       popScope(c);
-      Assert (c->m->stack_offset == 0);
+
+      // TODO: Remove reference to MachineX64
+      Assert (((MachineX64*)c->m)->stack_offset == 0);
    }
    else {
       codegenError("Funcdef: Invalid node in the tree.");
@@ -952,5 +963,6 @@ codegenTranslationUnit(Codegen* c, AstNode* node) {
       node = node->next;
    }
    popScope(c);
+   Call(c->m, finish);
 }
 
