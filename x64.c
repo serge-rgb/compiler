@@ -256,30 +256,6 @@ x64StackPop(MachineX64* m, ExprType* et) {
 }
 
 void
-pushScope(Codegen* c) {
-   Scope* prev_scope = c->scope;
-   c->scope = allocate(c->arena, sizeof(*c->scope));
-   ArenaBootstrap(c->scope, arena);
-   c->scope->prev = prev_scope;
-}
-
-void
-popScope(Codegen* c) {
-   deallocate(c->scope->arena);
-
-   // We might have pointers to objects declared in this scope
-   // We can't deallocate, but we can go through all of our symbols and mark them as invalid.
-
-   for (sz i = 0;
-        i < c->scope->symbol_table.n_keyvals;
-        ++i) {
-      c->scope->symbol_table.keyvals[i] = (symHashmapKeyVal)Zero;
-   }
-
-   c->scope = c->scope->prev;
-}
-
-void
 x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
    if (isRealType(&etype->c)) {
       NotImplemented("Floating parameters.");

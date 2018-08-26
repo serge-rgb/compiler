@@ -40,6 +40,30 @@ findSymbol(Codegen* c, char* name) {
    return entry;
 }
 
+void
+pushScope(Codegen* c) {
+   Scope* prev_scope = c->scope;
+   c->scope = allocate(c->arena, sizeof(*c->scope));
+   ArenaBootstrap(c->scope, arena);
+   c->scope->prev = prev_scope;
+}
+
+void
+popScope(Codegen* c) {
+   deallocate(c->scope->arena);
+
+   // We might have pointers to objects declared in this scope
+   // We can't deallocate, but we can go through all of our symbols and mark them as invalid.
+
+   for (sz i = 0;
+        i < c->scope->symbol_table.n_keyvals;
+        ++i) {
+      c->scope->symbol_table.keyvals[i] = (symHashmapKeyVal)Zero;
+   }
+
+   c->scope = c->scope->prev;
+}
+
 // Forward declaration for recursive calls.
 void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
 
@@ -83,11 +107,13 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
       *expr_type = tleft;
    }
 
+   ExprType* dst = Call(m, accum, tleft.c.type, bits);
+   ExprType* src = Call(m, helper, tright.c.type, bits);
    switch (type) {
-      case Ast_ADD: { m->add(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
-      case Ast_SUB: { m->sub(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
-      case Ast_MUL: { m->mul(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
-      case Ast_DIV: { m->div(m, Call(m, accum, tleft.c.type, bits), Call(m, helper, tright.c.type, bits)); } break;
+      case Ast_ADD: { Call(m, add, dst, src); } break;
+      case Ast_SUB: { Call(m, sub, dst, src); } break;
+      case Ast_MUL: { Call(m, mul, dst, src); } break;
+      case Ast_DIV: { Call(m, div, dst, src); } break;
       default: break;
    }
 
