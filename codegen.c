@@ -87,7 +87,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 
    int bits = typeBits(&tleft.c);
-   m->stackPop(m, Call(m, helper, Type_INT, bits));
+   m->stackPop(m, m->helper(m, Type_INT, bits));
 
    if (typeBits(&tleft.c) != typeBits(&tright.c) ||
        tleft.c.type != tright.c.type) {
@@ -107,18 +107,18 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
       *expr_type = tleft;
    }
 
-   ExprType* dst = Call(m, accum, tleft.c.type, bits);
-   ExprType* src = Call(m, helper, tright.c.type, bits);
+   ExprType* dst = m->accum(m, tleft.c.type, bits);
+   ExprType* src = m->helper(m, tright.c.type, bits);
    switch (type) {
-      case Ast_ADD: { Call(m, add, dst, src); } break;
-      case Ast_SUB: { Call(m, sub, dst, src); } break;
-      case Ast_MUL: { Call(m, mul, dst, src); } break;
-      case Ast_DIV: { Call(m, div, dst, src); } break;
+      case Ast_ADD: { m->add(m, dst, src); } break;
+      case Ast_SUB: { m->sub(m, dst, src); } break;
+      case Ast_MUL: { m->mul(m, dst, src); } break;
+      case Ast_DIV: { m->div(m, dst, src); } break;
       default: break;
    }
 
    if (target == Target_STACK) {
-      Call(m, stackPushReg, Call(m, accum, tleft.c.type, bits)->location.reg);
+      m->stackPushReg(m, m->accum(m, tleft.c.type, bits)->location.reg);
    }
 }
 
@@ -138,7 +138,8 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       if (target != Target_NONE) {
          m->stackAddressInAccum(m, entry);
          if (target == Target_STACK) {
-            Call(m, stackPushReg, Call(m, accumC, expr_type->c)->location.reg);
+            m->stackPushReg(m,
+                            m->accumC(m, expr_type->c)->location.reg);
          }
       }
 
@@ -152,7 +153,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
          m->mov(m, &reg, entry);
 
          if (target == Target_STACK) {
-            Call(m, stackPushReg, Reg_RAX);
+            m->stackPushReg(m, Reg_RAX);
          }
       }
    }
@@ -216,11 +217,11 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
             .c = *member->ctype,
             .location = address,
          };
-         ExprType* accum = Call(m, accumC, *member->ctype);
+         ExprType* accum = m->accumC(m, *member->ctype);
          m->mov(m, accum, &reg);
 
          if (target == Target_STACK) {
-            Call(m, stackPushReg, accum->location.reg);
+            m->stackPushReg(m, accum->location.reg);
          }
       }
    }
@@ -234,12 +235,12 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
                .reg_offset = member_offset,
             },
          };
-         ExprType* accum = Call(m, accumC, *member->ctype);
+         ExprType* accum = m->accumC(m, *member->ctype);
 
 
          m->mov(m, accum, &reg);
          if (target == Target_STACK) {
-            Call(m, stackPushReg, address.reg);
+            m->stackPushReg(m, address.reg);
          }
       }
    }
@@ -370,24 +371,24 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
       expected_param = expected_param->next;
    }
 
-   Call(c->m, call, label);
+   c->m->call(c->m, label);
 
    while (bufCount(m_totally_temp->s_stack) != stack_top) {
-      ExprType* helper = Call(m, helper, Type_INT, 64);
-      Call(m, stackPop, helper);
+      ExprType* helper = m->helper(m, Type_INT, 64);
+      m->stackPop(m, helper);
    }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
 
    Ctype return_type = funcReturnType(sym->c.func.node);
    if (target == Target_STACK) {
-      Call(m, stackPushReg, Call(m, accumC, return_type)->location.reg);
+      m->stackPushReg(m, m->accumC(m, return_type)->location.reg);
    }
 
    AstNode* funcdef = sym->c.func.node;
    Assert(funcdef->type == Ast_FUNCDEF);
 
    expr_type->c = funcdef->child->ctype;
-   expr_type->location = Call(m, accumC, return_type)->location;
+   expr_type->location = m->accumC(m, return_type)->location;
 }
 
 void
@@ -408,10 +409,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   expr_type->c = (Ctype) {
                      .type = Type_INT,
                   };
-                  Call(m, movAccum, expr_type, node->tok);
+                  m->movAccum(m, expr_type, node->tok);
                } break;
                case Target_STACK: {
-                  Call(m, stackPushImm, expr_type, node->tok->value);
+                  m->stackPushImm(m, expr_type, node->tok->value);
                } break;
                case Target_NONE: {
                   expr_type->location = (Location) {
@@ -448,12 +449,12 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                Assert(bits < 64);
                // TODO: Check for arithmetic type here.
 
-               ExprType* helper = Call(m, helper, lhs_type.c.type, 32);
+               ExprType* helper = m->helper(m, lhs_type.c.type, 32);
                m->mov(m, helper, &lhs_type);
 
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
-                     Call(m, add, helper, Call(m, accum, rhs_type.c.type, 32));
+                     m->add(m, helper, m->accum(m, rhs_type.c.type, 32));
                   } break;
                   default: {
                      NotImplemented("Different assignment expressions");
@@ -463,7 +464,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                m->mov(m, &lhs_type, helper);
 
                if (target == Target_ACCUM) {
-                  m->mov(c->m, Call(m, accumC, lhs_type.c), &lhs_type);
+                  m->mov(c->m, m->accumC(m, lhs_type.c), &lhs_type);
                }
             }
          } break;
@@ -481,7 +482,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                case Ast_POSTFIX_DEC: { emitArithBinaryExpr(c, Ast_SUB, NULL, expr, c->one, Target_ACCUM); } break;
             }
 
-            ExprType* accum = Call(m, accumC, local_etype.c);
+            ExprType* accum = m->accumC(m, local_etype.c);
             m->mov(c->m, &local_etype, accum);
 
             if (target == Target_STACK) {
@@ -489,10 +490,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
             else if (target == Target_ACCUM) {
                // Return old value.
-               Call(m, stackPop, accum);
+               m->stackPop(m, accum);
             }
             else if (target == Target_NONE) {
-               Call(m, stackPop, Call(m, helper, Type_INT, 64));
+               m->stackPop(m, m->helper(m, Type_INT, 64));
             }
             if (expr_type) {
                *expr_type = local_etype;
@@ -532,10 +533,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             if (target != Target_NONE) {
                Location* loc = &result.c.pointer.pointee->location;
-               Call(c->m, addressOf, loc);
-               ExprType* accum = Call(m, accum, Type_INT, 64);
+               c->m->addressOf(c->m, loc);
+               ExprType* accum = m->accum(m, Type_INT, 64);
                if (target == Target_STACK) {
-                  Call(m, stackPushReg, accum->location.reg);
+                  m->stackPushReg(m, accum->location.reg);
 
                   MachineX64* m_totally_temp = (MachineX64*)c->m;
                   result.location = (Location){ .type = Location_STACK, .offset = m_totally_temp->stack_offset };
@@ -568,15 +569,15 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                codegenEmit(c, right, &right_type, Target_STACK);
                codegenEmit(c, left, &left_type, Target_ACCUM);
 
-               ExprType* accum = Call(m, accumC, left_type.c);
-               ExprType* helper = Call(m, helperC, right_type.c);
+               ExprType* accum = m->accumC(m, left_type.c);
+               ExprType* helper = m->helperC(m, right_type.c);
 
-               Call(m, stackPop, helper);
-               Call(m, cmp, accum, helper);
-               Call(m, cmpSetAccum, node->type);
+               m->stackPop(m, helper);
+               m->cmp(m, accum, helper);
+               m->cmpSetAccum(m, node->type);
 
                if (target == Target_STACK) {
-                  Call(m, stackPushReg, accum->location.reg);
+                  m->stackPushReg(m, accum->location.reg);
                }
             }
             else {
@@ -612,11 +613,11 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
             NotImplemented("Promotion rules");
          }
 
-         Call(c->m, cmpJmp, cond->type, &left_type, then, els);
+         c->m->cmpJmp(c->m, cond->type, &left_type, then, els);
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);
-         Call(c->m, testAndJump, typeBits(&expr_type.c), then, els);
+         c->m->testAndJump(c->m, typeBits(&expr_type.c), then, els);
       } break;
    }
 }
@@ -710,7 +711,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       }
       // TODO: top level declarations
 
-      Call(c->m, stackPushOffset, bits/8);
+      c->m->stackPushOffset(c->m, bits/8);
 
       MachineX64* m_totally_temp = (MachineX64*)c->m;
 
@@ -737,14 +738,14 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             rhs->tok->type = TType_FLOAT;
             rhs->tok->cast.real64 = rhs->tok->cast.int32;
          }
-         ExprType* imm = Call(c->m, immediateFromToken, rhs->tok);
+         ExprType* imm = c->m->immediateFromToken(c->m, rhs->tok);
 
-         Call(c->m, mov, entry, imm);
+         c->m->mov(c->m, entry, imm);
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType type = Zero;
          emitExpression(c, rhs, &type, Target_ACCUM);
-         Call(c->m, mov, entry, &type);
+         c->m->mov(c->m, entry, &type);
       }
       else {
          // TODO: scc initializes to zero by default.
@@ -765,7 +766,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          if (stmt->child) {
             ExprType et = {0};
             emitExpression(c, stmt->child, &et, Target_ACCUM);
-            Call(m, jmp, ".func_end");
+            m->jmp(m, ".func_end");
          }
       } break;
       case Ast_DECLARATION: {
@@ -784,7 +785,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
 
          emitConditionalJump(c, cond, then_label, else_label);
 
-         Call(c->m, label, then_label);
+         c->m->label(c->m, then_label);
 
          ExprType et = Zero;
          if (then) {
@@ -793,12 +794,12 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          else {
             codegenError("No then after if");
          }
-         Call(m, jmp, end_label);
-         Call(m, label, else_label);
+         m->jmp(m, end_label);
+         m->label(m, else_label);
          if (els) {
             codegenEmit(c, els, &et, Target_NONE);
          }
-         Call(m, label, end_label);
+         m->label(m, end_label);
       } break;
       case Ast_ITERATION: {
          int loop_id = c->scope->if_count++;
@@ -819,22 +820,22 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          b32 after_is_control = (control->type == Ast_NONE);
          if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
 
-         Call(m, label, loop_label);
+         m->label(m, loop_label);
          if (!after_is_control) {
             emitConditionalJump(c, control, body_label, end_label);
          } else {
             NotImplemented("after is control");
          }
 
-         Call(m, label, body_label);
+         m->label(m, body_label);
          if (body->type != Ast_NONE) {
             emitStatement(c, body, Target_ACCUM);
          }
          if (after->type != Ast_NONE) {
             emitStatement(c, after, Target_ACCUM);
          }
-         Call(m, jmp, loop_label);
-         Call(m, label, end_label);
+         m->jmp(m, loop_label);
+         m->label(m, end_label);
          popScope(c);
       } break;
       default: {
@@ -920,7 +921,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
                param_type = param_type_spec->ctype;
             }
 
-            Location param_loc = Call(c->m, popParameter, &param_type, n_param++, &offset);
+            Location param_loc = c->m->popParameter(c->m, &param_type, n_param++, &offset);
 
             symInsert(&c->scope->symbol_table,
                                         id_str,
@@ -936,11 +937,11 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       // NOTE: The prelude goes after popping parameters, since it's easier to
       // handle them when we know they are at the top of the stack.
-      Call(c->m, functionPrelude, func_name);
+      c->m->functionPrelude(c->m, func_name);
 
       emitCompoundStatement(c, compound, Target_ACCUM);
 
-      Call(c->m, functionEpilogue);
+      c->m->functionEpilogue(c->m);
 
       popScope(c);
 
@@ -989,6 +990,6 @@ codegenTranslationUnit(Codegen* c, AstNode* node) {
       node = node->next;
    }
    popScope(c);
-   Call(c->m, finish);
+   c->m->finish(c->m);
 }
 

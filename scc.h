@@ -109,13 +109,6 @@ typedef size_t sz;
    printf("Not Implemented! -- [%s]\n", message);   \
    Assert(0);
 
-// =====================================
-// ======== Polymorphic methods ========
-// =====================================
-
-#define Poly(name, ...) (*name)(void*, __VA_ARGS__)
-#define Call(obj, method, ...) (obj)->method(obj, __VA_ARGS__)
-
 // ========================
 // ======== String ========
 // ========================
@@ -471,49 +464,48 @@ struct Codegen {
 // =====================================
 // ======== Machine abstraction ========
 // =====================================
-
 struct Machine {
-   void Poly(stackPop, ExprType* et);
-   void Poly(stackPushReg, RegisterEnum reg);
-   void Poly(stackPushImm, ExprType* et, i64 value);
-   void Poly(stackPushOffset, u64 bytes);
+   void (*stackPop)(void*, ExprType* et);
+   void (*stackPushReg)(void*, RegisterEnum reg);
+   void (*stackPushImm)(void*, ExprType* et, i64 value);
+   void (*stackPushOffset)(void*, u64 bytes);
 
-   void Poly(stackAddressInAccum, ExprType* entry);
+   void (*stackAddressInAccum)(void*, ExprType* entry);
 
-   void Poly(addressOf, Location* loc);
+   void (*addressOf)(void*, Location* loc);
 
-   void Poly(functionPrelude, char* func_name);
-   void Poly(pushParameter, u64 n_param, ExprType* etype);
-   Location Poly(popParameter, Ctype* ctype, u64 n_param, u64* offset);
-   void Poly(functionEpilogue);
+   void (*functionPrelude)(void*, char* func_name);
+   void (*pushParameter)(void*, u64 n_param, ExprType* etype);
+   Location (*popParameter)(void*, Ctype* ctype, u64 n_param, u64* offset);
+   void (*functionEpilogue)(void*);
 
-   void Poly(mov, ExprType* dst, ExprType* src);
-   void Poly(movAccum, ExprType* dst, Token* rhs_tok);
+   void (*mov)(void*, ExprType* dst, ExprType* src);
+   void (*movAccum)(void*, ExprType* dst, Token* rhs_tok);
 
-   void Poly(add, ExprType* dst, ExprType* src);
-   void Poly(sub, ExprType* dst, ExprType* src);
-   void Poly(mul, ExprType* dst, ExprType* src);
-   void Poly(div, ExprType* dst, ExprType* src);
-   void Poly(cmp, ExprType* dst, ExprType* src);
-   void Poly(cmpSetAccum, AstType type);
+   void (*add)(void*, ExprType* dst, ExprType* src);
+   void (*sub)(void*, ExprType* dst, ExprType* src);
+   void (*mul)(void*, ExprType* dst, ExprType* src);
+   void (*div)(void*, ExprType* dst, ExprType* src);
+   void (*cmp)(void*, ExprType* dst, ExprType* src);
+   void (*cmpSetAccum)(void*, AstType type);
 
-   void Poly(cmpJmp, AstType ast_type, ExprType* type, char* then, char* els);
-   void Poly(testAndJump, u32 bits, char* then, char* els);
-   void Poly(jmp, char* label);
+   void (*cmpJmp)(void*, AstType ast_type, ExprType* type, char* then, char* els);
+   void (*testAndJump)(void*, u32 bits, char* then, char* els);
+   void (*jmp)(void*, char* label);
 
-   void Poly(label, char* label);
-   void Poly(call, char* func);
+   void (*label)(void*, char* label);
+   void (*call)(void*, char* func);
 
-   void Poly(finish);
+   void (*finish)(void*);
 
    // Registers
 
-   ExprType* Poly(immediateFromToken, Token* tok);
+   ExprType* (*immediateFromToken)(void*, Token* tok);
 
-   ExprType* Poly(helper, int type /*Ctype.type*/, u32 bits);
-   ExprType* Poly(helperC, Ctype c);
-   ExprType* Poly(accum, int type /*Ctype.type*/, u32 bits);
-   ExprType* Poly(accumC, Ctype c);
+   ExprType* (*helper)(void*, int type /*Ctype.type*/, u32 bits);
+   ExprType* (*helperC)(void*, Ctype c);
+   ExprType* (*accum)(void*, int type /*Ctype.type*/, u32 bits);
+   ExprType* (*accumC)(void*, Ctype c);
 };
 
 Machine* makeMachineX64(Arena* a, MachineConfigFlags mflags);
