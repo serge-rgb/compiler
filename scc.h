@@ -455,6 +455,8 @@ struct Codegen {
    char*       file_name;
    u64         last_line_number;
 
+   AstNode*    current_function;
+
    Machine*    m;
    // Constants
    AstNode* one;

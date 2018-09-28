@@ -251,21 +251,21 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
 }
 
 b32
-typesAreCompatible(Codegen* c, Ctype a, Ctype b) {
+typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
    b32 compatible = false;
-   if (a.type == b.type) {
-      if (a.type == Type_POINTER) {
+   if (into.type == from.type) {
+      if (into.type == Type_POINTER) {
          compatible = typesAreCompatible(c,
-                                         a.pointer.pointee->c,
-                                         b.pointer.pointee->c);
+                                         into.pointer.pointee->c,
+                                         from.pointer.pointee->c);
       }
       else {
-         switch (a.type) {
+         switch (into.type) {
             case Type_AGGREGATE: {
                // TODO: Anonymous structs
-               if ((a.aggr.tag && b.aggr.tag)) {
-                  ExprType* aggr_a = findTag(c, a.aggr.tag);
-                  ExprType* aggr_b = findTag(c, b.aggr.tag);
+               if ((into.aggr.tag && from.aggr.tag)) {
+                  ExprType* aggr_a = findTag(c, into.aggr.tag);
+                  ExprType* aggr_b = findTag(c, from.aggr.tag);
                   // TODO: We could return here by just having the same tag. C
                   // spec says (6.7.2) that when two types have the same tag,
                   // defined in different translation units, they must have:
@@ -301,11 +301,17 @@ typesAreCompatible(Codegen* c, Ctype a, Ctype b) {
       }
    }
    else {
-      if (a.type == Type_POINTER || b.type == Type_POINTER) {
+      if (into.type == Type_POINTER || from.type == Type_POINTER) {
          compatible = false;
       }
       else {
-         NotImplemented("Compatibility rules");
+         if ((isIntegerType(&into) || isRealType(&into)) &&
+             (isIntegerType(&from) || isRealType(&from))) {
+            compatible = true;
+         }
+         else {
+            NotImplemented("Compatibility rules");
+         }
       }
    }
    return compatible;
@@ -755,6 +761,11 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 }
 
 void
+maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target) {
+   NotImplemented("TODO: continue here.");
+}
+
+void
 emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
    Machine* m = c->m;
    switch (stmt->type) {
@@ -763,9 +774,19 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       } break;
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
+
          if (stmt->child) {
             ExprType et = {0};
             emitExpression(c, stmt->child, &et, Target_ACCUM);
+            Ctype ret_type = funcReturnType(c->current_function);
+
+            if (!typesAreCompatible(c, et.c, ret_type)) {
+               codegenError("Trying to return from a function with a non-compatible type.");
+            }
+
+            maybeEmitTypeConversion(c,
+                                    &et,
+                                    ret_type, Target_ACCUM);
             m->jmp(m, ".func_end");
          }
       } break;
@@ -877,6 +898,8 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    AstNode* compound    = declarator->next;
 
    if (specifier && declarator && compound) {
+      c->current_function = node;
+
       char *func_name = declarator->child->tok->cast.string;
 
       ExprType* entry = findSymbol(c, func_name);
@@ -945,6 +968,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       popScope(c);
 
+      c->current_function = NULL;
       // TODO: Remove reference to MachineX64
       Assert (((MachineX64*)c->m)->stack_offset == 0);
    }
