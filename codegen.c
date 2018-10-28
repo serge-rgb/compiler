@@ -131,6 +131,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
    ExprType* entry = findSymbol(c, id_str);
 
    expr_type->c = entry->c;
+   expr_type->location = entry->location;
 
    if (!entry) {
       codegenError("Use of undeclared identifier %s", node->tok->cast.string);
@@ -581,8 +582,16 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                m->cmp(m, accum, helper);
                m->cmpSetAccum(m, node->type);
 
-               if (target == Target_STACK) {
-                  m->stackPushReg(m, accum->location.reg);
+               if (!typesAreCompatible(c, left_type.c, right_type.c)) {
+                  codegenError("Incompatible types in binary expression");
+               }
+
+               expr_type->c = left_type.c;
+               if (target == Target_ACCUM) {
+                  expr_type->location = accum->location;
+               }
+               else if (target == Target_STACK) {
+                  expr_type->location = m->stackPushReg(m, accum->location.reg);
                }
             }
             else {
@@ -761,7 +770,11 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
 void
 maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target) {
-   if (value->c.type == Type_FLOAT &&
+   if (value->c.type == target_type.type
+       || (isIntegerType(&value->c) && isIntegerType(&target_type))) {
+      // Nothing to do
+   }
+   else if (value->c.type == Type_FLOAT &&
        target_type.type == Type_INT) {
       if (target != Target_NONE) {
          c->m->convertFloatToInt(c->m, value->location);
