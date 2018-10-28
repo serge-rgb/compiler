@@ -795,6 +795,11 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
                               locationString(m, x64AccumInt(bits)->location, bits));
 
          }
+         else if (isRealType(&dst->c)) {
+            instructionPrintf("movss %s, %s",
+                              locationString(m, dst->location, bits),
+                              locationString(m, src->location, bits));
+         }
          else {
             instructionPrintf("mov %s, %s",
                               locationString(m, dst->location, bits),
