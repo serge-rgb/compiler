@@ -10,9 +10,9 @@ struct MachineX64 {
 } typedef MachineX64;
 
 void        x64Mov(MachineX64* m, ExprType* dst, ExprType* src);
-void        x64StackPushReg(MachineX64* m, RegisterEnum reg);
-void        x64StackPushImm(MachineX64* m, ExprType* et, i64 val);
-void        x64StackPushOffset(MachineX64* m, u64 bytes);
+Location        x64StackPushReg(MachineX64* m, RegisterEnum reg);
+Location        x64StackPushImm(MachineX64* m, ExprType* et, i64 val);
+Location        x64StackPushOffset(MachineX64* m, u64 bytes);
 ExprType*   x64ImmediateInt(u64 value);
 ExprType*   x64Accum64(int type /*Ctype.type*/ );
 ExprType*   x64Helper64(int type /*Ctype.type*/ );
@@ -909,14 +909,20 @@ x64Call(MachineX64* m, char* label) {
    instructionPrintf("call %s", label);
 }
 
-void
+Location
 x64StackPushReg(MachineX64* m, RegisterEnum reg) {
    instructionPrintf("push %s", locationString(m, registerLocation(reg), 64));
+   Location location = (Location) {
+      .type = Location_STACK,
+      .offset = m->stack_offset,
+   };
+
    m->stack_offset += 8;
    bufPush(m->s_stack, (StackValue){ .type = Stack_QWORD });
+   return location;
 }
 
-void
+Location
 x64StackPushImm(MachineX64* m, ExprType* et, i64 val) {
    instructionPrintf("push %d", val);
    m->stack_offset += 8;
@@ -925,15 +931,22 @@ x64StackPushImm(MachineX64* m, ExprType* et, i64 val) {
       .type = Location_STACK,
       .reg = m->stack_offset,
    };
+   return et->location;
 }
 
-void
+Location
 x64StackPushOffset(MachineX64* m, u64 bytes) {
+   Location location = (Location) {
+      .type = Location_STACK,
+      .offset = m->stack_offset,
+   };
+
    Assert(bytes);
    instructionPrintf("sub rsp, %d", bytes);
    m->stack_offset += bytes;
    StackValue val = { .type = Stack_OFFSET, .offset = bytes };
    bufPush(m->s_stack, val);
+   return location;
 }
 
 void
@@ -996,6 +1009,17 @@ x64AddressOf(MachineX64* m, Location* loc) {
    }
 }
 
+
+void
+x64ConvertFloatToInt(MachineX64* machine, Location from) {
+   if (from.type == Location_REGISTER) {
+      char* from_str = g_registers[from.reg].reg;
+      instructionPrintf("cvtss2si rax, %s", from_str);
+   }
+   else {
+      NotImplemented("X64 conversion instruction")
+   }
+}
 
 
 Machine*
@@ -1073,6 +1097,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
 
    m->finish = x64Finish;
 
+   m->convertFloatToInt = x64ConvertFloatToInt;
 
    return m;
 }

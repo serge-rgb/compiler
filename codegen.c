@@ -124,45 +124,44 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
 
 void
 emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+   Assert(expr_type);
+
    Machine* m = c->m;
    char* id_str = node->tok->cast.string;
    ExprType* entry = findSymbol(c, id_str);
+
+   expr_type->c = entry->c;
 
    if (!entry) {
       codegenError("Use of undeclared identifier %s", node->tok->cast.string);
    }
 
-   Location loc = entry->location;
-
    if (typeBits(&entry->c) > 64) {
       if (target != Target_NONE) {
          m->stackAddressInAccum(m, entry);
          if (target == Target_STACK) {
+            ExprType* accum = m->accumC(m, expr_type->c);
             m->stackPushReg(m,
-                            m->accumC(m, expr_type->c)->location.reg);
+                            accum->location.reg);
+            expr_type->location = accum->location;
          }
       }
 
    }
    else {
       if (target != Target_NONE) {
-         ExprType reg = {
-            .c = entry->c,
-            .location = registerLocation(Reg_RAX)
-         };
-         m->mov(m, &reg, entry);
+         ExprType* accum = m->accumC(m, entry->c);
+         m->mov(m, accum, entry);
 
          if (target == Target_STACK) {
-            m->stackPushReg(m, Reg_RAX);
+            Location loc = m->stackPushReg(m, Reg_RAX);
+            expr_type->location = loc;
+         }
+         else if (target == Target_ACCUM) {
+            expr_type->location = accum->location;
          }
       }
    }
-
-   if (expr_type) {
-      expr_type->c = entry->c;
-      expr_type->location = loc;
-   }
-
 }
 
 void
@@ -762,7 +761,18 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
 void
 maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target) {
-   NotImplemented("TODO: continue here.");
+   if (value->c.type == Type_FLOAT &&
+       target_type.type == Type_INT) {
+      if (target != Target_NONE) {
+         c->m->convertFloatToInt(c->m, value->location);
+         if (target == Target_STACK) {
+            c->m->stackPushReg(c->m, c->m->accum(c->m, target_type.type, typeBits(&target_type))->location.reg);
+         }
+      }
+   }
+   else {
+      NotImplemented("type conversion.");
+   }
 }
 
 void

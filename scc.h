@@ -467,47 +467,51 @@ struct Codegen {
 // ======== Machine abstraction ========
 // =====================================
 struct Machine {
-   void (*stackPop)(void*, ExprType* et);
-   void (*stackPushReg)(void*, RegisterEnum reg);
-   void (*stackPushImm)(void*, ExprType* et, i64 value);
-   void (*stackPushOffset)(void*, u64 bytes);
+   void (*stackPop)(void* machine, ExprType* et);
+   Location (*stackPushReg)(void* machine, RegisterEnum reg);
+   Location (*stackPushImm)(void* machine, ExprType* et, i64 value);
+   Location (*stackPushOffset)(void* machine, u64 bytes);
 
-   void (*stackAddressInAccum)(void*, ExprType* entry);
+   void (*stackAddressInAccum)(void* machine, ExprType* entry);
 
-   void (*addressOf)(void*, Location* loc);
+   void (*addressOf)(void* machine, Location* loc);
 
-   void (*functionPrelude)(void*, char* func_name);
-   void (*pushParameter)(void*, u64 n_param, ExprType* etype);
-   Location (*popParameter)(void*, Ctype* ctype, u64 n_param, u64* offset);
-   void (*functionEpilogue)(void*);
+   void (*functionPrelude)(void* machine, char* func_name);
+   void (*pushParameter)(void* machine, u64 n_param, ExprType* etype);
+   Location (*popParameter)(void* machine, Ctype* ctype, u64 n_param, u64* offset);
+   void (*functionEpilogue)(void* machine);
 
-   void (*mov)(void*, ExprType* dst, ExprType* src);
-   void (*movAccum)(void*, ExprType* dst, Token* rhs_tok);
+   void (*mov)(void* machine, ExprType* dst, ExprType* src);
+   void (*movAccum)(void* machine, ExprType* dst, Token* rhs_tok);
 
-   void (*add)(void*, ExprType* dst, ExprType* src);
-   void (*sub)(void*, ExprType* dst, ExprType* src);
-   void (*mul)(void*, ExprType* dst, ExprType* src);
-   void (*div)(void*, ExprType* dst, ExprType* src);
-   void (*cmp)(void*, ExprType* dst, ExprType* src);
-   void (*cmpSetAccum)(void*, AstType type);
+   void (*add)(void* machine, ExprType* dst, ExprType* src);
+   void (*sub)(void* machine, ExprType* dst, ExprType* src);
+   void (*mul)(void* machine, ExprType* dst, ExprType* src);
+   void (*div)(void* machine, ExprType* dst, ExprType* src);
+   void (*cmp)(void* machine, ExprType* dst, ExprType* src);
+   void (*cmpSetAccum)(void* machine, AstType type);
 
-   void (*cmpJmp)(void*, AstType ast_type, ExprType* type, char* then, char* els);
-   void (*testAndJump)(void*, u32 bits, char* then, char* els);
-   void (*jmp)(void*, char* label);
+   void (*cmpJmp)(void* machine, AstType ast_type, ExprType* type, char* then, char* els);
+   void (*testAndJump)(void* machine, u32 bits, char* then, char* els);
+   void (*jmp)(void* machine, char* label);
 
-   void (*label)(void*, char* label);
-   void (*call)(void*, char* func);
+   void (*label)(void* machine, char* label);
+   void (*call)(void* machine, char* func);
 
-   void (*finish)(void*);
+   void (*finish)(void* machine);
 
    // Registers
 
-   ExprType* (*immediateFromToken)(void*, Token* tok);
+   ExprType* (*immediateFromToken)(void* machine, Token* tok);
 
-   ExprType* (*helper)(void*, int type /*Ctype.type*/, u32 bits);
-   ExprType* (*helperC)(void*, Ctype c);
-   ExprType* (*accum)(void*, int type /*Ctype.type*/, u32 bits);
-   ExprType* (*accumC)(void*, Ctype c);
+   ExprType* (*helper)(void* machine, int type /*Ctype.type*/, u32 bits);
+   ExprType* (*helperC)(void* machine, Ctype c);
+   ExprType* (*accum)(void* machine, int type /*Ctype.type*/, u32 bits);
+   ExprType* (*accumC)(void* machine, Ctype c);
+
+
+   // Conversion
+   void (*convertFloatToInt)(void* machine, Location from);
 };
 
 Machine* makeMachineX64(Arena* a, MachineConfigFlags mflags);
