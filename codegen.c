@@ -165,6 +165,97 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
    }
 }
 
+b32
+typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
+   b32 compatible = false;
+   if (into.type == from.type) {
+      if (into.type == Type_POINTER) {
+         compatible = typesAreCompatible(c,
+                                         into.pointer.pointee->c,
+                                         from.pointer.pointee->c);
+      }
+      else {
+         switch (into.type) {
+            case Type_AGGREGATE: {
+               // TODO: Anonymous structs
+               if ((into.aggr.tag && from.aggr.tag)) {
+                  ExprType* aggr_a = findTag(c, into.aggr.tag);
+                  ExprType* aggr_b = findTag(c, from.aggr.tag);
+                  // TODO: We could return here by just having the same tag. C
+                  // spec says (6.7.2) that when two types have the same tag,
+                  // defined in different translation units, they must have:
+                  //    - The same number of parameters.
+                  //    - Every corresponding parameter is compatible.
+                  if (aggr_a == aggr_b) {
+                     compatible = true;
+                  }
+                  // SPEC: We deviate from the spec by always considering two
+                  // structs with the same layout as compatible.
+                  else {
+                     u64 n_a = bufCount(aggr_a->c.aggr.s_members);
+                     u64 n_b = bufCount(aggr_b->c.aggr.s_members);
+                     if (n_a == n_b) {
+                        compatible = true;
+                        for (u64 i = 0; i < n_a; ++i) {
+                           // TODO: Alignment check.
+                           if (!typesAreCompatible(c,
+                                                   *aggr_a->c.aggr.s_members[i].ctype,
+                                                   *aggr_b->c.aggr.s_members[i].ctype)) {
+                              compatible = false;
+                              break;
+                           }
+                        }
+                     }
+                  }
+               }
+            } break;
+            default: {
+               compatible = true;
+            } break;
+         }
+      }
+   }
+   else {
+      if (into.type == Type_POINTER || from.type == Type_POINTER) {
+         compatible = false;
+      }
+      else {
+         if ((isIntegerType(&into) || isRealType(&into)) &&
+             (isIntegerType(&from) || isRealType(&from))) {
+            compatible = true;
+         }
+         else {
+            NotImplemented("Compatibility rules");
+         }
+      }
+   }
+   return compatible;
+}
+
+void
+maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target, char* incompatibleError) {
+   if (!typesAreCompatible(c, target_type, value->c)) {
+      codegenError(incompatibleError);
+   }
+
+   if (value->c.type == target_type.type
+       || (isIntegerType(&value->c) && isIntegerType(&target_type))) {
+      // Nothing to do
+   }
+   else if (value->c.type == Type_FLOAT &&
+            target_type.type == Type_INT) {
+      if (target != Target_NONE) {
+         c->m->convertFloatToInt(c->m, value->location);
+         if (target == Target_STACK) {
+            c->m->stackPushReg(c->m, c->m->accum(c->m, target_type.type, typeBits(&target_type))->location.reg);
+         }
+      }
+   }
+   else {
+      NotImplemented("type conversion.");
+   }
+}
+
 void
 emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    Machine* m = c->m;
@@ -248,73 +339,6 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
       expr_type->c = *(member->ctype);
       expr_type->location = address;
    }
-}
-
-b32
-typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
-   b32 compatible = false;
-   if (into.type == from.type) {
-      if (into.type == Type_POINTER) {
-         compatible = typesAreCompatible(c,
-                                         into.pointer.pointee->c,
-                                         from.pointer.pointee->c);
-      }
-      else {
-         switch (into.type) {
-            case Type_AGGREGATE: {
-               // TODO: Anonymous structs
-               if ((into.aggr.tag && from.aggr.tag)) {
-                  ExprType* aggr_a = findTag(c, into.aggr.tag);
-                  ExprType* aggr_b = findTag(c, from.aggr.tag);
-                  // TODO: We could return here by just having the same tag. C
-                  // spec says (6.7.2) that when two types have the same tag,
-                  // defined in different translation units, they must have:
-                  //    - The same number of parameters.
-                  //    - Every corresponding parameter is compatible.
-                  if (aggr_a == aggr_b) {
-                     compatible = true;
-                  }
-                  // SPEC: We deviate from the spec by always considering two
-                  // structs with the same layout as compatible.
-                  else {
-                     u64 n_a = bufCount(aggr_a->c.aggr.s_members);
-                     u64 n_b = bufCount(aggr_b->c.aggr.s_members);
-                     if (n_a == n_b) {
-                        compatible = true;
-                        for (u64 i = 0; i < n_a; ++i) {
-                           // TODO: Alignment check.
-                           if (!typesAreCompatible(c,
-                                                   *aggr_a->c.aggr.s_members[i].ctype,
-                                                   *aggr_b->c.aggr.s_members[i].ctype)) {
-                              compatible = false;
-                              break;
-                           }
-                        }
-                     }
-                  }
-               }
-            } break;
-            default: {
-               compatible = true;
-            } break;
-         }
-      }
-   }
-   else {
-      if (into.type == Type_POINTER || from.type == Type_POINTER) {
-         compatible = false;
-      }
-      else {
-         if ((isIntegerType(&into) || isRealType(&into)) &&
-             (isIntegerType(&from) || isRealType(&from))) {
-            compatible = true;
-         }
-         else {
-            NotImplemented("Compatibility rules");
-         }
-      }
-   }
-   return compatible;
 }
 
 void emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target); // Forward decl.
@@ -582,11 +606,15 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                m->cmp(m, accum, helper);
                m->cmpSetAccum(m, node->type);
 
-               if (!typesAreCompatible(c, left_type.c, right_type.c)) {
-                  codegenError("Incompatible types in binary expression");
-               }
-
+               Ctype target_type = arithmeticTypeConversion(left_type.c, right_type.c);
                expr_type->c = left_type.c;
+
+               maybeEmitTypeConversion(c,
+                                       &left_type,
+                                       target_type, 
+                                       Target_ACCUM, 
+                                       "Incompatible types in binary expression");
+
                if (target == Target_ACCUM) {
                   expr_type->location = accum->location;
                }
@@ -764,27 +792,6 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else {
          // TODO: scc initializes to zero by default.
       }
-
-   }
-}
-
-void
-maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target) {
-   if (value->c.type == target_type.type
-       || (isIntegerType(&value->c) && isIntegerType(&target_type))) {
-      // Nothing to do
-   }
-   else if (value->c.type == Type_FLOAT &&
-       target_type.type == Type_INT) {
-      if (target != Target_NONE) {
-         c->m->convertFloatToInt(c->m, value->location);
-         if (target == Target_STACK) {
-            c->m->stackPushReg(c->m, c->m->accum(c->m, target_type.type, typeBits(&target_type))->location.reg);
-         }
-      }
-   }
-   else {
-      NotImplemented("type conversion.");
    }
 }
 
@@ -803,13 +810,12 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             emitExpression(c, stmt->child, &et, Target_ACCUM);
             Ctype ret_type = funcReturnType(c->current_function);
 
-            if (!typesAreCompatible(c, et.c, ret_type)) {
-               codegenError("Trying to return from a function with a non-compatible type.");
-            }
-
             maybeEmitTypeConversion(c,
                                     &et,
-                                    ret_type, Target_ACCUM);
+                                    ret_type, 
+                                    Target_ACCUM,
+                                    "Trying to return from a function with a non-compatible type.");
+
             m->jmp(m, ".func_end");
          }
       } break;

@@ -169,3 +169,8 @@ paramType(Ctype* out, AstNode* node) {
    }
 }
 
+Ctype
+arithmeticTypeConversion(Ctype a, Ctype b)
+{
+   return a;
+}

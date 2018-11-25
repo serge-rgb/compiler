@@ -10,4 +10,7 @@ tests/*.asm
 *.VC.*
 *.exp
 *.sln
-
+*.obj
+*.exe
+*.pdb
+*.ilk
