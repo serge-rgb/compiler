@@ -232,8 +232,9 @@ typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
    return compatible;
 }
 
-void
+b32
 maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target, char* incompatibleError) {
+   b32 didConversion = true;
    if (!typesAreCompatible(c, target_type, value->c)) {
       codegenError(incompatibleError);
    }
@@ -241,6 +242,7 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
    if (value->c.type == target_type.type
        || (isIntegerType(&value->c) && isIntegerType(&target_type))) {
       // Nothing to do
+      didConversion = false;
    }
    else if (value->c.type == Type_FLOAT &&
             target_type.type == Type_INT) {
@@ -254,6 +256,7 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
    else {
       NotImplemented("type conversion.");
    }
+   return didConversion;
 }
 
 void
@@ -599,21 +602,32 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                codegenEmit(c, right, &right_type, Target_STACK);
                codegenEmit(c, left, &left_type, Target_ACCUM);
 
-               ExprType* accum = m->accumC(m, left_type.c);
-               ExprType* helper = m->helperC(m, right_type.c);
-
-               m->stackPop(m, helper);
-               m->cmp(m, accum, helper);
-               m->cmpSetAccum(m, node->type);
-
                Ctype target_type = arithmeticTypeConversion(left_type.c, right_type.c);
-               expr_type->c = left_type.c;
+
+               ExprType* helper = m->helperC(m, right_type.c);
+               m->stackPop(m, helper);
+               
+               if (maybeEmitTypeConversion(c,
+                                          &right_type,
+                                          target_type, 
+                                          Target_STACK, 
+                                          "Incompatible types in binary expression")) {
+                  helper = m->helperC(m, target_type);
+                  m->stackPop(m, helper);
+               }
 
                maybeEmitTypeConversion(c,
                                        &left_type,
                                        target_type, 
                                        Target_ACCUM, 
                                        "Incompatible types in binary expression");
+
+               ExprType* accum = m->accumC(m, target_type);
+
+               m->cmp(m, accum, helper);
+               m->cmpSetAccum(m, node->type);
+
+               expr_type->c = target_type;
 
                if (target == Target_ACCUM) {
                   expr_type->location = accum->location;

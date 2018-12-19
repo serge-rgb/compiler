@@ -172,5 +172,16 @@ paramType(Ctype* out, AstNode* node) {
 Ctype
 arithmeticTypeConversion(Ctype a, Ctype b)
 {
-   return a;
+   Ctype result = {};
+
+   // 6.3.14. Real and integer. Use integer type
+   if (isRealType(&a) && isIntegerType(&b)) {
+      result = b;
+   }
+
+   if (isRealType(&b) && isIntegerType(&a)) {
+      result = a;
+   }
+
+   return result;
 }
