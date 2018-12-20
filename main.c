@@ -172,7 +172,6 @@ main(int argc, char** argv) {
             printf("Test file %s\n", test_files[i]);
             processSingleFile(test_files[i]);
 
-
             char* trimmed = cloneString(&temp_arena, test_files[i]);
             size_t len = strlen(trimmed);
             for (i64 i = len-1; i >= 1; --i) {
@@ -182,9 +181,9 @@ main(int argc, char** argv) {
                }
             }
 
-            char* exe = appendString(&temp_arena, trimmed, ".exe");
+            char* exe = platformOutputBinaryFilename(&temp_arena, trimmed);
 
-            if (platformRunProcess(&exe, 1, 1) != Ok) {
+             if (platformRunProcess(&exe, 1, 1) != Ok) {
                fprintf(stderr, "Test failed\n");
                Break;
                // Run it again, probably under a debugger.

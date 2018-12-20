@@ -169,18 +169,29 @@ paramType(Ctype* out, AstNode* node) {
    }
 }
 
+b32
+ctypeEquals(Ctype a, Ctype b) {
+   b32 equals = (a.type == b.type);
+   return equals;
+}
+
 Ctype
 arithmeticTypeConversion(Ctype a, Ctype b)
 {
-   Ctype result = {};
+   Ctype result = {0};
 
+   if (ctypeEquals(a, b)) {
+      result = a;
+   }
    // 6.3.14. Real and integer. Use integer type
-   if (isRealType(&a) && isIntegerType(&b)) {
+   else if (isRealType(&a) && isIntegerType(&b)) {
       result = b;
    }
-
-   if (isRealType(&b) && isIntegerType(&a)) {
+   else if (isRealType(&b) && isIntegerType(&a)) {
       result = a;
+   }
+   else if (isIntegerType(&a) && isIntegerType(&b)) {
+      NotImplemented("Integer promotion rules");
    }
 
    return result;

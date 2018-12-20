@@ -28,55 +28,59 @@ extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format
 #define PlatformPrintString(...) snprintf(__VA_ARGS__)
 #define PlatformBreak __asm ("int $3")
 
+ErrorCode
+platformRunProcess(char** args, sz n_args, i32 expected_return) {
+   ErrorCode ret = Fail;
+   int pid = fork();
 
+   int status = -1;
+   if (pid == 0) {
+      execve(args[0], args, NULL);
+      exit(42);
+   }
+   else if (pid == wait(NULL) &&
+            wait(&status) &&
+            WIFEXITED(status)) {
+      int exit_status = WEXITSTATUS(status);
+      if (exit_status == expected_return) {
+         ret = Ok;
+      }
+   }
+   return ret;
+}
 
 ErrorCode
 platformCompileAndLinkAsmFile(char* filename_without_extension) {
+   Break;
    ErrorCode ret = Ok;
    // Call nasm from here.
    char asm_file[PathMax] = {0};
    snprintf(asm_file, PathMax, "%s.asm", filename_without_extension);
    char obj_file[PathMax] = {0};
    snprintf(obj_file, PathMax, "%s.o", filename_without_extension);
-   pid_t pid = fork();
    printf("Running nasm\n");
-   int nasm_status = 0;
-   if (pid == 0) {
-      char* nasm_args[] = { "nasm", "-f", "macho64", asm_file };
-      // printargs(nasm_args, ArrayCount(nasm_args));
-      execve("/usr/local/bin/nasm", nasm_args, NULL);
-   }
-   else if (pid == wait(&nasm_status)) {
-      if (WIFEXITED(nasm_status) && WEXITSTATUS(nasm_status) == 0) {
-         printf("Running ld\n");
-         char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", filename_without_extension };
-         pid = fork();
-         if (pid == 0) {
+   char* nasm_args[] = { "nasm", "-Znasm_output", "-f", "macho64", asm_file, 0 };
+   if (Ok == platformRunProcess(nasm_args, ArrayCount(nasm_args), 0)) {
+      printf("Running ld\n");
+      char* ld_args[] = { "ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", filename_without_extension };
+      int pid = fork();
+      if (pid == 0) {
             // printargs(ld_args, ArrayCount(ld_args));
-            execve("/usr/bin/ld", ld_args, NULL);
-         }
-         else if (pid == wait(NULL)) {
-            printf("Running %s\n", filename_without_extension);
-            char* out_args[] = { filename_without_extension };
-            if (fork() == 0) {
-               execve(filename_without_extension, out_args, NULL);
-            }
-            int status = 0;
-            wait(&status);
-            if (WIFEXITED(status)) {
-               printf("Returned status: %d\n", WEXITSTATUS(status));
-               if (WEXITSTATUS(status) != 1) {
-                  printf("ERROR: test failed.\n");
-                  exit(1);
-               }
-            }
-            else {
-               printf("Program exited incorrectly.");
-            }
-         }
-      } else {
-         fprintf(stderr, "nasm failed\n");
+         execve("ld", ld_args, NULL);
+         exit(0);
       }
+      else if (pid == wait(NULL)) {
+         int status = 0;
+         wait(&status);
+         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            printf("ld finished successfully\n");
+         }
+         else {
+            printf("ld failed with code %d", WEXITSTATUS(status));
+         }
+      }
+   } else {
+       fprintf(stderr, "nasm failed\n");
    }
    return ret;
 }
@@ -94,7 +98,13 @@ platformListDirectory(char*** s_out_files, char* dirname, b32 (*filter)(char*)) 
          char* name = entry->d_name;
          if (name[0] != '.') {
             if (filter(name)) {
-               bufPush(*s_out_files, getString(name));
+               char file[PathMax] = Zero; {
+                  strncat(file, dirname, PathMax);
+                  strncat(file, "/", PathMax);
+                  strncat(file, name, PathMax);
+               }
+
+               bufPush(*s_out_files, getString(file));
             }
          }
       }
@@ -103,7 +113,7 @@ platformListDirectory(char*** s_out_files, char* dirname, b32 (*filter)(char*)) 
    return err;
 }
 
-ErrorCode
-platformRunProcess(char** args, sz n_args, i32 expected_return) {
-   return Fail;  // TODO: Fix this :)
+char*
+platformOutputBinaryFilename(Arena* arena, char* fname_without_extension) {
+   return fname_without_extension;
 }
