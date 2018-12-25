@@ -172,6 +172,7 @@ paramType(Ctype* out, AstNode* node) {
 b32
 ctypeEquals(Ctype a, Ctype b) {
    b32 equals = (a.type == b.type);
+   // TODO: What about const?
    return equals;
 }
 

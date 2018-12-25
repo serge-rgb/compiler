@@ -10,9 +10,9 @@ struct MachineX64 {
 } typedef MachineX64;
 
 void        x64Mov(MachineX64* m, ExprType* dst, ExprType* src);
-Location        x64StackPushReg(MachineX64* m, RegisterEnum reg);
-Location        x64StackPushImm(MachineX64* m, ExprType* et, i64 val);
-Location        x64StackPushOffset(MachineX64* m, u64 bytes);
+Location    x64StackPushReg(MachineX64* m, RegisterEnum reg);
+Location    x64StackPushImm(MachineX64* m, ExprType* et, i64 val);
+Location    x64StackPushOffset(MachineX64* m, u64 bytes);
 ExprType*   x64ImmediateInt(u64 value);
 ExprType*   x64Accum64(int type /*Ctype.type*/ );
 ExprType*   x64Helper64(int type /*Ctype.type*/ );
@@ -44,7 +44,6 @@ Register g_registers[] = {
    { .reg = "xmm0", .reg_32 = "xmm0", .reg_8 = NULL },
    { .reg = "xmm1", .reg_32 = "xmm1", .reg_8 = NULL },
 };
-
 
 void
 codegenError(char* msg, ...) {
@@ -255,6 +254,11 @@ x64StackPop(MachineX64* m, ExprType* et) {
    }
 }
 
+typedef enum
+{
+   Param_POINTER
+} SystemVParamClass;
+
 void
 x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
    if (isRealType(&etype->c)) {
@@ -262,9 +266,10 @@ x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
    }
 
    if ((m->config & Config_TARGET_LINUX) || (m->config & Config_TARGET_MACOS)) {
-      RegisterEnum r = Reg_RDI;
-      if (n_param < 6) {
-         if (typeBits(&etype->c) <= 64) {
+      Location loc = {0};
+      if (isIntegerType(&etype->c)) {
+         if (n_param < 6) {
+            RegisterEnum r = Reg_RDI;
             switch (n_param) {
                case 0: { } break;
                case 1: { r = Reg_RSI; } break;
@@ -273,17 +278,29 @@ x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
                case 4: { r = Reg_R8;  } break;
                case 5: { r = Reg_R9;  } break;
             }
+
+            loc = registerLocation(r);
          }
-         ExprType reg = {
-            .c = etype->c,
-            .location = registerLocation(r),
-         };
-         Break;
-         x64Mov(m, &reg, x64Accum64(etype->c.type));
+         else {
+            NotImplemented("Pass integer param on stack");
+         }
       }
       else {
-         NotImplemented("More params.");
+         NotImplemented("Non integer types");
       }
+      ExprType reg = {
+         .c = etype->c,
+         .location = loc,
+      };
+      x64Mov(m, &reg, etype);
+      // if (typeBits(&etype->c) <= 64) {
+      //    ExprType reg = {
+      //       .c = etype->c,
+      //       .location = registerLocation(r),
+      //    };
+      //    x64Mov(m, &reg, x64Accum64(etype->c.type));
+      // } else {
+      // }
    }
    else {
       // Windows x64 calling convention:
@@ -309,7 +326,8 @@ x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
          }
          else {
             NotImplemented("more than 4 params");
-         }      }
+         }
+      }
       else {
          x64StackPushOffset(m, typeBits(&etype->c) / 8);
          loc.type = Location_STACK;
@@ -957,7 +975,7 @@ x64StackPushOffset(MachineX64* m, u64 bytes) {
 void
 x64Finish(MachineX64* m) {
    char* end =
-      "int 3\n"
+      //"int 3\n"
       "ret\n";
    fwrite(end, 1, strlen(end), g_asm);
    fclose(g_asm);
@@ -1034,6 +1052,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
    m64->config = mflags;
 
    char* prelude =
+   // TODO: unix / win32 targets
 #ifdef _WIN32
       "extern ExitProcess\n"
 #else
