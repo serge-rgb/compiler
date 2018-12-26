@@ -49,9 +49,19 @@ platformRunProcess(char** args, sz n_args, i32 expected_return) {
    else {
       pid_t wait_pid  = waitpid(pid, &status, 0);
       if (wait_pid != pid) {
-         fprintf(stderr, "Child process exit error\n");
-         handleErrno(errno);
-         ret = Fail;
+         int error = errno;
+         if (error == EINTR) {
+            wait_pid = waitpid(pid, &status, 0);
+            if (wait_pid == pid) {
+               printf("Retried after process got EINTR signal.\n");
+               ret = Ok;
+            }
+         }
+         else {
+            fprintf(stderr, "Child process exit error\n");
+            handleErrno(error);
+            ret = Fail;
+         }
       }
       else {
          if (WIFEXITED(status)) {

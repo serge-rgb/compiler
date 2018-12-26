@@ -1082,46 +1082,51 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
 
    setupVolatility(m64);
 
-   // Function pointers
    Machine* m = &m64->machine;
-   m->stackPop = x64StackPop;
 
+   #pragma clang diagnostic push
+   #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+   {
+      // Function pointers
+      m->stackPop = x64StackPop;
 
-   m->immediateFromToken = x64ImmediateFromToken;
+      m->immediateFromToken = x64ImmediateFromToken;
 
-   m->stackPop = x64StackPop;
-   m->stackPushReg = x64StackPushReg;
-   m->stackPushImm = x64StackPushImm;
-   m->stackPushOffset = x64StackPushOffset;
-   m->stackAddressInAccum = x64StackAddressInAccum;
-   m->addressOf = x64AddressOf;
-   m->functionPrelude = x64FunctionPrelude;
-   m->pushParameter = x64PushParameter;
-   m->popParameter = x64PopParameter;
-   m->functionEpilogue = x64FunctionEpilogue;
-   m->mov = x64Mov;
-   m->movAccum = x64MovAccum;
-   m->add = x64Add;
-   m->sub = x64Sub;
-   m->mul = x64Mul;
-   m->div = x64Div;
-   m->cmp = x64Cmp;
-   m->cmpSetAccum = x64CmpSetAccum;
-   m->cmpJmp = x64CmpJmp;
-   m->testAndJump = x64TestAndJump;
-   m->jmp = x64Jmp;
-   m->label = x64Label;
-   m->call = x64Call;
+      m->stackPop = x64StackPop;
+      m->stackPushReg = x64StackPushReg;
+      m->stackPushImm = x64StackPushImm;
+      m->stackPushOffset = x64StackPushOffset;
+      m->stackAddressInAccum = x64StackAddressInAccum;
+      m->addressOf = x64AddressOf;
+      m->functionPrelude = x64FunctionPrelude;
+      m->pushParameter = x64PushParameter;
+      m->popParameter = x64PopParameter;
+      m->functionEpilogue = x64FunctionEpilogue;
+      m->mov = x64Mov;
+      m->movAccum = x64MovAccum;
+      m->add = x64Add;
+      m->sub = x64Sub;
+      m->mul = x64Mul;
+      m->div = x64Div;
+      m->cmp = x64Cmp;
+      m->cmpSetAccum = x64CmpSetAccum;
+      m->cmpJmp = x64CmpJmp;
+      m->testAndJump = x64TestAndJump;
+      m->jmp = x64Jmp;
+      m->label = x64Label;
+      m->call = x64Call;
 
-   m->helper = x64Helper;
-   m->helperC = x64HelperC;
+      m->helper = x64Helper;
+      m->helperC = x64HelperC;
 
-   m->accum = x64Accum;
-   m->accumC = x64AccumC;
+      m->accum = x64Accum;
+      m->accumC = x64AccumC;
 
-   m->finish = x64Finish;
+      m->finish = x64Finish;
 
-   m->convertFloatToInt = x64ConvertFloatToInt;
+      m->convertFloatToInt = x64ConvertFloatToInt;
+   }
+   #pragma clang diagnostic pop
 
    return m;
 }
