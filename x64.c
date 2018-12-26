@@ -272,25 +272,35 @@ static SystemVParamClass aggregateParamClass(Scope* scope, ExprType* etype); // 
 
 static SystemVParamClass
 paramClass(Scope* scope, Ctype a) {
-   SystemVParamClass param = Param_NO_CLASS;
+   SystemVParamClass class = Param_NO_CLASS;
    if (a.type == Type_POINTER) {
-      param = Param_POINTER;
+      class = Param_POINTER;
    }
    else if (isIntegerType(&a)) {
-      param = Param_INTEGER;
+      class = Param_INTEGER;
    }
    else if (isRealType(&a)) {
-      param = Param_SSE;
+      class = Param_SSE;
    }
    else if (a.type == Type_AGGREGATE) {
       Tag* tag = findTag(scope, a.aggr.tag);
       printf("Num tag members %ld\n", bufCount(tag->s_members));
-      NotImplemented("Aggregate");
+      if (typeBits(&a) > 4*64 /*four eightbytes*/
+          || hasUnalignedMembers(tag)) {
+         class = Param_MEMORY;
+      }
+      else if (typeBits(&a) > 64 /*one eightbyte*/) {
+         NotImplemented("Aggregate");
+      }
+      else {
+         NotImplemented("Small aggregate");
+
+      }
    }
    else {
       NotImplemented("SystemV parameter class");
    }
-   return param;
+   return class;
 }
 
 static SystemVParamClass

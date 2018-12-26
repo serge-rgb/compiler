@@ -197,3 +197,9 @@ arithmeticTypeConversion(Ctype a, Ctype b)
 
    return result;
 }
+
+b32
+hasUnalignedMembers(Tag* tag) {
+   // TODO: when adding alignment pragma, implement this function
+   return false;
+}

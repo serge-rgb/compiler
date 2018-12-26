@@ -4,6 +4,8 @@ compiler
 
 # Compiler output
 tests/*.asm
+tests/*
+!tests/*.c
 
 # Windows dev environment
 
