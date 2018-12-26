@@ -218,11 +218,6 @@ struct Ctype {
          char* tag;
          struct AstNode* decls;
          u64 bits;
-         struct StructMember {
-            char* id;
-            struct Ctype* ctype;
-            i64 offset;
-         } * s_members;
       } aggr;
 
       struct CtypeFunc {
@@ -411,7 +406,7 @@ struct ExprType {
    Location location;
 } typedef ExprType;
 
-// SymTable define
+// SymTable definition
 struct SymTable;
 #define HashmapName     SymTable
 #define HashmapPrefix   sym
@@ -429,14 +424,42 @@ typedef struct StackValue_s {
    } type : 2;
 } StackValue;
 
+struct TagMember {
+   char* id;
+   struct Ctype ctype;
+   i64 offset;
+} typedef TagMember;
+
+struct Tag {
+   ExprType etype;
+   TagMember* s_members;
+} typedef Tag;
+
+// TagTable definition
+struct TagTable;
+#define HashmapName     TagTable
+#define HashmapPrefix   tag
+#define HashmapKey      char*
+#define HashmapValue    Tag
+#define HashFunction    hashStrPtr
+#define KeyCompareFunc  compareStringKey
+#include "hashmap.inl"
+
+
 #define SCOPE_HASH_SIZE 1024
 struct Scope {
    Arena*      arena;
 
    int            if_count;
    struct Scope*  prev;
-   SymTable       label_table;
-   SymTable       tag_table;
+
+   // Name spaces
+
+   //SymTable       label_table;
+
+   // Structs, enums, unions
+   TagTable       tag_table;
+
    SymTable       symbol_table;
 } typedef Scope;
 
@@ -477,7 +500,7 @@ struct Machine {
    void (*addressOf)(void* machine, Location* loc);
 
    void (*functionPrelude)(void* machine, char* func_name);
-   void (*pushParameter)(void* machine, u64 n_param, ExprType* etype);
+   void (*pushParameter)(void* machine, Scope* scope, u64 n_param, ExprType* etype);
    Location (*popParameter)(void* machine, Ctype* ctype, u64 n_param, u64* offset);
    void (*functionEpilogue)(void* machine);
 

@@ -234,9 +234,9 @@ instructionReg(MachineX64* m, char* asm_line, int bits, ...) {
 #undef MaxRegs
 }
 
-// Forward declarations. (TODO: are these still necessary after the x64 refactor?)
-ExprType* findTag(Codegen* c, char* name);
-ExprType* findSymbol(Codegen* c, char* name);
+// Forward declarations.
+//ExprType* findTag(Scope* c, char* name);
+//ExprType* findSymbol(Codegen* c, char* name);
 
 void
 x64StackPop(MachineX64* m, ExprType* et) {
@@ -259,8 +259,26 @@ typedef enum
    Param_POINTER
 } SystemVParamClass;
 
+#if 0
+static SystemVParamClass
+paramClass(Ctype a) {
+   if (a.type == Type_AGGREGATE) {
+
+   }
+   return Param_POINTER;
+}
+
+static SystemVParamClass
+aggregateParamClass(ExprType* etype) {
+   Assert(etype->c.type == Type_AGGREGATE);
+
+
+   return Param_POINTER;
+}
+#endif
+
 void
-x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
+x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
    if (isRealType(&etype->c)) {
       NotImplemented("Floating parameters.");
    }
@@ -284,6 +302,10 @@ x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
          else {
             NotImplemented("Pass integer param on stack");
          }
+      }
+      else if (etype->c.type == Type_AGGREGATE) {
+         // / SystemVParamClass class = aggregateParamClass(etype);
+
       }
       else {
          NotImplemented("Non integer types");
@@ -340,6 +362,8 @@ x64PushParameter(MachineX64* m, u64 n_param, ExprType* etype) {
       x64Mov(m, &reg, etype);
    }
 }
+
+
 
 Location
 x64PopParameter(MachineX64* m, Ctype* ctype, u64 n_param, u64* offset) {

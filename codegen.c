@@ -14,17 +14,16 @@ codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    c->one->tok = one_tok;
 }
 
-ExprType*
-findTag(Codegen* c, char* name) {
-   ExprType* entry = NULL;
-   Scope* scope = c->scope;
+Tag*
+findTag(Scope* scope, char* name) {
+   Tag* tag = NULL;
    while (scope) {
-      entry = symGet(&scope->tag_table, name);
-      if (entry) break;
+      tag = tagGet(&scope->tag_table, name);
+      if (tag) break;
       else scope = scope->prev;
    }
 
-   return entry;
+   return tag;
 }
 
 ExprType*
@@ -179,28 +178,28 @@ typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
             case Type_AGGREGATE: {
                // TODO: Anonymous structs
                if ((into.aggr.tag && from.aggr.tag)) {
-                  ExprType* aggr_a = findTag(c, into.aggr.tag);
-                  ExprType* aggr_b = findTag(c, from.aggr.tag);
+                  Tag* tag_a = findTag(c->scope, into.aggr.tag);
+                  Tag* tag_b = findTag(c->scope, from.aggr.tag);
                   // TODO: We could return here by just having the same tag. C
                   // spec says (6.7.2) that when two types have the same tag,
                   // defined in different translation units, they must have:
                   //    - The same number of parameters.
                   //    - Every corresponding parameter is compatible.
-                  if (aggr_a == aggr_b) {
+                  if (tag_a == tag_b) {
                      compatible = true;
                   }
                   // SPEC: We deviate from the spec by always considering two
                   // structs with the same layout as compatible.
                   else {
-                     u64 n_a = bufCount(aggr_a->c.aggr.s_members);
-                     u64 n_b = bufCount(aggr_b->c.aggr.s_members);
+                     u64 n_a = bufCount(tag_a->s_members);
+                     u64 n_b = bufCount(tag_b->s_members);
                      if (n_a == n_b) {
                         compatible = true;
                         for (u64 i = 0; i < n_a; ++i) {
                            // TODO: Alignment check.
                            if (!typesAreCompatible(c,
-                                                   *aggr_a->c.aggr.s_members[i].ctype,
-                                                   *aggr_b->c.aggr.s_members[i].ctype)) {
+                                                   tag_a->s_members[i].ctype,
+                                                   tag_b->s_members[i].ctype)) {
                               compatible = false;
                               break;
                            }
@@ -283,11 +282,11 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    }
 
    char* tag_str = ctype->aggr.tag;
-   ExprType* struct_entry = findTag(c, tag_str);
+   Tag* struct_entry = findTag(c->scope, tag_str);
    if (!struct_entry) {
       codegenError("No struct named %s", tag_str);
    }
-   struct StructMember* s_members = struct_entry->c.aggr.s_members;
+   struct TagMember* s_members = struct_entry->s_members;
 
    u64 member_idx = MaxU64;
    for (u64 i = 0; i < bufCount(s_members); ++i) {
@@ -300,7 +299,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
       codegenError("Struct %s does not have %s member", tag_str, field_str);
    }
 
-   struct StructMember* member = s_members + member_idx;
+   struct TagMember* member = s_members + member_idx;
    u64 member_offset = member->offset;
 
    if (address.type == Location_STACK) {
@@ -308,10 +307,10 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
 
       if (target != Target_NONE) {
          ExprType reg = {
-            .c = *member->ctype,
+            .c = member->ctype,
             .location = address,
          };
-         ExprType* accum = m->accumC(m, *member->ctype);
+         ExprType* accum = m->accumC(m, member->ctype);
          m->mov(m, accum, &reg);
 
          if (target == Target_STACK) {
@@ -322,14 +321,14 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    else if (address.type == Location_REGISTER) {
       if (target != Target_NONE) {
          ExprType reg = {
-            .c = *member->ctype,
+            .c = member->ctype,
             .location = (Location){
                .type = Location_STACK_FROM_REG,
                .reg = address.reg,
                .reg_offset = member_offset,
             },
          };
-         ExprType* accum = m->accumC(m, *member->ctype);
+         ExprType* accum = m->accumC(m, member->ctype);
 
 
          m->mov(m, accum, &reg);
@@ -339,7 +338,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
       }
    }
    if (expr_type) {
-      expr_type->c = *(member->ctype);
+      expr_type->c = member->ctype;
       expr_type->location = address;
    }
 }
@@ -400,7 +399,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
          codegenError("Attempting to pass incompatible parameter to function.");
       }
 
-      m->pushParameter(m, n_param++, &et);
+      m->pushParameter(m, c->scope, n_param++, &et);
       expected_param = expected_param->next;
    }
 
@@ -606,11 +605,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
                ExprType* helper = m->helperC(m, right_type.c);
                m->stackPop(m, helper);
-               
+
                if (maybeEmitTypeConversion(c,
                                           &right_type,
-                                          target_type, 
-                                          Target_STACK, 
+                                          target_type,
+                                          Target_STACK,
                                           "Incompatible types in binary expression")) {
                   helper = m->helperC(m, target_type);
                   m->stackPop(m, helper);
@@ -618,8 +617,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
                maybeEmitTypeConversion(c,
                                        &left_type,
-                                       target_type, 
-                                       Target_ACCUM, 
+                                       target_type,
+                                       Target_ACCUM,
                                        "Incompatible types in binary expression");
 
                ExprType* accum = m->accumC(m, target_type);
@@ -704,18 +703,19 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          Assert(typeBits(&specifier->ctype) != 0);
          bits = typeBits(&specifier->ctype);
 
-         if (findTag(c, tag_str)) {
+         if (findTag(c->scope, tag_str)) {
             codegenError("Struct identifier redeclared: %s");
          }
 
-         ExprType entry = {
+
+         // TODO: Parameter passing is tied to ABI. Move to machine abstraction
+
+         Tag* tag = tagInsert(&c->scope->tag_table, tag_str, (Tag){0});
+         tag->etype = (ExprType){
             .c = specifier->ctype,
             // TODO: tag table should have different entry.
             .location = { .type = Location_STACK, .offset = 0 /*struct tag does not have a place*/ },
          };
-
-         // TODO: Parameter passing is tied to ABI. Move to machine abstraction
-
          u64 offset = 0;
          for (AstNode* decl = decls;
               decl;
@@ -725,8 +725,8 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             char* member_id = declarator->child->tok->cast.string;
 
             Assert(offset % 8 == 0);
-            struct StructMember member = { member_id, &spec->ctype, offset/8 };
-            bufPush(entry.c.aggr.s_members, member);
+            struct TagMember member = { member_id, spec->ctype, offset/8 };
+            bufPush(tag->s_members, member);
 
             Ctype* ctype = NULL;
             if (declarator->is_pointer) {
@@ -741,10 +741,9 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          }
          Assert(typeBits(&specifier->ctype) == offset);
 
-         symInsert(&c->scope->tag_table, tag_str, entry);
       }
       else if (tag_str && declarator->type != Ast_NONE) {
-         ExprType* entry = findTag(c, tag_str);
+         Tag* entry = findTag(c->scope, tag_str);
          if (!entry) {
             codegenError("Use of undeclared struct %s", tag_str);
          }
@@ -752,7 +751,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          if (declarator->is_pointer)
             bits = pointerSizeBits();
          else
-            bits = typeBits(&entry->c);
+            bits = typeBits(&entry->etype.c);
       }
    }
 
@@ -826,7 +825,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
 
             maybeEmitTypeConversion(c,
                                     &et,
-                                    ret_type, 
+                                    ret_type,
                                     Target_ACCUM,
                                     "Trying to return from a function with a non-compatible type.");
 
