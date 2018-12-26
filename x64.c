@@ -256,26 +256,50 @@ x64StackPop(MachineX64* m, ExprType* et) {
 
 typedef enum
 {
-   Param_POINTER
+   Param_NO_CLASS,
+
+   Param_POINTER,
+   Param_INTEGER,
+   Param_SSE,
+   Param_SSEUP,
+   Param_X87,
+   Param_X87UP,
+   Param_COMPLEX_X87,
+   Param_MEMORY,
 } SystemVParamClass;
 
-#if 0
-static SystemVParamClass
-paramClass(Ctype a) {
-   if (a.type == Type_AGGREGATE) {
+static SystemVParamClass aggregateParamClass(Scope* scope, ExprType* etype); // Forward decl.
 
+static SystemVParamClass
+paramClass(Scope* scope, Ctype a) {
+   SystemVParamClass param = Param_NO_CLASS;
+   if (a.type == Type_POINTER) {
+      param = Param_POINTER;
    }
-   return Param_POINTER;
+   else if (isIntegerType(&a)) {
+      param = Param_INTEGER;
+   }
+   else if (isRealType(&a)) {
+      param = Param_SSE;
+   }
+   else if (a.type == Type_AGGREGATE) {
+      Tag* tag = findTag(scope, a.aggr.tag);
+      printf("Num tag members %ld\n", bufCount(tag->s_members));
+      NotImplemented("Aggregate");
+   }
+   else {
+      NotImplemented("SystemV parameter class");
+   }
+   return param;
 }
 
 static SystemVParamClass
-aggregateParamClass(ExprType* etype) {
+aggregateParamClass(Scope* scope, ExprType* etype) {
    Assert(etype->c.type == Type_AGGREGATE);
 
 
-   return Param_POINTER;
+   return paramClass(scope, etype->c);
 }
-#endif
 
 void
 x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
@@ -304,8 +328,7 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
          }
       }
       else if (etype->c.type == Type_AGGREGATE) {
-         // / SystemVParamClass class = aggregateParamClass(etype);
-
+         SystemVParamClass class = aggregateParamClass(scope, etype);
       }
       else {
          NotImplemented("Non integer types");

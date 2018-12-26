@@ -707,11 +707,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             codegenError("Struct identifier redeclared: %s");
          }
 
-
          // TODO: Parameter passing is tied to ABI. Move to machine abstraction
 
          Tag* tag = tagInsert(&c->scope->tag_table, tag_str, (Tag){0});
-         tag->etype = (ExprType){
+         tag->etype = (ExprType) {
             .c = specifier->ctype,
             // TODO: tag table should have different entry.
             .location = { .type = Location_STACK, .offset = 0 /*struct tag does not have a place*/ },

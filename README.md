@@ -26,7 +26,6 @@ Deviations from the C spec.
 
 To-Do (short term):
 -------------------
-- machine abstraction
 - prefix addition & subtraction (++i, --i)
 - floating point
 - typedefs

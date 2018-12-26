@@ -463,6 +463,8 @@ struct Scope {
    SymTable       symbol_table;
 } typedef Scope;
 
+Tag* findTag(Scope* scope, char* name);
+
 enum MachineConfigFlags {
    Config_TARGET_MACOS = (1<<0),
    Config_TARGET_LINUX = (1<<1),
