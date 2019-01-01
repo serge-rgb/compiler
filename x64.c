@@ -268,33 +268,57 @@ typedef enum
    Param_MEMORY,
 } SystemVParamClass;
 
-static SystemVParamClass aggregateParamClass(Scope* scope, ExprType* etype); // Forward decl.
-
-static SystemVParamClass
-paramClass(Scope* scope, Ctype a) {
+SystemVParamClass
+sysvClassifyNode(Arena* arena, Scope* scope, Ctype ctype) {
    SystemVParamClass class = Param_NO_CLASS;
-   if (a.type == Type_POINTER) {
+
+   if (ctype.type == Type_POINTER) {
       class = Param_POINTER;
    }
-   else if (isIntegerType(&a)) {
+   else if (isIntegerType(&ctype)) {
       class = Param_INTEGER;
    }
-   else if (isRealType(&a)) {
+   else if (isRealType(&ctype)) {
       class = Param_SSE;
    }
-   else if (a.type == Type_AGGREGATE) {
-      Tag* tag = findTag(scope, a.aggr.tag);
+   else if (ctype.type == Type_AGGREGATE) {
+      Tag* tag = findTag(scope, ctype.aggr.tag);
       printf("Num tag members %ld\n", bufCount(tag->s_members));
-      if (typeBits(&a) > 4*64 /*four eightbytes*/
+      if (typeBits(&ctype) > 4*8*8 /*four eightbytes*/
           || hasUnalignedMembers(tag)) {
          class = Param_MEMORY;
       }
-      else if (typeBits(&a) > 64 /*one eightbyte*/) {
-         NotImplemented("Aggregate");
+      else if (typeBits(&ctype) > 8*8 /*one eightbyte*/) {
+            SystemVParamClass eightbytes[4] = {0};
+            sz eightbyte_i = 0;
+
+            sz n_members = bufCount(tag->s_members);
+
+            // Go through each member. Filling eightbytes array.
+            for (sz member_i = 0; member_i < n_members; ++member_i) {
+               TagMember* member = &tag->s_members[member_i];
+               SystemVParamClass member_class = sysvClassifyNode(arena, scope, member->ctype);
+               sz size_in_eightbytes = AlignPow2(typeBits(&member->ctype), 8*8);
+               switch (member_class) {
+                  case Param_MEMORY: {
+                     for (sz i = 0; i < size_in_eightbytes; ++i) {
+                        eightbytes[eightbyte_i++] = member_class;
+                     }
+                  } break;
+                  case Param_SSE: {
+                     for (sz i = 0; i < size_in_eightbytes - 1; ++i) {
+                        eightbytes[eightbyte_i++] = Param_SSEUP;
+                     }
+                     eightbytes[eightbyte_i++] = Param_SSE;
+                  }
+                  default: {
+                     NotImplemented("Aggregate member type");
+                  }
+               }
+            }
       }
       else {
          NotImplemented("Small aggregate");
-
       }
    }
    else {
@@ -303,12 +327,13 @@ paramClass(Scope* scope, Ctype a) {
    return class;
 }
 
-static SystemVParamClass
-aggregateParamClass(Scope* scope, ExprType* etype) {
-   Assert(etype->c.type == Type_AGGREGATE);
-
-
-   return paramClass(scope, etype->c);
+SystemVParamClass
+sysvClassify(Scope* scope, ExprType* etype) {
+   SystemVParamClass result = Param_NO_CLASS;
+   Arena temp_arena = {0};
+   result = sysvClassifyNode(&temp_arena, scope, etype->c);
+   deallocate(&temp_arena);
+   return result;
 }
 
 void
@@ -338,7 +363,8 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
          }
       }
       else if (etype->c.type == Type_AGGREGATE) {
-         SystemVParamClass class = aggregateParamClass(scope, etype);
+
+         SystemVParamClass class = sysvClassify(scope, etype);
       }
       else {
          NotImplemented("Non integer types");

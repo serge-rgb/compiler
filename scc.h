@@ -426,7 +426,7 @@ typedef struct StackValue_s {
 
 struct TagMember {
    char* id;
-   struct Ctype ctype;
+   Ctype ctype;
    i64 offset;
 } typedef TagMember;
 
