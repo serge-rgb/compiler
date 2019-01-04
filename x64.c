@@ -283,7 +283,7 @@ sysvClassifyNode(Arena* arena, Scope* scope, Ctype ctype) {
    }
    else if (ctype.type == Type_AGGREGATE) {
       Tag* tag = findTag(scope, ctype.aggr.tag);
-      printf("Num tag members %ld\n", bufCount(tag->s_members));
+      printf("Num tag members %ld\n", (long)bufCount(tag->s_members));
       if (typeBits(&ctype) > 4*8*8 /*four eightbytes*/
           || hasUnalignedMembers(tag)) {
          class = Param_MEMORY;
@@ -1167,8 +1167,10 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
 
    Machine* m = &m64->machine;
 
-   #pragma clang diagnostic push
-   #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+   #if defined(__MACH__)
+      #pragma clang diagnostic push
+      #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+   #endif
    {
       // Function pointers
       m->stackPop = x64StackPop;
@@ -1209,7 +1211,9 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
 
       m->convertFloatToInt = x64ConvertFloatToInt;
    }
-   #pragma clang diagnostic pop
+   #if defined(__MACH__)
+      #pragma clang diagnostic pop
+   #endif
 
    return m;
 }

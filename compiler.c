@@ -31,6 +31,7 @@ exit 0
 
 #include "memory.c"
 #include "stretchy.c"
+#include "string.c"
 #if defined(_WIN32)
    #include "platform_windows.c"
 #else
@@ -43,7 +44,6 @@ exit 0
    #endif
 #endif
 #include "hashmap.c"
-#include "string.c"
 #include "lexer.c"
 #include "tree.c"
 #include "semantics.c"

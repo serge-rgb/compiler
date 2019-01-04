@@ -199,6 +199,6 @@ platformPathAtBinary(char* path, sz size) {
 
 char*
 platformOutputBinaryFilename(Arena* arena, char* fname_without_extension) {
-   char* appended = appendString(&temp_arena, trimmed, ".exe");
+   char* appended = appendString(arena, fname_without_extension, ".exe");
    return appended;
 }
