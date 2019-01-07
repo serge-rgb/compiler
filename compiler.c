@@ -3,6 +3,7 @@
 
 if [ `uname` = "Linux" ]; then
    clang -g -Wall -fno-omit-frame-pointer -fsanitize=address compiler.c -o compiler && ./compiler && nasm -f elf64 out.asm && ld out.o
+   exit $?
 elif [ `uname` = "MSYS_NT-10.0" ]; then
    # *** NOTE: *** As of 2018-06-02, clang-cl is still pretty buggy when debugging with Visual Studio.
    comment_for_cleanup="-Wno-unused-parameter -Wno-shadow -Wno-unused-macros -Wno-switch-enum"
@@ -11,6 +12,7 @@ else  # Assume it's macOS
    echo `uname`
    comment_for_cleanup="-Wno-switch"
    clang -g -Wall -ObjC -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address $comment_for_cleanup compiler.c -o compiler # && ./compiler -t all
+   exit $?
 fi
 
 exit 0

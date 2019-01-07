@@ -268,56 +268,71 @@ typedef enum
    Param_MEMORY,
 } SystemVParamClass;
 
-SystemVParamClass
+struct SystemVArgument {
+   SystemVParamClass classes[4];  // Arguments are up to 4 eightbytes.
+   u8 n_classes;
+} typedef SystemVArgument;
+
+SystemVArgument
 sysvClassifyNode(Arena* arena, Scope* scope, Ctype ctype) {
-   SystemVParamClass class = Param_NO_CLASS;
+   SystemVArgument arg = {0, .n_classes = 1};
 
    if (ctype.type == Type_POINTER) {
-      class = Param_POINTER;
+      arg.classes[0] = Param_POINTER;
    }
    else if (isIntegerType(&ctype)) {
-      class = Param_INTEGER;
+      arg.classes[0] = Param_INTEGER;
    }
    else if (isRealType(&ctype)) {
-      class = Param_SSE;
+      arg.classes[0] = Param_SSE;
    }
    else if (ctype.type == Type_AGGREGATE) {
       Tag* tag = findTag(scope, ctype.aggr.tag);
-      printf("Num tag members %ld\n", (long)bufCount(tag->s_members));
-      if (typeBits(&ctype) > 4*8*8 /*four eightbytes*/
-          || hasUnalignedMembers(tag)) {
+      printf("Num tag members %ld\n", bufCount(tag->s_members));
+
+      // Greater than 4 eightbytes or unaligned
+      if (typeBits(&ctype) > 4*8*8 || hasUnalignedMembers(tag)) {
          class = Param_MEMORY;
       }
-      else if (typeBits(&ctype) > 8*8 /*one eightbyte*/) {
-            SystemVParamClass eightbytes[4] = {0};
-            sz eightbyte_i = 0;
 
-            sz n_members = bufCount(tag->s_members);
+      // Greater than an eightbyte (smaller or equal than 4)
+      else if (typeBits(&ctype) > 8*8) {
+         SystemVParamClass eightbytes[4] = {0};
+         sz eightbyte_i = 0;
 
-            // Go through each member. Filling eightbytes array.
-            for (sz member_i = 0; member_i < n_members; ++member_i) {
-               TagMember* member = &tag->s_members[member_i];
-               SystemVParamClass member_class = sysvClassifyNode(arena, scope, member->ctype);
-               sz size_in_eightbytes = AlignPow2(typeBits(&member->ctype), 8*8);
-               switch (member_class) {
-                  case Param_MEMORY: {
-                     for (sz i = 0; i < size_in_eightbytes; ++i) {
-                        eightbytes[eightbyte_i++] = member_class;
-                     }
-                  } break;
-                  case Param_SSE: {
-                     for (sz i = 0; i < size_in_eightbytes - 1; ++i) {
-                        eightbytes[eightbyte_i++] = Param_SSEUP;
-                     }
-                     eightbytes[eightbyte_i++] = Param_SSE;
+         sz n_members = bufCount(tag->s_members);
+         for (sz member_i = 0; member_i < n_members; ++member_i) {
+            TagMember* member = &tag->s_members[member_i];
+            SystemVParamClass member_class = sysvClassifyNode(arena, scope, member->ctype);
+            sz size_in_eightbytes = AlignPow2(typeBits(&member->ctype), 8*8) / (8*8);
+            Assert(size_in_eightbytes <= 4);
+
+            b32 copy_class = false;
+            switch (member_class) {
+               case Param_INTEGER: // fallthrough
+               case Param_MEMORY: {
+                  copy_class = true;
+               } break;
+               case Param_SSE: {
+                  for (sz i = 0; i < size_in_eightbytes - 1; ++i) {
+                     eightbytes[eightbyte_i++] = Param_SSEUP;
                   }
-                  default: {
-                     NotImplemented("Aggregate member type");
-                  }
+                  eightbytes[eightbyte_i++] = Param_SSE;
+               } break;
+               default: {
+                  NotImplemented("Aggregate member type");
                }
             }
+            if (copy_class) {
+               for (sz i = 0; i < size_in_eightbytes; ++i) {
+                  eightbytes[eightbyte_i++] = member_class;
+               }
+            }
+         }
       }
+
       else {
+         Assert (typeBits(&ctype) <= 8*8);
          NotImplemented("Small aggregate");
       }
    }
