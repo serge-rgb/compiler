@@ -47,7 +47,8 @@ typeBits(Ctype* ctype) {
 
          // 64 bits
       case Type_POINTER:
-      case Type_DOUBLE: {
+      case Type_DOUBLE:
+      case Type_LONG: {
          bits = 64;
       } break;
 

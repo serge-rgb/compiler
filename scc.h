@@ -74,6 +74,9 @@ typedef size_t sz;
 #define Megabytes(n) Kilobytes(1024)
 #define Gigabytes(n) Megabytes(1024)
 
+// SystemV parameter passing
+#define Eightbytes(n) (n*8*8)
+
 // Next multiple of p which is greater than v, or v if it is already aligned.
 #define AlignPow2(v, p) ( \
 	                        (((v) + (p) - 1) & ~((p) - 1)) \
@@ -182,7 +185,7 @@ struct Ctype {
 
       // Arithmetic types
       Type_ARITH = (1<<0),
-      Type_PEANO = (1<<1),  // NOTE: Type_INTEGER would be buggy af.
+      Type_PEANO = (1<<1),  // NOTE: Type_INTEGER would be too easy to confuse with Type_INT
       Type_REAL  = (1<<2),
 
       // Integer types
@@ -359,6 +362,12 @@ typedef enum RegisterEnum {
    // Floating point registers.
    Reg_XMM0,
    Reg_XMM1,
+   Reg_XMM2,
+   Reg_XMM3,
+   Reg_XMM4,
+   Reg_XMM5,
+   Reg_XMM6,
+   Reg_XMM7,
 
    Reg_Count,
 } RegisterEnum;
@@ -502,8 +511,15 @@ struct Machine {
    void (*addressOf)(void* machine, Location* loc);
 
    void (*functionPrelude)(void* machine, char* func_name);
+
+   void (* beginFuncParams ) (void* machine);
+
    void (*pushParameter)(void* machine, Scope* scope, u64 n_param, ExprType* etype);
    Location (*popParameter)(void* machine, Ctype* ctype, u64 n_param, u64* offset);
+
+   void (* endFuncParams ) (void* machine);
+
+
    void (*functionEpilogue)(void* machine);
 
    void (*mov)(void* machine, ExprType* dst, ExprType* src);

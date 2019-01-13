@@ -387,23 +387,27 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
 
    AstNode* expected_param = funcParams(sym->c.func.node);
 
-   for (AstNode* param = params;
-        param != NULL;
-        param = param->next) {
-      ExprType et = {0};
-      emitExpression(c, param, &et, Target_NONE);
-      ExprType expected_et = {0};
-      ExprType pointee = {0};
-      expected_et.c.pointer.pointee = &pointee;
-      if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
-         codegenError("Attempting to pass incompatible parameter to function.");
+   m->beginFuncParams(m);
+   {
+      for (AstNode* param = params;
+           param != NULL;
+           param = param->next) {
+         ExprType et = {0};
+         emitExpression(c, param, &et, Target_NONE);
+         ExprType expected_et = {0};
+         ExprType pointee = {0};
+         expected_et.c.pointer.pointee = &pointee;
+         if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
+            codegenError("Attempting to pass incompatible parameter to function.");
+         }
+
+         m->pushParameter(m, c->scope, n_param++, &et);
+         expected_param = expected_param->next;
       }
-
-      m->pushParameter(m, c->scope, n_param++, &et);
-      expected_param = expected_param->next;
    }
+   m->endFuncParams(m);
 
-   c->m->call(c->m, label);
+   m->call(m, label);
 
    while (bufCount(m_totally_temp->s_stack) != stack_top) {
       ExprType* helper = m->helper(m, Type_INT, 64);

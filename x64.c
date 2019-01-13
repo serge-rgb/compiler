@@ -7,6 +7,13 @@ struct MachineX64 {
    u32         config;   // MachineConfigFlags
    StackValue* s_stack;  // Stack allocation / de-allocation is done on a per-function basis.
    i64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
+
+   // Parameter passing state
+   u32 intParamIdx;
+   RegisterEnum paramIntegerRegs[6];
+
+   u32 floatParamIdx;
+   RegisterEnum paramFloatRegs[8];
 } typedef MachineX64;
 
 void        x64Mov(MachineX64* m, ExprType* dst, ExprType* src);
@@ -268,87 +275,96 @@ typedef enum
    Param_MEMORY,
 } SystemVParamClass;
 
-struct SystemVArgument {
-   SystemVParamClass classes[4];  // Arguments are up to 4 eightbytes.
-   u8 n_classes;
-} typedef SystemVArgument;
+SystemVParamClass
+sysvClassifyNode(Arena* arena, Scope* scope, Ctype ctype, int* num_registers) {
+   SystemVParamClass class = Param_NO_CLASS;
 
-SystemVArgument
-sysvClassifyNode(Arena* arena, Scope* scope, Ctype ctype) {
-   SystemVArgument arg = {0, .n_classes = 1};
+   int n_regs = 1;
 
    if (ctype.type == Type_POINTER) {
-      arg.classes[0] = Param_POINTER;
+      class = Param_POINTER;
    }
    else if (isIntegerType(&ctype)) {
-      arg.classes[0] = Param_INTEGER;
+      class = Param_INTEGER;
    }
    else if (isRealType(&ctype)) {
-      arg.classes[0] = Param_SSE;
+      class = Param_SSE;
    }
    else if (ctype.type == Type_AGGREGATE) {
       Tag* tag = findTag(scope, ctype.aggr.tag);
-      printf("Num tag members %ld\n", bufCount(tag->s_members));
 
-      // Greater than 4 eightbytes or unaligned
-      if (typeBits(&ctype) > 4*8*8 || hasUnalignedMembers(tag)) {
+      u32 eightbyte_aligned = AlignPow2(typeBits(&ctype), Eightbytes(1));
+
+      if (eightbyte_aligned > Eightbytes(2) || hasUnalignedMembers(tag)) {
          class = Param_MEMORY;
       }
-
-      // Greater than an eightbyte (smaller or equal than 4)
-      else if (typeBits(&ctype) > 8*8) {
-         SystemVParamClass eightbytes[4] = {0};
-         sz eightbyte_i = 0;
-
+      else {
          sz n_members = bufCount(tag->s_members);
+
+         if (eightbyte_aligned == Eightbytes(2)) {
+            n_regs = 2;
+         }
+
          for (sz member_i = 0; member_i < n_members; ++member_i) {
             TagMember* member = &tag->s_members[member_i];
-            SystemVParamClass member_class = sysvClassifyNode(arena, scope, member->ctype);
-            sz size_in_eightbytes = AlignPow2(typeBits(&member->ctype), 8*8) / (8*8);
-            Assert(size_in_eightbytes <= 4);
+            SystemVParamClass member_class = sysvClassifyNode(arena, scope, member->ctype, NULL);
 
-            b32 copy_class = false;
-            switch (member_class) {
-               case Param_INTEGER: // fallthrough
-               case Param_MEMORY: {
-                  copy_class = true;
-               } break;
-               case Param_SSE: {
-                  for (sz i = 0; i < size_in_eightbytes - 1; ++i) {
-                     eightbytes[eightbyte_i++] = Param_SSEUP;
-                  }
-                  eightbytes[eightbyte_i++] = Param_SSE;
-               } break;
-               default: {
-                  NotImplemented("Aggregate member type");
-               }
+            // Merge step
+            if (class == Param_NO_CLASS) {
+               class = member_class;
             }
-            if (copy_class) {
-               for (sz i = 0; i < size_in_eightbytes; ++i) {
-                  eightbytes[eightbyte_i++] = member_class;
-               }
+            else if (member_class == Param_NO_CLASS) {
+               // Do nothing
+            }
+            else if (class == Param_MEMORY || member_class == Param_MEMORY) {
+               class = Param_MEMORY;
+            }
+            else if (class == Param_INTEGER || member_class == Param_INTEGER) {
+               class = Param_INTEGER;
+            }
+            else if (class == Param_X87 || member_class == Param_X87) {
+               class = Param_MEMORY;
+            }
+            else {
+               class = Param_SSE;
             }
          }
-      }
-
-      else {
-         Assert (typeBits(&ctype) <= 8*8);
-         NotImplemented("Small aggregate");
       }
    }
    else {
       NotImplemented("SystemV parameter class");
    }
+
+   if (num_registers) {
+      *num_registers = n_regs;
+   }
    return class;
 }
 
-SystemVParamClass
-sysvClassify(Scope* scope, ExprType* etype) {
-   SystemVParamClass result = Param_NO_CLASS;
-   Arena temp_arena = {0};
-   result = sysvClassifyNode(&temp_arena, scope, etype->c);
-   deallocate(&temp_arena);
-   return result;
+RegisterEnum
+sysVIntegerRegisterEnum(u64 n_param) {
+   RegisterEnum r = Reg_RDI;
+   switch (n_param) {
+      case 0: { } break;
+      case 1: { r = Reg_RSI; } break;
+      case 2: { r = Reg_RDX; } break;
+      case 3: { r = Reg_RCX; } break;
+      case 4: { r = Reg_R8;  } break;
+      case 5: { r = Reg_R9;  } break;
+   }
+
+   return r;
+}
+
+void
+x64BeginFuncParams(MachineX64* m) {
+   m->intParamIdx = 0;
+   m->floatParamIdx = 0;
+}
+
+void
+x64EndFuncParams(MachineX64* m) {
+
 }
 
 void
@@ -361,42 +377,78 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
       Location loc = {0};
       if (isIntegerType(&etype->c)) {
          if (n_param < 6) {
-            RegisterEnum r = Reg_RDI;
-            switch (n_param) {
-               case 0: { } break;
-               case 1: { r = Reg_RSI; } break;
-               case 2: { r = Reg_RDX; } break;
-               case 3: { r = Reg_RCX; } break;
-               case 4: { r = Reg_R8;  } break;
-               case 5: { r = Reg_R9;  } break;
-            }
-
-            loc = registerLocation(r);
+            loc = registerLocation(sysVIntegerRegisterEnum(n_param));
+            ExprType reg = {
+               .c = etype->c,
+               .location = loc,
+            };
+            x64Mov(m, &reg, etype);
          }
          else {
             NotImplemented("Pass integer param on stack");
          }
       }
       else if (etype->c.type == Type_AGGREGATE) {
+         Arena temp_arena = {0};
+         int n_regs = 0;
+         SystemVParamClass class = sysvClassifyNode(&temp_arena, scope, etype->c, &n_regs);
 
-         SystemVParamClass class = sysvClassify(scope, etype);
+         if (class == Param_INTEGER && n_regs + m->intParamIdx > 6) {
+            class = Param_MEMORY;
+         }
+
+         if (class == Param_SSE && n_regs + m->floatParamIdx > 8) {
+            class = Param_MEMORY;
+         }
+
+         switch (class) {
+            case Param_INTEGER: {
+
+               u64 bits = typeBits(&etype->c);
+
+               ExprType partial_argument = *etype;
+
+               while (n_regs--) {
+                  Location loc = registerLocation(m->paramIntegerRegs[m->intParamIdx++]);
+
+                  ExprType reg = {
+                     .c = (Ctype) {
+                        .type = Type_LONG,
+                     },
+                     .location = loc,
+                  };
+
+                  if (bits <= 8) {
+                     reg.c.type = Type_CHAR;
+                  }
+                  else if (bits <= 16) {
+                     reg.c.type = Type_SHORT;
+                  }
+                  else if (bits <= 32) {
+                     reg.c.type = Type_INT;
+                  }
+
+                  x64Mov(m, &reg, &partial_argument);
+
+
+                  if (etype->location.type == Location_STACK) {
+                     partial_argument.location.offset -= 64;
+                  }
+                  else {
+                     NotImplemented("Shift big non-stack param.");
+                  }
+                  bits -= 64;
+               }
+
+            } break;
+            default: {
+               NotImplemented("Parameter class push");
+            }
+         }
       }
       else {
          NotImplemented("Non integer types");
       }
-      ExprType reg = {
-         .c = etype->c,
-         .location = loc,
-      };
-      x64Mov(m, &reg, etype);
-      // if (typeBits(&etype->c) <= 64) {
-      //    ExprType reg = {
-      //       .c = etype->c,
-      //       .location = registerLocation(r),
-      //    };
-      //    x64Mov(m, &reg, x64Accum64(etype->c.type));
-      // } else {
-      // }
    }
    else {
       // Windows x64 calling convention:
@@ -1199,8 +1251,10 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->stackAddressInAccum = x64StackAddressInAccum;
       m->addressOf = x64AddressOf;
       m->functionPrelude = x64FunctionPrelude;
+      m->beginFuncParams = x64BeginFuncParams;
       m->pushParameter = x64PushParameter;
       m->popParameter = x64PopParameter;
+      m->endFuncParams = x64EndFuncParams;;
       m->functionEpilogue = x64FunctionEpilogue;
       m->mov = x64Mov;
       m->movAccum = x64MovAccum;
@@ -1229,6 +1283,26 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
    #if defined(__MACH__)
       #pragma clang diagnostic pop
    #endif
+
+   m64->intParamIdx = 0;
+
+   m64->paramIntegerRegs[0] = Reg_RDI;
+   m64->paramIntegerRegs[1] = Reg_RSI;
+   m64->paramIntegerRegs[2] = Reg_RDX;
+   m64->paramIntegerRegs[3] = Reg_RCX;
+   m64->paramIntegerRegs[4] = Reg_R8;
+   m64->paramIntegerRegs[5] = Reg_R9;
+
+   m64->floatParamIdx = 0;
+
+   m64->paramFloatRegs[0] = Reg_XMM0;
+   m64->paramFloatRegs[1] = Reg_XMM1;
+   m64->paramFloatRegs[2] = Reg_XMM2;
+   m64->paramFloatRegs[3] = Reg_XMM3;
+   m64->paramFloatRegs[4] = Reg_XMM4;
+   m64->paramFloatRegs[5] = Reg_XMM5;
+   m64->paramFloatRegs[6] = Reg_XMM6;
+   m64->paramFloatRegs[7] = Reg_XMM7;
 
    return m;
 }

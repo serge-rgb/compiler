@@ -1,6 +1,7 @@
 struct veci {
    int x;
    int y;
+
    int z;
 };
 
