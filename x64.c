@@ -276,7 +276,7 @@ typedef enum
 } SystemVParamClass;
 
 SystemVParamClass
-sysvClassifyNode(Arena* arena, Scope* scope, Ctype ctype, int* num_registers) {
+sysvClassifyNode(Scope* scope, Ctype ctype, int* num_registers) {
    SystemVParamClass class = Param_NO_CLASS;
 
    int n_regs = 1;
@@ -307,7 +307,7 @@ sysvClassifyNode(Arena* arena, Scope* scope, Ctype ctype, int* num_registers) {
 
          for (sz member_i = 0; member_i < n_members; ++member_i) {
             TagMember* member = &tag->s_members[member_i];
-            SystemVParamClass member_class = sysvClassifyNode(arena, scope, member->ctype, NULL);
+            SystemVParamClass member_class = sysvClassifyNode(scope, member->ctype, NULL);
 
             // Merge step
             if (class == Param_NO_CLASS) {
@@ -389,9 +389,8 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
          }
       }
       else if (etype->c.type == Type_AGGREGATE) {
-         Arena temp_arena = {0};
          int n_regs = 0;
-         SystemVParamClass class = sysvClassifyNode(&temp_arena, scope, etype->c, &n_regs);
+         SystemVParamClass class = sysvClassifyNode(scope, etype->c, &n_regs);
 
          if (class == Param_INTEGER && n_regs + m->intParamIdx > 6) {
             class = Param_MEMORY;
@@ -432,7 +431,7 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
 
 
                   if (etype->location.type == Location_STACK) {
-                     partial_argument.location.offset -= 64;
+                     partial_argument.location.offset -= 8;
                   }
                   else {
                      NotImplemented("Shift big non-stack param.");
@@ -492,34 +491,75 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
 
 
 Location
-x64PopParameter(MachineX64* m, Ctype* ctype, u64 n_param, u64* offset) {
+x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* offset) {
    Location loc = Zero;
 
-   if (isRealType(ctype)) {
-      NotImplemented("float params");
-   }
-
-   if (typeBits(ctype) <= 64) {
-      if ((m->config & Config_TARGET_MACOS) || (m->config & Config_TARGET_LINUX)) {
+   if ((m->config & Config_TARGET_MACOS) || (m->config & Config_TARGET_LINUX)) {
+      if (isIntegerType(ctype)) {
          if (n_param < 6) {
-            loc.type = Location_REGISTER;
-            if (isIntegerType(ctype)) {
-               switch (n_param) {
-                  case 0: { loc.reg = Reg_RDI; } break;
-                  case 1: { loc.reg = Reg_RSI; } break;
-                  case 2: { loc.reg = Reg_RDX; } break;
-                  case 3: { loc.reg = Reg_RCX; } break;
-                  case 4: { loc.reg = Reg_R8;  } break;
-                  case 5: { loc.reg = Reg_R9;  } break;
-               }
-            }
+            loc = registerLocation(sysVIntegerRegisterEnum(n_param));
          }
          else {
-            loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
-            *offset += typeBits(ctype);
+            NotImplemented("Pass integer param on stack");
          }
       }
-      else if (m->config & Config_TARGET_WIN){
+      else if (ctype->type == Type_AGGREGATE) {
+         int n_regs = 0;
+         SystemVParamClass class = sysvClassifyNode(scope, *ctype, &n_regs);
+
+         if (class == Param_INTEGER && n_regs + m->intParamIdx > 6) {
+            class = Param_MEMORY;
+         }
+
+         if (class == Param_SSE && n_regs + m->floatParamIdx > 8) {
+            class = Param_MEMORY;
+         }
+
+         switch (class) {
+            case Param_INTEGER: {
+
+               u64 bits = typeBits(ctype);
+
+               while (n_regs--) {
+                  // We need a new location
+
+                  loc = registerLocation(m->paramIntegerRegs[m->intParamIdx++]);
+
+
+                  NotImplemented("move to the stack and return stack location");
+
+                  ExprType reg = {
+                     .c = (Ctype) {
+                        .type = Type_LONG,
+                     },
+                     .location = loc,
+                  };
+
+                  if (bits <= 8) {
+                     reg.c.type = Type_CHAR;
+                  }
+                  else if (bits <= 16) {
+                     reg.c.type = Type_SHORT;
+                  }
+                  else if (bits <= 32) {
+                     reg.c.type = Type_INT;
+                  }
+
+                  bits -= 64;
+               }
+
+            } break;
+            default: {
+               NotImplemented("Parameter class pop");
+            }
+         }
+      }
+      else {
+         NotImplemented("Non integer types");
+      }
+   }
+   else if (m->config & Config_TARGET_WIN){
+      if (typeBits(ctype) <= 64) {
          if (n_param < 4) {
             if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
                loc.type = Location_REGISTER;
@@ -530,16 +570,19 @@ x64PopParameter(MachineX64* m, Ctype* ctype, u64 n_param, u64* offset) {
                   case 3: { loc.reg = Reg_R9;  } break;
                }
             }
+            if (isRealType(ctype)) {
+               NotImplemented("float params");
+            }
          }
          else {
             loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
             *offset += typeBits(ctype);
          }
       }
-   }
-   else {
-      loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
-      *offset += typeBits(ctype);
+      else {
+         loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
+         *offset += typeBits(ctype);
+      }
    }
    return loc;
 }
