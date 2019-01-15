@@ -488,6 +488,7 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
    }
 }
 
+ExprType* x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits); // fwd decl
 
 
 Location
@@ -517,16 +518,13 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* off
 
          switch (class) {
             case Param_INTEGER: {
-
                u64 bits = typeBits(ctype);
 
                while (n_regs--) {
                   // We need a new location
 
-                  loc = registerLocation(m->paramIntegerRegs[m->intParamIdx++]);
-
-
-                  NotImplemented("move to the stack and return stack location");
+                  RegisterEnum regEnum = m->paramIntegerRegs[m->intParamIdx++];
+                  loc = registerLocation(regEnum);
 
                   ExprType reg = {
                      .c = (Ctype) {
@@ -543,6 +541,15 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* off
                   }
                   else if (bits <= 32) {
                      reg.c.type = Type_INT;
+                  }
+
+                  if (bits >= 64) {
+                     x64StackPushReg(m, regEnum);
+                  }
+                  else {
+                     u64 nextPow2 = 1 << platformFirstBitSet(bits);
+                     ExprType* accum = x64Helper(m, reg.c.type, nextPow2);
+   //                     x64Mov(m)
                   }
 
                   bits -= 64;

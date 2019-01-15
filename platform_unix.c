@@ -21,6 +21,16 @@ asdfasd
 extern int    snprintf( char * buffer, unsigned long bufsz, const char * format, ... );
 extern int    vsnprintf( char * buffer, unsigned long bufsz, const char * format, va_list vlist );
 
+u64
+platformFirstBitSet(u64 val) {
+   u64 result = 0;
+   asm ("bsrq %1,%0"
+         : "=r" (result)
+         : "r" (val)
+         : "cc");
+   return result;
+}
+
 
 #define PlatformAssert(expr) do { if (!(expr)) { \
                                                 printf("Assertion failed: %s\n", #expr);\
