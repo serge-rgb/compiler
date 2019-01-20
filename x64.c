@@ -520,37 +520,46 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* off
             case Param_INTEGER: {
                u64 bits = typeBits(ctype);
 
+               // Reserve stack for struct.
+               ExprType dst = {
+                  .c = *ctype,
+                  .location = x64StackPushOffset(m, bits / 8),
+               };
+
+               loc = dst.location; // Result
+
+               dst.c.type = Type_LONG;
                while (n_regs--) {
                   // We need a new location
 
                   RegisterEnum regEnum = m->paramIntegerRegs[m->intParamIdx++];
-                  loc = registerLocation(regEnum);
+                  Location src = registerLocation(regEnum);
+                  dst.location.offset  = loc.offset - bits/8;
 
                   ExprType reg = {
                      .c = (Ctype) {
                         .type = Type_LONG,
                      },
-                     .location = loc,
+                     .location = src,
                   };
 
                   if (bits <= 8) {
                      reg.c.type = Type_CHAR;
+                     dst.c.type = Type_CHAR;
                   }
                   else if (bits <= 16) {
                      reg.c.type = Type_SHORT;
+                     dst.c.type = Type_SHORT;
                   }
                   else if (bits <= 32) {
                      reg.c.type = Type_INT;
+                     dst.c.type = Type_INT;
                   }
 
-                  if (bits >= 64) {
-                     x64StackPushReg(m, regEnum);
-                  }
-                  else {
-                     u64 nextPow2 = 1 << platformFirstBitSet(bits);
-                     ExprType* accum = x64Helper(m, reg.c.type, nextPow2);
-   //                     x64Mov(m)
-                  }
+                  u64 nextPow2 = 1 << platformFirstBitSet(bits);
+                  if (nextPow2 < bits) { nextPow2 <<= 1; }
+
+                  x64Mov(m, &dst, &reg);
 
                   bits -= 64;
                }

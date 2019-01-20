@@ -400,7 +400,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
          if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
             codegenError("Attempting to pass incompatible parameter to function.");
          }
-
+          
          m->pushParameter(m, c->scope, n_param++, &et);
          expected_param = expected_param->next;
       }
