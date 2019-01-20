@@ -1,3 +1,11 @@
+
+
+#pragma warning(push)
+#pragma warning(disable : 4668)
+
+#include <intrin.h>
+#pragma warning(pop)
+
 #define PRI_size "zi"
 #define PLATFORM_FORMAT_I64 "lld"
 #define PLATFORM_FORMAT_U64 "llu"
@@ -13,7 +21,12 @@
 #endif
 #endif
 
-
+u64
+platformFirstBitSet(u64 val) {
+  unsigned long bit = 0;
+  _BitScanReverse64(&bit, val);
+  return (u64)bit;
+}
 
 void
 winPrintError(int err_code) {

@@ -556,7 +556,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* off
                      dst.c.type = Type_INT;
                   }
 
-                  u64 nextPow2 = 1 << platformFirstBitSet(bits);
+                  u64 nextPow2 = (u64)1 << platformFirstBitSet(bits);
                   if (nextPow2 < bits) { nextPow2 <<= 1; }
 
                   x64Mov(m, &dst, &reg);

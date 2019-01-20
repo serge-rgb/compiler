@@ -127,6 +127,7 @@ char* getString(char* orig);
    #include "platform_unix.h"
 #endif
 
+u64 platformFirstBitSet(u64 val);
 ErrorCode platformListDirectory(char*** out_files, char* dirname, b32 (*filter)(char*));
 ErrorCode platformCompileAndLinkAsmFile(char* filename_without_extension);
 
