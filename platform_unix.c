@@ -97,6 +97,39 @@ platformRunProcess(char** args, sz n_args, i32 expected_return) {
    return ret;
 }
 
+b32
+findBinaryInPath(char* out_path, size_t size, char* name) {
+   b32 found = false;
+   char* PATH = getenv("PATH");
+
+   char tokens[PATH_MAX] = Zero;  // TODO: Copy path into tokens
+   NotImplemented("Copy path into tokens");
+
+   char binary_path[PATH_MAX] = Zero;
+
+   if (PATH) {
+      for (char* token = strtok(PATH, ":");
+           token != NULL;
+           token = strtok(NULL, ":")) {
+
+         snprintf(binary_path, size, "%s/%s", token, name);
+
+         if (access (binary_path, F_OK) != -1) {
+            found = true;
+
+            snprintf(out_path, size, "%s", binary_path);
+
+            break;
+         }
+      }
+   }
+   else {
+      fprintf(stderr, "no PATH env var.\n");
+   }
+
+   return found;
+}
+
 ErrorCode
 platformCompileAndLinkAsmFile(char* filename_without_extension) {
    ErrorCode ret = Ok;
@@ -106,19 +139,44 @@ platformCompileAndLinkAsmFile(char* filename_without_extension) {
    char obj_file[PathMax] = {0};
    snprintf(obj_file, PathMax, "%s.o", filename_without_extension);
    printf("Running nasm\n");
-   // TODO: Look in PATH for binary.
-   char* nasm_args[] = { "/usr/local/bin/nasm", "-Znasm_output", "-f", "macho64", asm_file };
-   if (Ok == platformRunProcess(nasm_args, ArrayCount(nasm_args), 0)) {
-      printf("Running ld\n");
-      char* ld_args[] = { "/usr/bin/ld", "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", filename_without_extension };
-      if (Ok == platformRunProcess(ld_args, ArrayCount(ld_args), 0)) {
+
+   char nasm_path[PATH_MAX] = Zero;
+
+   Break;
+   if (findBinaryInPath(nasm_path, ArrayCount(nasm_path), "nasm")) {
+      if (findBinaryInPath(nasm_path, ArrayCount(nasm_path), "nasm")) {
+         printf("found it twice\n");
       }
-      else {
-         fprintf(stderr, "ld failed\n");
+      char* nasm_args[] = { nasm_path, "-Znasm_output", "-f", "macho64", asm_file };
+      if (Ok == platformRunProcess(nasm_args, ArrayCount(nasm_args), 0)) {
+         char ld_path[PATH_MAX] = Zero;
+
+         Break;
+         if (findBinaryInPath(ld_path, ArrayCount(ld_path), "ld")) {
+            printf("Running ld\n");
+            char* ld_args[] = { ld_path, "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", filename_without_extension };
+            if (Ok == platformRunProcess(ld_args, ArrayCount(ld_args), 0)) {
+            }
+            else {
+               fprintf(stderr, "ld failed\n");
+               ret = CouldNotLink;
+            }
+         }
+         else {
+            fprintf(stderr, "Could not find ld in path\n");
+            ret = Fail;
+         }
+      } else {
+          fprintf(stderr, "nasm failed\n");
+          ret = CouldNotAssemble;
       }
-   } else {
-       fprintf(stderr, "nasm failed\n");
    }
+   else {
+      fprintf(stderr, "Could not find nasm in path\n");
+      ret = Fail;
+   }
+
+
    return ret;
 }
 
