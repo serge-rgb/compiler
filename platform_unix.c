@@ -2,6 +2,9 @@
 #include "unistd.h"
 #include "dirent.h"
 
+// #include <sys/wait.h>
+pid_t waitpid(pid_t pid, int *status, int options);
+
 #define PRI_size "li"
 
 int raise(int sig);

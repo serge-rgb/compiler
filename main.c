@@ -167,7 +167,9 @@ main(int argc, char** argv) {
          char** test_files = NULL;
          char test_dir[PathMax] = "tests";
          platformPathAtBinary(test_dir, ArrayCount(test_dir));
-         platformListDirectory(&test_files, test_dir, filterCFiles);
+         if (platformListDirectory(&test_files, test_dir, filterCFiles) != Ok) {
+            fprintf(stderr, "Could not open directory %s\n", test_dir);
+         }
          for (sz i = 0; i < bufCount(test_files); ++i) {
             printf("Test file %s\n", test_files[i]);
             processSingleFile(test_files[i]);
@@ -193,17 +195,20 @@ main(int argc, char** argv) {
          }
          bufFree(test_files);
       } break;
+
+      case Action_COMPILE_FILE: {
+         if (bufCount(s_files) > 1) {
+            NotImplemented("More than one file.");
+         }
+
+         for (sz i = 0 ; i < bufCount(s_files); ++i) {
+            result = processSingleFile(s_files[i]);
+         }
+      } break;
    }
 
    bufFree(compiler_flags);
 
-   if (bufCount(s_files) > 1) {
-      NotImplemented("More than one file.");
-   }
-
-   for (sz i = 0 ; i < bufCount(s_files); ++i) {
-      result = processSingleFile(s_files[i]);
-   }
 
    deallocate(&temp_arena);
    return result;

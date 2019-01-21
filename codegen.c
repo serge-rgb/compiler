@@ -400,7 +400,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
          if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
             codegenError("Attempting to pass incompatible parameter to function.");
          }
-          
+
          m->pushParameter(m, c->scope, n_param++, &et);
          expected_param = expected_param->next;
       }
@@ -516,6 +516,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             switch (node->type) {
                case Ast_POSTFIX_INC: { emitArithBinaryExpr(c, Ast_ADD, NULL, expr, c->one, Target_ACCUM); } break;
                case Ast_POSTFIX_DEC: { emitArithBinaryExpr(c, Ast_SUB, NULL, expr, c->one, Target_ACCUM); } break;
+               default: { InvalidCodePath; }
             }
 
             ExprType* accum = m->accumC(m, local_etype.c);
