@@ -968,12 +968,15 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       // Push
       pushScope(c);
 
+      c->m->functionPrelude(c->m, func_name);
+
+      m->beginFuncParams(m);
+
+
       AstNode* params = declarator->child->next;
       if (params) {
          AstNode* p = params;
          u64 n_param = 0;
-         u64 offset = 0;
-         m->beginFuncParams(m);
          while (p) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
@@ -993,7 +996,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
                param_type = param_type_spec->ctype;
             }
 
-            Location param_loc = m->popParameter(m, c->scope, &param_type, n_param++, &offset);
+            Location param_loc = m->popParameter(m, c->scope, &param_type, n_param++);
 
             symInsert(&c->scope->symbol_table,
                                         id_str,
@@ -1008,9 +1011,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          m->endFuncParams(m);
       }
 
-      // NOTE: The prelude goes after popping parameters, since it's easier to
-      // handle them when we know they are at the top of the stack.
-      c->m->functionPrelude(c->m, func_name);
 
       emitCompoundStatement(c, compound, Target_ACCUM);
 

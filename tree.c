@@ -30,7 +30,8 @@ makeAstNode(Arena* a, AstType type, AstNode* left, AstNode* right) {
    if (left) {
       line_number = left->line_number;
    } else {
-      fprintf(stderr, "WARNING: Calling makeAstNode with NULL left node. Will emit line number as 0. \n");
+      // TODO: Re-enable this warning when improving error messages.
+      // fprintf(stderr, "WARNING: Calling makeAstNode with NULL left node. Will emit line number as 0. \n");
    }
    return makeAstNodeWithLineNumber(a, type, left, right, line_number);
 }

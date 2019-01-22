@@ -9,11 +9,23 @@ struct MachineX64 {
    i64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 
    // Parameter passing state
-   u32 intParamIdx;
-   RegisterEnum paramIntegerRegs[6];
+   union {
 
-   u32 floatParamIdx;
-   RegisterEnum paramFloatRegs[8];
+      // Unix
+      struct {
+         u32 intIdx;
+         RegisterEnum integerRegs[6];
+
+         u32 floatParamIdx;
+         RegisterEnum floatRegs[8];
+      };
+
+      // Windows
+      struct {
+         // Begins as offset to stack before function prelude
+         u64 offset;
+      };
+   } params;
 } typedef MachineX64;
 
 void        x64Mov(MachineX64* m, ExprType* dst, ExprType* src);
@@ -358,8 +370,14 @@ sysVIntegerRegisterEnum(u64 n_param) {
 
 void
 x64BeginFuncParams(MachineX64* m) {
-   m->intParamIdx = 0;
-   m->floatParamIdx = 0;
+   if (m->machine.flags & Config_TARGET_WIN) {
+      m->params.offset = 16;  // Function prelude stack offset. RBP 8 bytes. Return address 8 bytes.
+   }
+   else {
+      m->params.intIdx = 0;
+      m->params.floatParamIdx = 0;
+   }
+
 }
 
 void
@@ -392,11 +410,11 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
          int n_regs = 0;
          SystemVParamClass class = sysvClassifyNode(scope, etype->c, &n_regs);
 
-         if (class == Param_INTEGER && n_regs + m->intParamIdx > 6) {
+         if (class == Param_INTEGER && n_regs + m->params.intIdx > 6) {
             class = Param_MEMORY;
          }
 
-         if (class == Param_SSE && n_regs + m->floatParamIdx > 8) {
+         if (class == Param_SSE && n_regs + m->params.floatParamIdx > 8) {
             class = Param_MEMORY;
          }
 
@@ -408,7 +426,7 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
                ExprType partial_argument = *etype;
 
                while (n_regs--) {
-                  Location loc = registerLocation(m->paramIntegerRegs[m->intParamIdx++]);
+                  Location loc = registerLocation(m->params.integerRegs[m->params.intIdx++]);
 
                   ExprType reg = {
                      .c = (Ctype) {
@@ -492,7 +510,7 @@ ExprType* x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits); // fwd de
 
 
 Location
-x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* offset) {
+x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param) {
    Location loc = Zero;
 
    if ((m->config & Config_TARGET_MACOS) || (m->config & Config_TARGET_LINUX)) {
@@ -508,11 +526,11 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* off
          int n_regs = 0;
          SystemVParamClass class = sysvClassifyNode(scope, *ctype, &n_regs);
 
-         if (class == Param_INTEGER && n_regs + m->intParamIdx > 6) {
+         if (class == Param_INTEGER && n_regs + m->params.intIdx > 6) {
             class = Param_MEMORY;
          }
 
-         if (class == Param_SSE && n_regs + m->floatParamIdx > 8) {
+         if (class == Param_SSE && n_regs + m->params.floatParamIdx > 8) {
             class = Param_MEMORY;
          }
 
@@ -532,7 +550,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* off
                while (n_regs--) {
                   // We need a new location
 
-                  RegisterEnum regEnum = m->paramIntegerRegs[m->intParamIdx++];
+                  RegisterEnum regEnum = m->params.integerRegs[m->params.intIdx++];
                   Location src = registerLocation(regEnum);
                   dst.location.offset  = loc.offset - bits/8;
 
@@ -591,13 +609,13 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param, u64* off
             }
          }
          else {
-            loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
-            *offset += typeBits(ctype);
+            loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - m->params.offset };
+            m->params.offset += typeBits(ctype);
          }
       }
       else {
-         loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - *offset };
-         *offset += typeBits(ctype);
+         loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - m->params.offset };
+         m->params.offset += typeBits(ctype) / 8;
       }
    }
    return loc;
@@ -1298,6 +1316,8 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
    #endif
    {
+      m->flags = mflags;
+
       // Function pointers
       m->stackPop = x64StackPop;
 
@@ -1343,25 +1363,32 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       #pragma clang diagnostic pop
    #endif
 
-   m64->intParamIdx = 0;
+   if (!(mflags & Config_TARGET_WIN)) {
+      m64->params.intIdx = 0;
 
-   m64->paramIntegerRegs[0] = Reg_RDI;
-   m64->paramIntegerRegs[1] = Reg_RSI;
-   m64->paramIntegerRegs[2] = Reg_RDX;
-   m64->paramIntegerRegs[3] = Reg_RCX;
-   m64->paramIntegerRegs[4] = Reg_R8;
-   m64->paramIntegerRegs[5] = Reg_R9;
+      m64->params.integerRegs[0] = Reg_RDI;
+      m64->params.integerRegs[1] = Reg_RSI;
+      m64->params.integerRegs[2] = Reg_RDX;
+      m64->params.integerRegs[3] = Reg_RCX;
+      m64->params.integerRegs[4] = Reg_R8;
+      m64->params.integerRegs[5] = Reg_R9;
 
-   m64->floatParamIdx = 0;
+      m64->params.floatParamIdx = 0;
 
-   m64->paramFloatRegs[0] = Reg_XMM0;
-   m64->paramFloatRegs[1] = Reg_XMM1;
-   m64->paramFloatRegs[2] = Reg_XMM2;
-   m64->paramFloatRegs[3] = Reg_XMM3;
-   m64->paramFloatRegs[4] = Reg_XMM4;
-   m64->paramFloatRegs[5] = Reg_XMM5;
-   m64->paramFloatRegs[6] = Reg_XMM6;
-   m64->paramFloatRegs[7] = Reg_XMM7;
+      m64->params.floatRegs[0] = Reg_XMM0;
+      m64->params.floatRegs[1] = Reg_XMM1;
+      m64->params.floatRegs[2] = Reg_XMM2;
+      m64->params.floatRegs[3] = Reg_XMM3;
+      m64->params.floatRegs[4] = Reg_XMM4;
+      m64->params.floatRegs[5] = Reg_XMM5;
+      m64->params.floatRegs[6] = Reg_XMM6;
+      m64->params.floatRegs[7] = Reg_XMM7;
+   }
+   // Windows
+   else {
+
+   }
+
 
    return m;
 }

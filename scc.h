@@ -505,6 +505,8 @@ struct Codegen {
 // ======== Machine abstraction ========
 // =====================================
 struct Machine {
+   u8 flags; // MachineConfigFlags
+
    void (*stackPop)(void* machine, ExprType* et);
    Location (*stackPushReg)(void* machine, RegisterEnum reg);
    Location (*stackPushImm)(void* machine, ExprType* et, i64 value);
@@ -519,7 +521,7 @@ struct Machine {
    void (* beginFuncParams ) (void* machine);
 
    void (*pushParameter)(void* machine, Scope* scope, u64 n_param, ExprType* etype);
-   Location (*popParameter)(void* machine, Scope* scope, Ctype* ctype, u64 n_param, u64* offset);
+   Location (*popParameter)(void* machine, Scope* scope, Ctype* ctype, u64 n_param);
 
    void (* endFuncParams ) (void* machine);
 

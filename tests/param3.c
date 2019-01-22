@@ -1,11 +1,10 @@
 struct veci {
    int x;
    int y;
-
    int z;
 };
 
-int proc_struct(struct veci foo) {
+int procStruct(struct veci foo) {
    return 10*foo.x + foo.y;
 }
 
@@ -14,5 +13,5 @@ int main() {
    foo.x = 4;
    foo.y = 2;
    foo.z = 1;
-   return proc_struct(foo) == 42;
+   return procStruct(foo) == 42;
 }
