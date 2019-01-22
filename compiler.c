@@ -3,7 +3,7 @@
 
 if [ `uname` = "Linux" ]; then
    # -fsanitize=address
-   clang -g -Wall -fno-omit-frame-pointer -Wno-missing-braces -Wno-incompatible-pointer-types compiler.c -o compiler
+   clang -g -Wall -fno-omit-frame-pointer -Wno-missing-braces -Wno-incompatible-pointer-types compiler.c -o compiler && ./compiler $*
    exit $?
 elif [ `uname` = "MSYS_NT-10.0" ]; then
    # *** NOTE: *** As of 2018-06-02, clang-cl is still pretty buggy when debugging with Visual Studio.

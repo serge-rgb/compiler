@@ -131,6 +131,9 @@ u64 platformFirstBitSet(u64 val);
 ErrorCode platformListDirectory(char*** out_files, char* dirname, b32 (*filter)(char*));
 ErrorCode platformCompileAndLinkAsmFile(char* filename_without_extension);
 
+ErrorCode platformAssemble(char* nasm_path, char* asm_file);
+ErrorCode platformLink(char* ld_path, char* filename_without_extension);
+
 
 // ========================
 // ======== Memory ========
