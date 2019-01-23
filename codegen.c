@@ -584,65 +584,89 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                *expr_type = result;
             }
          } break;
-         // Binary operators
-         default: {
+         // Logical operators
+         case Ast_ADD:
+         case Ast_SUB:
+         case Ast_MUL:
+         case Ast_DIV: {
             AstNode* child1 = child0->next;
-            if (node->type == Ast_ADD ||
-                node->type == Ast_SUB ||
-                node->type == Ast_MUL ||
-                node->type == Ast_DIV) {
-               emitArithBinaryExpr(c, node->type, expr_type, child0, child1, target);
-            }
-            else if (node->type == Ast_LESS ||
-                     node->type == Ast_LEQ ||
-                     node->type == Ast_GREATER ||
-                     node->type == Ast_GEQ ||
-                     node->type == Ast_NOT_EQUALS ||
-                     node->type == Ast_EQUALS) {
-               AstNode* left = node->child;
-               AstNode* right = node->child->next;
-               ExprType left_type = {0};
-               ExprType right_type = {0};
-               codegenEmit(c, right, &right_type, Target_STACK);
-               codegenEmit(c, left, &left_type, Target_ACCUM);
+            emitArithBinaryExpr(c, node->type, expr_type, child0, child1, target);
+         } break;
 
-               Ctype target_type = arithmeticTypeConversion(left_type.c, right_type.c);
+         case Ast_LESS:
+         case Ast_LEQ:
+         case Ast_GREATER:
+         case Ast_GEQ:
+         case Ast_NOT_EQUALS:
+         case Ast_EQUALS: {
+            AstNode* left = node->child;
+            AstNode* right = node->child->next;
+            ExprType left_type = {0};
+            ExprType right_type = {0};
+            codegenEmit(c, right, &right_type, Target_STACK);
+            codegenEmit(c, left, &left_type, Target_ACCUM);
 
-               ExprType* helper = m->helperC(m, right_type.c);
-               m->stackPop(m, helper);
+            Ctype target_type = arithmeticTypeConversion(left_type.c, right_type.c);
 
-               if (maybeEmitTypeConversion(c,
-                                          &right_type,
-                                          target_type,
-                                          Target_STACK,
-                                          "Incompatible types in binary expression")) {
-                  helper = m->helperC(m, target_type);
-                  m->stackPop(m, helper);
-               }
+            ExprType* helper = m->helperC(m, right_type.c);
+            m->stackPop(m, helper);
 
-               maybeEmitTypeConversion(c,
-                                       &left_type,
+            if (maybeEmitTypeConversion(c,
+                                       &right_type,
                                        target_type,
-                                       Target_ACCUM,
-                                       "Incompatible types in binary expression");
+                                       Target_STACK,
+                                       "Incompatible types in binary expression")) {
+               helper = m->helperC(m, target_type);
+               m->stackPop(m, helper);
+            }
 
-               ExprType* accum = m->accumC(m, target_type);
+            maybeEmitTypeConversion(c,
+                                    &left_type,
+                                    target_type,
+                                    Target_ACCUM,
+                                    "Incompatible types in binary expression");
 
-               m->cmp(m, accum, helper);
-               m->cmpSetAccum(m, node->type);
+            ExprType* accum = m->accumC(m, target_type);
 
-               expr_type->c = target_type;
+            m->cmp(m, accum, helper);
+            m->cmpSetAccum(m, node->type);
 
-               if (target == Target_ACCUM) {
-                  expr_type->location = accum->location;
-               }
-               else if (target == Target_STACK) {
-                  expr_type->location = m->stackPushReg(m, accum->location.reg);
-               }
+            expr_type->c = target_type;
+
+            if (target == Target_ACCUM) {
+               expr_type->location = accum->location;
+            }
+            else if (target == Target_STACK) {
+               expr_type->location = m->stackPushReg(m, accum->location.reg);
+            }
+
+         } break;
+         // Logical AND/OR
+         case Ast_LOGICAL_OR:
+         case Ast_LOGICAL_AND: {
+            AstNode* left = node->child;
+            AstNode* right = node->child->next;
+            ExprType left_type = {0};
+            ExprType right_type = {0};
+
+            NotImplemented("check for scalar type");
+            // TODO: need to determine type of expression without emitting code.
+            // if (!isScalarType())
+
+            codegenEmit(c, left, &left_type, Target_ACCUM);
+
+            if (node->type == Ast_LOGICAL_AND) {
+
+               codegenEmit(c, right, &right_type, Target_STACK);
             }
             else {
-               NotImplemented("Missing codegen for expression AST node.");
+               NotImplemented("logical or");
             }
+
+         } break;
+         // Binary operators
+         default: {
+            NotImplemented("Missing codegen for expression AST node.");
          }
       }
    }

@@ -5,6 +5,12 @@ isArithmeticType(Ctype ctype) {
 }
 
 b32
+isScalarType(Ctype ctype) {
+   b32 scalar = isArithmeticType(ctype) || ctype.type == Type_POINTER || ctype.type == Type_ARRAY;
+   return scalar;
+}
+
+b32
 isRealType(Ctype* ctype) {
    b32 real = ctype->type & Type_REAL;
    return real;
@@ -75,7 +81,8 @@ nodeIsExpression(AstNode* node) {
        node->type == Ast_FUNCCALL || node->type == Ast_ASSIGN_EXPR ||
        node->type == Ast_NUMBER || node->type == Ast_ID ||
        node->type == Ast_POSTFIX_INC || node->type == Ast_POSTFIX_DEC ||
-       node->type == Ast_STRUCT_MEMBER_ACCESS || node->type == Ast_ADDRESS) {
+       node->type == Ast_STRUCT_MEMBER_ACCESS || node->type == Ast_ADDRESS ||
+       node->type == Ast_LOGICAL_AND || node->type == Ast_LOGICAL_OR) {
       isExpr = true;
    }
    return isExpr;
