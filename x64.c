@@ -24,16 +24,13 @@ struct MachineX64 {
       struct {
          // Begins as offset to stack before function prelude
          u64 offset;
+         int n_param;
       };
    } params;
 } typedef MachineX64;
 
 void        x64Mov(MachineX64* m, ExprType* dst, ExprType* src);
-Location    x64StackPushReg(MachineX64* m, RegisterEnum reg);
-Location    x64StackPushImm(MachineX64* m, ExprType* et, i64 val);
 Location    x64StackPushOffset(MachineX64* m, u64 bytes);
-ExprType*   x64ImmediateInt(u64 value);
-ExprType*   x64Accum64(int type /*Ctype.type*/ );
 ExprType*   x64Helper64(int type /*Ctype.type*/ );
 
 struct Register {
@@ -386,7 +383,7 @@ x64EndFuncParams(MachineX64* m) {
 }
 
 void
-x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
+x64PushParameter(MachineX64* m, Scope* scope, ExprType* etype) {
    if (isRealType(&etype->c)) {
       NotImplemented("Floating parameters.");
    }
@@ -394,8 +391,8 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
    if ((m->config & Config_TARGET_LINUX) || (m->config & Config_TARGET_MACOS)) {
       Location loc = {0};
       if (isIntegerType(&etype->c)) {
-         if (n_param < 6) {
-            loc = registerLocation(sysVIntegerRegisterEnum(n_param));
+         if (m->params.n_param < 6) {
+            loc = registerLocation(sysVIntegerRegisterEnum(m->params.n_param));
             ExprType reg = {
                .c = etype->c,
                .location = loc,
@@ -476,9 +473,9 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
       Location loc = {0};
       if (typeBits(&etype->c) <= 64) {
          loc.type = Location_REGISTER;
-         if (n_param < 4) {
+         if (m->params.n_param < 4) {
             if (!isRealType(&etype->c)) {
-               switch(n_param) {
+               switch(m->params.n_param) {
                   case 0: { loc.reg = Reg_RCX; } break;
                   case 1: { loc.reg = Reg_RDX; } break;
                   case 2: { loc.reg = Reg_R8;  } break;
@@ -503,6 +500,7 @@ x64PushParameter(MachineX64* m, Scope* scope, u64 n_param, ExprType* etype) {
          .location = loc,
       };
       x64Mov(m, &reg, etype);
+      m->params.n_param++;
    }
 }
 
@@ -510,13 +508,13 @@ ExprType* x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits); // fwd de
 
 
 Location
-x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param) {
+x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
    Location loc = Zero;
 
    if ((m->config & Config_TARGET_MACOS) || (m->config & Config_TARGET_LINUX)) {
       if (isIntegerType(ctype)) {
-         if (n_param < 6) {
-            loc = registerLocation(sysVIntegerRegisterEnum(n_param));
+         if (m->params.n_param < 6) {
+            loc = registerLocation(sysVIntegerRegisterEnum(m->params.n_param));
          }
          else {
             NotImplemented("Pass integer param on stack");
@@ -594,10 +592,10 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype, u64 n_param) {
    }
    else if (m->config & Config_TARGET_WIN){
       if (typeBits(ctype) <= 64) {
-         if (n_param < 4) {
+         if (m->params.n_param < 4) {
             if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
                loc.type = Location_REGISTER;
-               switch(n_param) {
+               switch(m->params.n_param) {
                   case 0: { loc.reg = Reg_RCX; } break;
                   case 1: { loc.reg = Reg_RDX; } break;
                   case 2: { loc.reg = Reg_R8;  } break;

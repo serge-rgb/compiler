@@ -520,8 +520,8 @@ struct Machine {
 
    void (* beginFuncParams ) (void* machine);
 
-   void (*pushParameter)(void* machine, Scope* scope, u64 n_param, ExprType* etype);
-   Location (*popParameter)(void* machine, Scope* scope, Ctype* ctype, u64 n_param);
+   void (*pushParameter)(void* machine, Scope* scope, ExprType* etype);
+   Location (*popParameter)(void* machine, Scope* scope, Ctype* ctype);
 
    void (* endFuncParams ) (void* machine);
 

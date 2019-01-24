@@ -330,7 +330,6 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
          };
          ExprType* accum = m->accumC(m, member->ctype);
 
-
          m->mov(m, accum, &reg);
          if (target == Target_STACK) {
             m->stackPushReg(m, address.reg);
@@ -383,8 +382,6 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    }
 
    // Put the parameters in registers and/or the stack.
-   u64 n_param = 0;
-
    AstNode* expected_param = funcParams(sym->c.func.node);
 
    m->beginFuncParams(m);
@@ -401,7 +398,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
             codegenError("Attempting to pass incompatible parameter to function.");
          }
 
-         m->pushParameter(m, c->scope, n_param++, &et);
+         m->pushParameter(m, c->scope, &et);
          expected_param = expected_param->next;
       }
    }
@@ -1000,7 +997,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       AstNode* params = declarator->child->next;
       if (params) {
          AstNode* p = params;
-         u64 n_param = 0;
          while (p) {
             Assert (p->type == Ast_PARAMETER);
             AstNode* param_type_spec = p->child;
@@ -1020,7 +1016,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
                param_type = param_type_spec->ctype;
             }
 
-            Location param_loc = m->popParameter(m, c->scope, &param_type, n_param++);
+            Location param_loc = m->popParameter(m, c->scope, &param_type);
 
             symInsert(&c->scope->symbol_table,
                                         id_str,
