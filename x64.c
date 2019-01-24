@@ -4,7 +4,6 @@ static FILE* g_asm;
 struct MachineX64 {
    Machine machine;  // Space for function pointers.
 
-   u32         config;   // MachineConfigFlags
    StackValue* s_stack;  // Stack allocation / de-allocation is done on a per-function basis.
    i64         stack_offset;  // # Bytes from the bottom of the stack to RSP.
 
@@ -82,8 +81,8 @@ codegenError(char* msg, ...) {
 void
 setupVolatility(MachineX64* m) {
    int* volatile_regs = NULL;
-   if (   (m->config & Config_TARGET_MACOS)
-       || (m->config & Config_TARGET_LINUX)) {
+   if (   (m->machine.flags & Config_TARGET_MACOS)
+       || (m->machine.flags & Config_TARGET_LINUX)) {
       // These are the non-volatile registers in macos
       static int volatile_regs_systemv[] = {
          Reg_RBX,
@@ -96,7 +95,7 @@ setupVolatility(MachineX64* m) {
       };
       volatile_regs = volatile_regs_systemv;
    }
-   else if (m->config & Config_TARGET_WIN) {
+   else if (m->machine.flags & Config_TARGET_WIN) {
       static int volatile_regs_win64[] = {
          Reg_RAX, Reg_RCX, Reg_RDX, Reg_R8, Reg_R9, Reg_R10, Reg_R11
                  // TODO: Floating point registers volatility.
@@ -182,24 +181,26 @@ locationString(MachineX64* m, Location r, int bits) {
 }
 
 void
-instructionPrintf(char* asm_line, ...) {
+instructionPrintf(MachineX64* m, char* asm_line, ...) {
    va_list args;
    va_start(args, asm_line);
 
-   char out_asm[LineMax] = {0};
+   if (!(m->machine.flags & Config_INSTR_OUTPUT_DISABLED)) {
+      char out_asm[LineMax] = {0};
 
-   int written = vsnprintf(out_asm, LineMax, asm_line, args);
-   if (written >= LineMax - 2) {  // Counting two extra character for the new line and 0 terminator.
-      codegenError("LineMax is not sufficient for instruction length.");
+      int written = vsnprintf(out_asm, LineMax, asm_line, args);
+      if (written >= LineMax - 2) {  // Counting two extra character for the new line and 0 terminator.
+         codegenError("LineMax is not sufficient for instruction length.");
+      }
+      if (out_asm[written-1] != '\n') {
+         out_asm[written] = '\n';
+      }
+      fwrite(out_asm, 1, strlen(out_asm), g_asm);
+
+      printf("%s", out_asm);
+
+      va_end(args);
    }
-   if (out_asm[written-1] != '\n') {
-      out_asm[written] = '\n';
-   }
-   fwrite(out_asm, 1, strlen(out_asm), g_asm);
-
-   printf("%s", out_asm);
-
-   va_end(args);
 }
 
 Location
@@ -232,14 +233,14 @@ instructionReg(MachineX64* m, char* asm_line, int bits, ...) {
    }
    switch (n_regs) {
       case 0: {
-         instructionPrintf(asm_line);
+         instructionPrintf(m, asm_line);
       } break;
       case 1: {
-         instructionPrintf(asm_line,
+         instructionPrintf(m, asm_line,
                            locationString(m, registerLocation(regs[0]), bits));
       } break;
       case 2: {
-         instructionPrintf(asm_line,
+         instructionPrintf(m, asm_line,
                            locationString(m, registerLocation(regs[0]), bits),
                            locationString(m, registerLocation(regs[1]), bits));
       } break;
@@ -265,7 +266,7 @@ x64StackPop(MachineX64* m, ExprType* et) {
       } break;
       case Stack_OFFSET: {
          m->stack_offset -= s.offset;
-         instructionPrintf("add rsp, %d", s.offset);
+         instructionPrintf(m, "add rsp, %d", s.offset);
       }
    }
 }
@@ -388,7 +389,7 @@ x64PushParameter(MachineX64* m, Scope* scope, ExprType* etype) {
       NotImplemented("Floating parameters.");
    }
 
-   if ((m->config & Config_TARGET_LINUX) || (m->config & Config_TARGET_MACOS)) {
+   if ((m->machine.flags & Config_TARGET_LINUX) || (m->machine.flags & Config_TARGET_MACOS)) {
       Location loc = {0};
       if (isIntegerType(&etype->c)) {
          if (m->params.n_param < 6) {
@@ -511,7 +512,7 @@ Location
 x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
    Location loc = Zero;
 
-   if ((m->config & Config_TARGET_MACOS) || (m->config & Config_TARGET_LINUX)) {
+   if ((m->machine.flags & Config_TARGET_MACOS) || (m->machine.flags & Config_TARGET_LINUX)) {
       if (isIntegerType(ctype)) {
          if (m->params.n_param < 6) {
             loc = registerLocation(sysVIntegerRegisterEnum(m->params.n_param));
@@ -590,7 +591,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
          NotImplemented("Non integer types");
       }
    }
-   else if (m->config & Config_TARGET_WIN){
+   else if (m->machine.flags & Config_TARGET_WIN){
       if (typeBits(ctype) <= 64) {
          if (m->params.n_param < 4) {
             if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
@@ -622,35 +623,35 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
 void
 x64TestAndJump(MachineX64* m, u32 bits, char* then, char* els) {
    instructionReg(m, "test %s, %s", bits, Reg_RAX, Reg_RAX);
-   instructionPrintf("jne %s", then);
-   instructionPrintf("jmp %s", els);
+   instructionPrintf(m, "jne %s", then);
+   instructionPrintf(m, "jmp %s", els);
 }
 
 void
 x64Cmp(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
-   instructionPrintf("cmp %s, %s",
+   instructionPrintf(m, "cmp %s, %s",
                      locationString(m, dst->location, bits),
                      locationString(m, src->location, bits));
 }
 
 // Compare the accumulator with the top of the stack.
 void
-x64CmpJmp(Machine* m, AstType ast_type, ExprType* type, char* then, char* els) {
+x64CmpJmp(MachineX64* m, AstType ast_type, ExprType* type, char* then, char* els) {
    u32 bits = typeBits(&type->c);
-   m->stackPop(m, x64Helper64(type->c.type));
+   x64StackPop(m, x64Helper64(type->c.type));
 
    instructionReg((MachineX64*)m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
    switch (ast_type) {
-      case Ast_EQUALS:     { instructionPrintf("je %s", then); } break;
-      case Ast_LESS:       { instructionPrintf("jl %s", then); } break;
-      case Ast_LEQ:        { instructionPrintf("jle %s", then); } break;
-      case Ast_GREATER:    { instructionPrintf("jg %s", then); } break;
-      case Ast_GEQ:        { instructionPrintf("jge %s", then); } break;
-      case Ast_NOT_EQUALS: { instructionPrintf("jne %s", then); } break;
+      case Ast_EQUALS:     { instructionPrintf(m, "je %s", then); } break;
+      case Ast_LESS:       { instructionPrintf(m, "jl %s", then); } break;
+      case Ast_LEQ:        { instructionPrintf(m, "jle %s", then); } break;
+      case Ast_GREATER:    { instructionPrintf(m, "jg %s", then); } break;
+      case Ast_GEQ:        { instructionPrintf(m, "jge %s", then); } break;
+      case Ast_NOT_EQUALS: { instructionPrintf(m, "jne %s", then); } break;
       default:             { InvalidCodePath; }
    }
-   instructionPrintf("jmp %s", els);
+   instructionPrintf(m, "jmp %s", els);
 }
 
 void
@@ -1003,7 +1004,7 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
       if (dst->location.type == Location_REGISTER
           && bits <= 16) {
          Assert (!isRealType(&dst->c));
-         instructionPrintf("xor %s, %s",
+         instructionPrintf(m, "xor %s, %s",
                            locationString(m, dst->location, 64),
                            locationString(m, dst->location, 64));
       }
@@ -1011,12 +1012,12 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
           isImmediate(src)) {
          switch(typeBits(&dst->c)) {
             case 64: {
-               instructionPrintf("mov %s, __float64__(%f)",
+               instructionPrintf(m, "mov %s, __float64__(%f)",
                                  locationString(m, dst->location, bits),
                                  src->location.cast.real64);
             } break;
             case 32: {
-               instructionPrintf("mov %s, __float32__(%f)",
+               instructionPrintf(m, "mov %s, __float32__(%f)",
                                  locationString(m, dst->location, bits),
                                  src->location.cast.real64);
             } break;
@@ -1029,22 +1030,22 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
          // If both locations are on the stack, use the accumulator as a temp register.
          if (   (dst->location.type == Location_STACK || dst->location.type == Location_STACK_FROM_REG)
              && (src->location.type == Location_STACK || src->location.type == Location_STACK_FROM_REG)) {
-            instructionPrintf("mov %s, %s",
+            instructionPrintf(m, "mov %s, %s",
                               locationString(m, x64AccumInt(bits)->location, bits),
                               locationString(m, src->location, bits));
 
-            instructionPrintf("mov %s, %s",
+            instructionPrintf(m, "mov %s, %s",
                               locationString(m, dst->location, bits),
                               locationString(m, x64AccumInt(bits)->location, bits));
 
          }
          else if (isRealType(&dst->c)) {
-            instructionPrintf("movss %s, %s",
+            instructionPrintf(m, "movss %s, %s",
                               locationString(m, dst->location, bits),
                               locationString(m, src->location, bits));
          }
          else {
-            instructionPrintf("mov %s, %s",
+            instructionPrintf(m, "mov %s, %s",
                               locationString(m, dst->location, bits),
                               locationString(m, src->location, bits));
          }
@@ -1060,14 +1061,14 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
             instructionReg(m, "mov rsi, %s", 64, src->location);
          }
          else if (src->location.type == Location_STACK) {
-            instructionPrintf("lea rsi, [ rsp + %d ]", m->stack_offset - src->location.offset);
+            instructionPrintf(m, "lea rsi, [ rsp + %d ]", m->stack_offset - src->location.offset);
          }
-         instructionPrintf("mov rdi, rsp");
+         instructionPrintf(m, "mov rdi, rsp");
          if (dst->location.offset != m->stack_offset) {
-            instructionPrintf("add rdi, %d", m->stack_offset - dst->location.offset);
+            instructionPrintf(m, "add rdi, %d", m->stack_offset - dst->location.offset);
          }
-         instructionPrintf("mov rcx, 0x%x", bytes);
-         instructionPrintf("rep movsb");
+         instructionPrintf(m, "mov rcx, 0x%x", bytes);
+         instructionPrintf(m, "rep movsb");
       }
       else {
          InvalidCodePath;
@@ -1079,12 +1080,12 @@ void
 x64Add(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
-      instructionPrintf("add %s, %s",
+      instructionPrintf(m, "add %s, %s",
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
    }
    else {
-      instructionPrintf("addps %s, %s",
+      instructionPrintf(m, "addps %s, %s",
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
    }
@@ -1094,12 +1095,12 @@ void
 x64Sub(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
-      instructionPrintf("sub %s, %s",
+      instructionPrintf(m, "sub %s, %s",
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
    }
    else {
-      instructionPrintf("subps %s, %s",
+      instructionPrintf(m, "subps %s, %s",
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
    }
@@ -1109,7 +1110,7 @@ void
 x64Mul(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
-      instructionPrintf("imul %s, %s",
+      instructionPrintf(m, "imul %s, %s",
          locationString(m, dst->location, bits),
          locationString(m, src->location, bits));
 
@@ -1123,7 +1124,7 @@ void
 x64Div(MachineX64* m, ExprType* dst, ExprType* src) {
    u32 bits = typeBits(&dst->c);
    if (!isRealType(&dst->c)) {
-      instructionPrintf("idiv %s, %s",
+      instructionPrintf(m, "idiv %s, %s",
          locationString(m, dst->location, bits),
          locationString(m, src->location, bits));
 
@@ -1135,7 +1136,7 @@ x64Div(MachineX64* m, ExprType* dst, ExprType* src) {
 
 void
 x64MovAccum(MachineX64* m, ExprType* et , Token* rhs_tok)  {
-   instructionPrintf("mov %s, %d",
+   instructionPrintf(m, "mov %s, %d",
                      locationString(m, registerLocation(Reg_RAX), typeBits(&et->c)),
                      rhs_tok->cast.int32);
 
@@ -1149,17 +1150,17 @@ x64MovAccum(MachineX64* m, ExprType* et , Token* rhs_tok)  {
 void
 x64StackAddressInAccum(MachineX64* m, ExprType* entry) {
    Assert(entry->location.type == Location_STACK);
-   instructionPrintf("lea rax, [rsp + %d]", m->stack_offset - entry->location.offset);
+   instructionPrintf(m, "lea rax, [rsp + %d]", m->stack_offset - entry->location.offset);
 }
 
 void
 x64Call(MachineX64* m, char* label) {
-   instructionPrintf("call %s", label);
+   instructionPrintf(m, "call %s", label);
 }
 
 Location
 x64StackPushReg(MachineX64* m, RegisterEnum reg) {
-   instructionPrintf("push %s", locationString(m, registerLocation(reg), 64));
+   instructionPrintf(m, "push %s", locationString(m, registerLocation(reg), 64));
    Location location = (Location) {
       .type = Location_STACK,
       .offset = m->stack_offset,
@@ -1172,7 +1173,7 @@ x64StackPushReg(MachineX64* m, RegisterEnum reg) {
 
 Location
 x64StackPushImm(MachineX64* m, ExprType* et, i64 val) {
-   instructionPrintf("push %d", val);
+   instructionPrintf(m, "push %d", val);
    m->stack_offset += 8;
    bufPush(m->s_stack, (StackValue){ .type = Stack_QWORD });
    et->location = (Location) {
@@ -1190,7 +1191,7 @@ x64StackPushOffset(MachineX64* m, u64 bytes) {
    };
 
    Assert(bytes);
-   instructionPrintf("sub rsp, %d", bytes);
+   instructionPrintf(m, "sub rsp, %d", bytes);
    m->stack_offset += bytes;
    StackValue val = { .type = Stack_OFFSET, .offset = bytes };
    bufPush(m->s_stack, val);
@@ -1209,17 +1210,17 @@ x64Finish(MachineX64* m) {
 
 void
 x64FunctionPrelude(MachineX64* m, char* func_name) {
-   instructionPrintf("global %s", func_name);
-   instructionPrintf("%s:", func_name);
-   instructionPrintf("push rbp");
-   instructionPrintf("mov rbp, rsp");
+   instructionPrintf(m, "global %s", func_name);
+   instructionPrintf(m, "%s:", func_name);
+   instructionPrintf(m, "push rbp");
+   instructionPrintf(m, "mov rbp, rsp");
 
    m->stack_offset += 16;  // 8 for rbp. 8 for return address from call
 }
 
 void
 x64FunctionEpilogue(MachineX64* m) {
-   instructionPrintf(".func_end:");
+   instructionPrintf(m, ".func_end:");
 
    while (bufCount(m->s_stack) > 0)  {
       m->machine.stackPop(m, x64Helper64(Type_INT));
@@ -1227,29 +1228,29 @@ x64FunctionEpilogue(MachineX64* m) {
 
    // Restore non-volatile registers.
 
-   instructionPrintf("pop rbp");
+   instructionPrintf(m, "pop rbp");
    m->stack_offset -= 8;
 
-   instructionPrintf("ret");
+   instructionPrintf(m, "ret");
    m->stack_offset -= 8;
 }
 
 void
 x64Label(MachineX64* m, char* label) {
-   instructionPrintf("%s:", label);
+   instructionPrintf(m, "%s:", label);
 }
 
 void
 x64Jmp(MachineX64* m, char* label) {
-   instructionPrintf("jmp %s", label);
+   instructionPrintf(m, "jmp %s", label);
 }
 
 void
 x64AddressOf(MachineX64* m, Location* loc) {
    switch (loc->type) {
       case Location_STACK: {
-         instructionPrintf("mov rax, rsp");
-         instructionPrintf("add rax, %d", m->stack_offset - loc->offset);
+         instructionPrintf(m, "mov rax, rsp");
+         instructionPrintf(m, "add rax, %d", m->stack_offset - loc->offset);
       } break;
       default: {
          NotImplemented("Address of something not on the stack");
@@ -1259,10 +1260,10 @@ x64AddressOf(MachineX64* m, Location* loc) {
 
 
 void
-x64ConvertFloatToInt(MachineX64* machine, Location from) {
+x64ConvertFloatToInt(MachineX64* m, Location from) {
    if (from.type == Location_REGISTER) {
       char* from_str = g_registers[from.reg].reg;
-      instructionPrintf("cvtss2si rax, %s", from_str);
+      instructionPrintf(m, "cvtss2si rax, %s", from_str);
    }
    else {
       NotImplemented("X64 conversion instruction")
@@ -1274,7 +1275,7 @@ Machine*
 makeMachineX64(Arena* a, MachineConfigFlags mflags) {
    MachineX64* m64 = AllocType(a, MachineX64);
 
-   m64->config = mflags;
+   m64->machine.flags = mflags;
 
    char* prelude =
    // TODO: unix / win32 targets

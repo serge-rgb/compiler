@@ -1,9 +1,13 @@
+enum InstrOutput {
+   InstrOutput_DISABLED,
+   InstrOutput_ENABLED,
+} typedef InstrOutput;
+
 void
 codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    char asmfile [PathMax] = Zero;
    snprintf(asmfile, PathMax, "%s.asm", outfile);
    g_asm = fopen(asmfile, "w");
-
 
    c->m = makeMachineX64(c->arena, mflags);
 
@@ -12,6 +16,8 @@ codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    Token* one_tok = AllocType(c->arena, Token);
    one_tok->value = 1;
    c->one->tok = one_tok;
+
+   c->instrOutputStack[ c->n_instrOutputStack++ ] = InstrOutput_ENABLED;
 }
 
 Tag*
@@ -61,6 +67,43 @@ popScope(Codegen* c) {
    }
 
    c->scope = c->scope->prev;
+}
+
+void
+pushInstructionOutput(Codegen* c, InstrOutput io) {
+   if (c->n_instrOutputStack >= MaxInstrOutputStack) {
+      codegenError("instrOutputStack stack overflow");
+   }
+
+   c->instrOutputStack[ c->n_instrOutputStack++ ] = io;
+
+   // TODO: Instead of using this flag, we can create a dummy machine that has
+   // stubs for all functions.
+
+   if (io == InstrOutput_ENABLED) {
+      c->m->flags &= ~Config_INSTR_OUTPUT_DISABLED;
+   }
+   else {
+      c->m->flags |= Config_INSTR_OUTPUT_DISABLED;
+   }
+}
+
+void
+popInstructionOutput(Codegen* c) {
+   --c->n_instrOutputStack;
+
+   if (!c->n_instrOutputStack) {
+      codegenError("Unexpected stack pop of instrOutputStack");
+   }
+
+   InstrOutput io = c->instrOutputStack[ c->n_instrOutputStack - 1 ];
+
+   if (io == InstrOutput_ENABLED) {
+      c->m->flags &= ~Config_INSTR_OUTPUT_DISABLED;
+   }
+   else {
+      c->m->flags |= Config_INSTR_OUTPUT_DISABLED;
+   }
 }
 
 // Forward declaration for recursive calls.
@@ -646,20 +689,29 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             ExprType left_type = {0};
             ExprType right_type = {0};
 
-            NotImplemented("check for scalar type");
-            // TODO: need to determine type of expression without emitting code.
-            // if (!isScalarType())
+            pushInstructionOutput(c, InstrOutput_DISABLED);
 
-            codegenEmit(c, left, &left_type, Target_ACCUM);
+            // Grab type
+            codegenEmit(c, left, &left_type, Target_NONE);
+            codegenEmit(c, right, &right_type, Target_NONE);
 
-            if (node->type == Ast_LOGICAL_AND) {
+            popInstructionOutput(c);
 
-               codegenEmit(c, right, &right_type, Target_STACK);
+            if (!isScalarType(left_type.c) || !isScalarType(right_type.c)) {
+               char andOr[8] = Zero; {
+                  snprintf(andOr, ArrayCount(andOr), "%s", node->type == Ast_LOGICAL_AND ? "AND" : "OR");
+               }
+
+               codegenError("Logical %s operation on non-scalar type.", andOr);
             }
             else {
-               NotImplemented("logical or");
+               if (node->type == Ast_LOGICAL_AND) {
+                  codegenEmit(c, left, &left_type, Target_STACK);
+               }
+               else {
+                  NotImplemented("logical or");
+               }
             }
-
          } break;
          // Binary operators
          default: {

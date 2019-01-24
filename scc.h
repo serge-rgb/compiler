@@ -482,6 +482,9 @@ enum MachineConfigFlags {
    Config_TARGET_MACOS = (1<<0),
    Config_TARGET_LINUX = (1<<1),
    Config_TARGET_WIN   = (1<<2),
+
+   Config_INSTR_OUTPUT_DISABLED = (1<<3),
+
 } typedef MachineConfigFlags;
 
 struct Machine typedef Machine;
@@ -489,11 +492,16 @@ struct Machine typedef Machine;
 struct Codegen {
    Arena*      arena;
    Scope*      scope;
-   char*       waiting;
+
    char*       file_name;
    u64         last_line_number;
 
    AstNode*    current_function;
+
+   // Disable/Enable instruction output.
+   #define MaxInstrOutputStack 8
+   char instrOutputStack[MaxInstrOutputStack];
+   char n_instrOutputStack;
 
    Machine*    m;
    // Constants
