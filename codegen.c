@@ -706,7 +706,36 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
             else {
                if (node->type == Ast_LOGICAL_AND) {
-                  codegenEmit(c, left, &left_type, Target_STACK);
+                  codegenEmit(c, left, &left_type, Target_ACCUM);
+                  u64 bits = typeBits(&left_type.c);
+
+
+                  if (left->type == Ast_EQUALS ||
+                      left->type == Ast_LESS ||
+                      left->type == Ast_LEQ ||
+                      left->type == Ast_GREATER ||
+                      left->type == Ast_GEQ ||
+                      left->type == Ast_NOT_EQUALS) {
+                     // We just emitted a compare.
+                  }
+                  else {
+                     ExprType* accum = m->accum(m, left_type.c.type, bits);
+                     ExprType imm = {
+                        .c = (Ctype) { .type = Type_LONG },
+                        .location = (Location) { .type = Location_IMMEDIATE, .immediate_value = 0 },
+                     };
+                     m->cmp(m, accum, &imm);
+                  }
+
+
+                  NotImplemented("Jump and set value");
+
+                  char rhs_label[LabelMax] = Zero; {
+                     static int count = 0;
+                     snprintf(rhs_label, ArrayCount(rhs_label), ".right_hand%d", count++);
+                  };
+
+                  m->cmpJmp(m, Ast_EQUALS, rhs_label);
                }
                else {
                   NotImplemented("logical or");
@@ -746,7 +775,7 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
             NotImplemented("Promotion rules");
          }
 
-         c->m->cmpJmp(c->m, cond->type, &left_type, then, els);
+         c->m->cmpJmpStackTop(c->m, cond->type, &left_type, then, els);
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);

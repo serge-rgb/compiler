@@ -404,6 +404,7 @@ struct Location {
       union {
          union {
             f64 real64;
+            i64 int64;
          } cast;
          u64 immediate_value;  // Cast to appropriate value based on token type.
       };
@@ -546,7 +547,8 @@ struct Machine {
    void (*cmp)(void* machine, ExprType* dst, ExprType* src);
    void (*cmpSetAccum)(void* machine, AstType type);
 
-   void (*cmpJmp)(void* machine, AstType ast_type, ExprType* type, char* then, char* els);
+   void (*cmpJmp)(void* machine, AstType ast_type, char* label);
+   void (*cmpJmpStackTop)(void* machine, AstType ast_type, ExprType* type, char* then, char* els);
    void (*testAndJump)(void* machine, u32 bits, char* then, char* els);
    void (*jmp)(void* machine, char* label);
 

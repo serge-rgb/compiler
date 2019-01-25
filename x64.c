@@ -635,22 +635,29 @@ x64Cmp(MachineX64* m, ExprType* dst, ExprType* src) {
                      locationString(m, src->location, bits));
 }
 
+void
+x64CmpJmp(MachineX64* m, AstType ast_type, char* label) {
+   switch (ast_type) {
+      case Ast_EQUALS:     { instructionPrintf(m, "je %s", label); } break;
+      case Ast_LESS:       { instructionPrintf(m, "jl %s", label); } break;
+      case Ast_LEQ:        { instructionPrintf(m, "jle %s", label); } break;
+      case Ast_GREATER:    { instructionPrintf(m, "jg %s", label); } break;
+      case Ast_GEQ:        { instructionPrintf(m, "jge %s", label); } break;
+      case Ast_NOT_EQUALS: { instructionPrintf(m, "jne %s", label); } break;
+      default:             { InvalidCodePath; }
+   }
+}
+
 // Compare the accumulator with the top of the stack.
 void
-x64CmpJmp(MachineX64* m, AstType ast_type, ExprType* type, char* then, char* els) {
+x64CmpJmpStackTop(MachineX64* m, AstType ast_type, ExprType* type, char* then, char* els) {
    u32 bits = typeBits(&type->c);
    x64StackPop(m, x64Helper64(type->c.type));
 
    instructionReg((MachineX64*)m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
-   switch (ast_type) {
-      case Ast_EQUALS:     { instructionPrintf(m, "je %s", then); } break;
-      case Ast_LESS:       { instructionPrintf(m, "jl %s", then); } break;
-      case Ast_LEQ:        { instructionPrintf(m, "jle %s", then); } break;
-      case Ast_GREATER:    { instructionPrintf(m, "jg %s", then); } break;
-      case Ast_GEQ:        { instructionPrintf(m, "jge %s", then); } break;
-      case Ast_NOT_EQUALS: { instructionPrintf(m, "jne %s", then); } break;
-      default:             { InvalidCodePath; }
-   }
+
+   x64CmpJmp(m, ast_type, els);
+
    instructionPrintf(m, "jmp %s", els);
 }
 
@@ -1343,6 +1350,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->cmp = x64Cmp;
       m->cmpSetAccum = x64CmpSetAccum;
       m->cmpJmp = x64CmpJmp;
+      m->cmpJmpStackTop = x64CmpJmpStackTop;
       m->testAndJump = x64TestAndJump;
       m->jmp = x64Jmp;
       m->label = x64Label;
