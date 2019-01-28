@@ -689,12 +689,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             ExprType left_type = {0};
             ExprType right_type = {0};
 
-            pushInstructionOutput(c, InstrOutput_DISABLED);
-
-            // Grab type
-            codegenEmit(c, left, &left_type, Target_NONE);
-            codegenEmit(c, right, &right_type, Target_NONE);
-
+            pushInstructionOutput(c, InstrOutput_DISABLED); {
+               // Grab type
+               codegenEmit(c, left, &left_type, Target_NONE);
+               codegenEmit(c, right, &right_type, Target_NONE);
+            }
             popInstructionOutput(c);
 
             if (!isScalarType(left_type.c) || !isScalarType(right_type.c)) {
@@ -709,7 +708,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   codegenEmit(c, left, &left_type, Target_ACCUM);
                   u64 bits = typeBits(&left_type.c);
 
-
+                  // TODO: special case for comparissons
+                  /*
                   if (left->type == Ast_EQUALS ||
                       left->type == Ast_LESS ||
                       left->type == Ast_LEQ ||
@@ -718,7 +718,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                       left->type == Ast_NOT_EQUALS) {
                      // We just emitted a compare.
                   }
-                  else {
+                  else
+                     */
+                  {
                      ExprType* accum = m->accum(m, left_type.c.type, bits);
                      ExprType imm = {
                         .c = (Ctype) { .type = Type_LONG },
@@ -727,15 +729,38 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                      m->cmp(m, accum, &imm);
                   }
 
-
-                  NotImplemented("Jump and set value");
-
-                  char rhs_label[LabelMax] = Zero; {
+                  char end_label[LabelMax] = Zero; {
                      static int count = 0;
-                     snprintf(rhs_label, ArrayCount(rhs_label), ".right_hand%d", count++);
-                  };
+                     snprintf(end_label, ArrayCount(end_label), ".cmp_end%d", count);
+                  }
 
-                  m->cmpJmp(m, Ast_EQUALS, rhs_label);
+                  m->cmpJmp(m, Ast_EQUALS, end_label);
+
+                  codegenEmit(c, right, &right_type, Target_ACCUM);
+                  {
+                     ExprType* accum = m->accum(m, right_type.c.type, typeBits(&right_type.c));
+                     ExprType imm = {
+                        .c = (Ctype) { .type = Type_LONG },
+                        .location = (Location) { .type = Location_IMMEDIATE, .immediate_value = 0 },
+                     };
+                     m->cmp(m, accum, &imm);
+                  }
+
+                  m->label(m, end_label);
+
+
+                  *expr_type = (ExprType){ .c = (Ctype) { .type = Type_INT } };
+
+                  if (target != Target_NONE) {
+                     Location loc = m->accum(m, Type_INT, 32)->location;
+                     if (target == Target_ACCUM) {
+                        m->cmpSetAccum(m, Ast_NOT_EQUALS);
+                        expr_type->location = loc;
+                     }
+                     else if (target == Target_STACK) {
+                        m->stackPushReg(m, loc.reg);
+                     }
+                  }
                }
                else {
                   NotImplemented("logical or");
