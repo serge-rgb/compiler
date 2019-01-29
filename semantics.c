@@ -35,6 +35,11 @@ isImmediate(ExprType* src) {
    return imm;
 }
 
+b32
+isDerivedType(Ctype* ctype) {
+   b32 is_derived = ctype->type == Type_POINTER || ctype->type == Type_ARRAY;
+   return is_derived;
+}
 
 u64
 typeBits(Ctype* ctype) {

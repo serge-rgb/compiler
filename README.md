@@ -22,7 +22,6 @@ Things that are (partially) implemented as of June 12, 2018:
 Deviations from the C spec.
 ---------------------------
 - No `->` operator. Pointers to structs can be accessed with `.`.
-- Laxer type compatibility rules. (types are compatible if their fields match)
 
 To-Do (short term):
 -------------------

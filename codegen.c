@@ -224,30 +224,15 @@ typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
                   Tag* tag_a = findTag(c->scope, into.aggr.tag);
                   Tag* tag_b = findTag(c->scope, from.aggr.tag);
                   // TODO: We could return here by just having the same tag. C
-                  // spec says (6.7.2) that when two types have the same tag,
+                  // spec says (6.2.7) that when two types have the same tag,
                   // defined in different translation units, they must have:
                   //    - The same number of parameters.
                   //    - Every corresponding parameter is compatible.
                   if (tag_a == tag_b) {
                      compatible = true;
                   }
-                  // SPEC: We deviate from the spec by always considering two
-                  // structs with the same layout as compatible.
                   else {
-                     u64 n_a = bufCount(tag_a->s_members);
-                     u64 n_b = bufCount(tag_b->s_members);
-                     if (n_a == n_b) {
-                        compatible = true;
-                        for (u64 i = 0; i < n_a; ++i) {
-                           // TODO: Alignment check.
-                           if (!typesAreCompatible(c,
-                                                   tag_a->s_members[i].ctype,
-                                                   tag_b->s_members[i].ctype)) {
-                              compatible = false;
-                              break;
-                           }
-                        }
-                     }
+                     // TODO: compatible structs accross translation unit
                   }
                }
             } break;

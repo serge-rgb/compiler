@@ -391,7 +391,7 @@ x64PushParameter(MachineX64* m, Scope* scope, ExprType* etype) {
 
    if ((m->machine.flags & Config_TARGET_LINUX) || (m->machine.flags & Config_TARGET_MACOS)) {
       Location loc = {0};
-      if (isIntegerType(&etype->c)) {
+      if (isIntegerType(&etype->c) || isDerivedType(&etype->c)) {
          if (m->params.n_param < 6) {
             loc = registerLocation(sysVIntegerRegisterEnum(m->params.n_param));
             ExprType reg = {
@@ -513,7 +513,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
    Location loc = Zero;
 
    if ((m->machine.flags & Config_TARGET_MACOS) || (m->machine.flags & Config_TARGET_LINUX)) {
-      if (isIntegerType(ctype)) {
+      if (isIntegerType(ctype) || isDerivedType(ctype)) {
          if (m->params.n_param < 6) {
             loc = registerLocation(sysVIntegerRegisterEnum(m->params.n_param));
          }
