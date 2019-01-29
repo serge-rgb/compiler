@@ -656,7 +656,7 @@ x64CmpJmpStackTop(MachineX64* m, AstType ast_type, ExprType* type, char* then, c
 
    instructionReg((MachineX64*)m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
 
-   x64CmpJmp(m, ast_type, els);
+   x64CmpJmp(m, ast_type, then);
 
    instructionPrintf(m, "jmp %s", els);
 }

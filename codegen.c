@@ -996,6 +996,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          m->label(m, end_label);
       } break;
       case Ast_ITERATION: {
+                        // TODO: put all label counts in one place.
          int loop_id = c->scope->if_count++;
          pushScope(c);
          AstNode* decl = stmt->child;
@@ -1006,7 +1007,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             snprintf(loop_label, sizeof(loop_label), ".loop%d", loop_id);
          }
          char body_label[1024] = {0}; {
-            snprintf(body_label, sizeof(loop_label), ".body%d", loop_id);
+            snprintf(body_label, sizeof(body_label), ".body%d", loop_id);
          }
          char end_label[1024] = {0}; {
             snprintf(end_label, sizeof(end_label), ".end%d", loop_id);

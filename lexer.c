@@ -50,6 +50,7 @@ fileStreamHasContent(FileStream* fs) {
 void
 lexerError(char* msg) {
    fprintf(stderr, "Syntax error: %s\n", msg);
+   Assert(!"Lexer error");
    exit(1);
 }
 

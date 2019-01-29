@@ -15,14 +15,14 @@ compileTranslationUnit(char* file_name, char* outfile) {
 
       Parser p = {0};
       initParser(&p);
-      Arena tmp_parser_arena = {0};
-      p.arena = &tmp_parser_arena;
+      Arena arena = {0};
+      p.arena = &arena;
       p.token = tokens;
       p.file_name = file_name;
 
       Codegen codegen = {0};
       codegen.file_name = file_name;
-      codegen.arena = &tmp_parser_arena;
+      codegen.arena = &arena;
 
       AstNode* tree = parseTranslationUnit(&p);
       if (!tree) {
@@ -32,7 +32,7 @@ compileTranslationUnit(char* file_name, char* outfile) {
          codegenInit(&codegen, outfile, PlatformDefaultTarget);
          codegenTranslationUnit(&codegen, tree);
       }
-      deallocate(&tmp_parser_arena);
+      deallocate(&arena);
       fileStreamClose(&file_stream);
    }
 
@@ -112,7 +112,7 @@ processSingleFile(char* file) {
 
 int /*ErrorCode*/
 main(int argc, char** argv) {
-   Arena temp_arena = {0};
+   Arena arena = {0};
 
    ErrorCode result = Ok;
 
@@ -174,7 +174,7 @@ main(int argc, char** argv) {
             printf("Test file %s\n", test_files[i]);
             processSingleFile(test_files[i]);
 
-            char* trimmed = cloneString(&temp_arena, test_files[i]);
+            char* trimmed = cloneString(&arena, test_files[i]);
             size_t len = strlen(trimmed);
             for (i64 i = len-1; i >= 1; --i) {
                if (trimmed[i] == '.') {
@@ -183,14 +183,13 @@ main(int argc, char** argv) {
                }
             }
 
-            char* exe = platformOutputBinaryFilename(&temp_arena, trimmed);
+            char* exe = platformOutputBinaryFilename(&arena, trimmed);
 
              if (platformRunProcess(&exe, 1, 1) != Ok) {
                fprintf(stderr, "Test failed\n");
                //Break;
                // Run it again, probably under a debugger.
                processSingleFile(test_files[i]);
-               break;
             }
          }
          bufFree(test_files);
@@ -210,7 +209,7 @@ main(int argc, char** argv) {
    bufFree(compiler_flags);
 
 
-   deallocate(&temp_arena);
+   deallocate(&arena);
    return result;
 }
 
