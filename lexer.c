@@ -16,7 +16,6 @@ indexOfPunctuator(Punctuator p) {
    return idx;
 }
 
-
 struct FileStream {
    FILE* fd;
    u64 line_number;
@@ -192,23 +191,42 @@ identifyKeyword(Buffer* b) {
    return keyword;
 }
 
+enum NumberTokenType {
+   NumberToken_OCTAL = (1<<0),
+   NumberToken_DECIMAL = (1<<1),
+   NumberToken_HEX = (1<<2),
+} typedef NumberTokenType;
+
 ErrorCode
-parseInt(char* str, int* out_int) {
-   ErrorCode result = Ok;
-   if (!out_int) {
-      return IntParse;
+parseNumber(NumberTokenType type, char* str, u64* out) {
+   u64 base = 10;
+   switch (type) {
+      case NumberToken_OCTAL: {
+         base = 8;
+      }
+      case NumberToken_HEX: {
+         base = 16;
+      }
    }
+
+   ErrorCode result = Ok;
    int val = 0;
    while (*str != '\0') {
       char c = *str;
       if (c-'0' < 0 || c-'0' > 9) {
-         result = IntParse;
+         if (type != NumberToken_HEX || (c-'A' < 0 || c-'A' > 5)) {
+            result = IntParse;
+         }
          break;
       }
-      val = (val * 10) + c-'0';
+      u64 digit_val = 0;
+      if (c >= '0' && c <= '9') {
+         digit_val = c-'0';
+      }
+      val = (val * base) + digit_val;
       str++;
    }
-   *out_int = val;
+   *out = val;
    return result;
 }
 
@@ -247,8 +265,9 @@ getToken(Arena* a, FileStream* fs) {
       while (fileStreamPeek2(fs, comment) && strcmp(comment, "*/")) {
          fileStreamRead(fs);
       }
-      for (int i = 0; i < 2; ++i)
+      for (int i = 0; i < 2; ++i) {
          fileStreamRead(fs);
+      }
    }
    else if (fileStreamPeek2(fs, comment) && !strcmp(comment, "//")) {
       while (fileStreamRead(fs) != '\n') {}  // TODO: Robust EOL handling.
@@ -294,16 +313,39 @@ getToken(Arena* a, FileStream* fs) {
       char tmptoken[128] = {0};
       token_buffer.current = tmptoken;
       token_buffer.end = tmptoken;
-      //char* start = buffer;
+
+      char peek[3] = Zero;
+
+      NumberTokenType number_type = NumberToken_DECIMAL;
+
+      if (fileStreamPeek2(fs, peek) && 0==strcmp(peek, "0x")) {
+         number_type = NumberToken_HEX;
+         for (int i = 0; i < 2; ++i) { fileStreamRead(fs); }
+      }
+
       while (!(isWhitespace(fileStreamPeek(fs)) || isPunctuator(fs))) {
          *token_buffer.end++ = fileStreamRead(fs);
       }
+      sz n_str = token_buffer.end - token_buffer.current;
+      char* str = getString(token_buffer.current);
+
+      if (number_type == NumberToken_HEX && n_str == 0) {
+         lexerError("Incomplete hexadecimal number");
+      }
+
       identifyToken(&token_buffer, &t);
 
-      char* str = getString(token_buffer.current);
       if (t.type == TType_NUMBER) {
-         int val = 0;
-         ErrorCode err = parseInt(str, &val);
+         u64 val = 0;
+         Assert(n_str);
+
+         if (str[0] == '0') {
+            if (number_type != NumberToken_HEX) {
+               number_type = NumberToken_OCTAL;
+            }
+         }
+
+         ErrorCode err = parseNumber(number_type, str, &val);
          if (err != Ok) {
             char msg[1024] = {0};
             PrintString(msg, 1024, "Error while parsing integer. Token string %s", str);
