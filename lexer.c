@@ -219,9 +219,16 @@ parseNumber(NumberTokenType type, char* str, u64* out) {
          }
          break;
       }
+      if (type == NumberToken_OCTAL && (c-'7') > 0) {
+         result = IntParse;
+         break;
+      }
       u64 digit_val = 0;
       if (c >= '0' && c <= '9') {
          digit_val = c-'0';
+      }
+      if (c >= 'A' && c <= 'F') {
+         digit_val = 10 + c-'A';
       }
       val = (val * base) + digit_val;
       str++;
@@ -239,6 +246,7 @@ identifyToken(Buffer* b, Token* out) {
    // this is equivalent.
 
    // If it starts with a digit, it's numerical.
+   NotImplemented("Check for period followed by digit.");
    if (isDigit(*b->current)) {
       out->type = TType_NUMBER;
       // TODO: Different kinds of numbers..
@@ -351,7 +359,52 @@ getToken(Arena* a, FileStream* fs) {
             PrintString(msg, 1024, "Error while parsing integer. Token string %s", str);
             lexerError(msg);
          }
-         t.cast.int32 = val;
+         else {
+            if (fileStreamPeek(fs) == '.') {
+               fileStreamRead(fs);
+               if (number_type == NumberToken_OCTAL) {
+                  lexerError("Floating point numbers can't be octal");
+               }
+               else if (number_type == NumberToken_HEX) {
+                  NotImplemented("Hex floating point");
+               }
+               else if (number_type == NumberToken_DECIMAL) {
+
+               }
+
+               if (!isDigit(fileStreamPeek(fs))) {
+                  lexerError("Floating point number must have digit sequence after point.");
+               }
+               char tmptoken[128] = Zero;
+               int tok_i = 0;
+               while (isDigit(fileStreamPeek(fs))) {
+                  tmptoken[tok_i++] = fileStreamRead(fs);
+               }
+
+               Buffer token_buffer = {
+                  .current = tmptoken,
+                  .end = tmptoken + tok_i,
+               };
+
+               u64 expansion = 0;
+               if (tok_i > 0 && parseNumber(number_type, tmptoken, &expansion) != Ok) {
+                  lexerError("Invalid floating point constant.");
+               }
+
+               char maybe_suffix = fileStreamPeek(fs);
+               b32 is_float = false;
+               if (maybe_suffix == 'f' || maybe_suffix == 'F' || maybe_suffix == 'l' || maybe_suffix == 'L') {
+                  fileStreamRead(fs);
+                  if (maybe_suffix == 'f' || maybe_suffix == 'F') {
+                     is_float = true;
+                  }
+               }
+               // t.cast.real32 =
+            }
+            else {
+               t.cast.int32 = val;
+            }
+         }
       }
       else if (t.type & TType_KEYWORD) {
          t.type = TType_KEYWORD;
