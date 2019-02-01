@@ -163,9 +163,7 @@ skipWhitespace(FileStream* fs) {
 
 b32
 isDigit(char c) {
-   b32 is_digit =
-      c == '0' || c == '1' || c == '2' || c == '3' || c == '4' ||
-      c == '5' || c == '6' || c == '7' || c == '8' || c == '9';
+   b32 is_digit = (c-'0' >= 0) && (c-'0') <= 9;
    return is_digit;
 }
 
@@ -246,7 +244,6 @@ identifyToken(Buffer* b, Token* out) {
    // this is equivalent.
 
    // If it starts with a digit, it's numerical.
-   NotImplemented("Check for period followed by digit.");
    if (isDigit(*b->current)) {
       out->type = TType_NUMBER;
       // TODO: Different kinds of numbers..
@@ -259,6 +256,8 @@ identifyToken(Buffer* b, Token* out) {
       out->type = TType_ID;
    }
 }
+
+
 
 Token
 getToken(Arena* a, FileStream* fs) {
@@ -283,6 +282,9 @@ getToken(Arena* a, FileStream* fs) {
    else if ((punctuator_token = isPunctuator(fs)) != 0) {
       t.type = TType_PUNCTUATOR;
       if (punctuator_token && punctuator_token < AsciiMax) {
+         if (punctuator_token == '.') {
+            NotImplemented("Special case: floating point number");
+         }
          t.cast.character = fileStreamRead(fs);
       }
       else if (punctuator_token < 255) {
@@ -326,7 +328,7 @@ getToken(Arena* a, FileStream* fs) {
 
       NumberTokenType number_type = NumberToken_DECIMAL;
 
-      if (fileStreamPeek2(fs, peek) && 0==strcmp(peek, "0x")) {
+      if (fileStreamPeek2(fs, peek) && stringsAreEqual(peek, "0x")) {
          number_type = NumberToken_HEX;
          for (int i = 0; i < 2; ++i) { fileStreamRead(fs); }
       }
@@ -380,11 +382,6 @@ getToken(Arena* a, FileStream* fs) {
                while (isDigit(fileStreamPeek(fs))) {
                   tmptoken[tok_i++] = fileStreamRead(fs);
                }
-
-               Buffer token_buffer = {
-                  .current = tmptoken,
-                  .end = tmptoken + tok_i,
-               };
 
                u64 expansion = 0;
                if (tok_i > 0 && parseNumber(number_type, tmptoken, &expansion) != Ok) {
