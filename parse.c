@@ -124,7 +124,9 @@ primaryExpr(Parser* p) {
    AstNode* t   = NULL;
    Token*   tok = nextToken(p);
    if (!tok) { return NULL; }
-   if (tok->type == TType_NUMBER) {
+   if (tok->type == TType_NUMBER ||
+       tok->type == TType_FLOAT ||
+       tok->type == TType_DOUBLE) {
       t       = newNode(p->arena);
       t->type = Ast_NUMBER;
       t->tok  = tok;

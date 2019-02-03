@@ -258,6 +258,123 @@ identifyToken(Buffer* b, Token* out) {
 }
 
 
+void
+lexNumberExpansion(FileStream* fs, NumberTokenType number_type, u64 integer, Token* t) {
+   char sign = 0; // TODO: negative floats
+   if (number_type == NumberToken_OCTAL) {
+      lexerError("Floating point numbers can't be octal");
+   }
+   else if (number_type == NumberToken_HEX) {
+      NotImplemented("Hex floating point");
+   }
+   else if (number_type == NumberToken_DECIMAL) {
+
+   }
+
+   if (!isDigit(fileStreamPeek(fs))) {
+      lexerError("Floating point number must have digit sequence after point.");
+   }
+   char tmptoken[128] = Zero;
+   int tok_i = 0;
+   while (isDigit(fileStreamPeek(fs))) {
+      tmptoken[tok_i++] = fileStreamRead(fs);
+   }
+
+   u64 number = 0;
+   if (tok_i > 0 && parseNumber(number_type, tmptoken, &number) != Ok) {
+      lexerError("Invalid floating point constant.");
+   }
+
+   u64 frac_bits = 0;
+   u64 frac = 0;
+
+   // Find the highest power of 10
+   // TODO: Check for numbers above highest representable power of 10
+   u64 pow = 1;
+   while(pow < number) {
+      pow *= 10;
+   }
+
+   while (number) {
+      frac_bits++;
+      frac <<= 1;
+      number <<= 1;
+      if (number >= pow) {
+         frac |= 1;
+         number -= pow;
+      }
+      if (frac_bits >= 63) {
+         break;
+      }
+   }
+
+   i64 exponent = 0;
+   // Get exponent
+   if (integer) {
+      exponent = platformFirstBitSet(integer);
+      integer &= ~(1 << exponent);
+   }
+   else {
+      exponent = platformFirstBitSet(frac) - frac_bits;
+      frac &= ~((u64)1 << platformFirstBitSet(frac));
+      // normalize
+      if (exponent < 0) {
+         frac <<= -exponent;
+      }
+   }
+
+   t->type = TType_DOUBLE;
+
+   char maybe_suffix = fileStreamPeek(fs);
+   if (maybe_suffix == 'f' || maybe_suffix == 'F' || maybe_suffix == 'l' || maybe_suffix == 'L') {
+      fileStreamRead(fs);
+      if (maybe_suffix == 'f' || maybe_suffix == 'F') {
+         t->type = TType_FLOAT;
+      }
+      else {
+         NotImplemented("l or L floating point suffix");
+      }
+   }
+
+   switch(t->type) {
+      case TType_DOUBLE: {
+         NotImplemented("doubles");
+      } break;
+      case TType_FLOAT: {
+         u8 exp = (u8)(i8)(127 + exponent);
+         u32 bits = exp << 23;
+         if (sign) {
+            bits |= (1<<31);
+         }
+
+         // Move fraction to beginning of mantissa.
+         if (frac_bits > 23) {
+            frac >>= frac_bits - 23;
+         }
+         else {
+            frac <<= 23 - frac_bits;
+         }
+
+         if (integer) {
+            // move exponent to beginning of mantissa
+            if (exponent < 23) {
+               integer <<= 23 - exponent;
+            }
+            else {
+               integer >>= exponent - 23;
+            }
+            frac >>= exponent;
+            bits |= integer;
+         }
+         bits |= frac;
+
+         t->cast.real32 = *(float*)&bits;
+      } break;
+      default: {
+         InvalidCodePath;
+      }
+   }
+}
 
 Token
 getToken(Arena* a, FileStream* fs) {
@@ -282,10 +399,13 @@ getToken(Arena* a, FileStream* fs) {
    else if ((punctuator_token = isPunctuator(fs)) != 0) {
       t.type = TType_PUNCTUATOR;
       if (punctuator_token && punctuator_token < AsciiMax) {
-         if (punctuator_token == '.') {
-            NotImplemented("Special case: floating point number");
+         fileStreamRead(fs);
+         if (punctuator_token == '.' && isDigit(fileStreamPeek(fs))) {
+            lexNumberExpansion(fs, NumberToken_DECIMAL, 0, &t);
          }
-         t.cast.character = fileStreamRead(fs);
+         else {
+            t.cast.character = punctuator_token;
+         }
       }
       else if (punctuator_token < 255) {
          t.cast.character = (u8)punctuator_token;
@@ -349,7 +469,7 @@ getToken(Arena* a, FileStream* fs) {
          u64 val = 0;
          Assert(n_str);
 
-         if (str[0] == '0') {
+         if (str[0] == '0' && n_str > 1) {
             if (number_type != NumberToken_HEX) {
                number_type = NumberToken_OCTAL;
             }
@@ -364,39 +484,7 @@ getToken(Arena* a, FileStream* fs) {
          else {
             if (fileStreamPeek(fs) == '.') {
                fileStreamRead(fs);
-               if (number_type == NumberToken_OCTAL) {
-                  lexerError("Floating point numbers can't be octal");
-               }
-               else if (number_type == NumberToken_HEX) {
-                  NotImplemented("Hex floating point");
-               }
-               else if (number_type == NumberToken_DECIMAL) {
-
-               }
-
-               if (!isDigit(fileStreamPeek(fs))) {
-                  lexerError("Floating point number must have digit sequence after point.");
-               }
-               char tmptoken[128] = Zero;
-               int tok_i = 0;
-               while (isDigit(fileStreamPeek(fs))) {
-                  tmptoken[tok_i++] = fileStreamRead(fs);
-               }
-
-               u64 expansion = 0;
-               if (tok_i > 0 && parseNumber(number_type, tmptoken, &expansion) != Ok) {
-                  lexerError("Invalid floating point constant.");
-               }
-
-               char maybe_suffix = fileStreamPeek(fs);
-               b32 is_float = false;
-               if (maybe_suffix == 'f' || maybe_suffix == 'F' || maybe_suffix == 'l' || maybe_suffix == 'L') {
-                  fileStreamRead(fs);
-                  if (maybe_suffix == 'f' || maybe_suffix == 'F') {
-                     is_float = true;
-                  }
-               }
-               // t.cast.real32 =
+               lexNumberExpansion(fs, number_type, val, &t);
             }
             else {
                t.cast.int32 = val;

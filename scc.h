@@ -44,6 +44,7 @@ typedef uint32_t u32;
 typedef uint32_t b32;
 typedef uint64_t u64;
 
+typedef int8_t i8;
 typedef int32_t i32;
 typedef int64_t i64;
 
@@ -255,6 +256,7 @@ enum TokType {
    TType_STRING_LITERAL,
    TType_NUMBER,
    TType_FLOAT,
+   TType_DOUBLE,
    TType_ID,
    TType_KEYWORD = 0xF000,
 } typedef TokType;

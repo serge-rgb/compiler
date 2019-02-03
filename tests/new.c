@@ -3,12 +3,9 @@ struct foo {
 };
 
 int main() {
-   int y = 0x2;
-
-   float x = .0f;
-
-
-   return x == 2;
+   // float x = 16777217.0f; not representable
+   float x = 42.75f;
+   return x == 0;
 
    // TODO: hexadecimal numbers
    // TODO: hexadecimal floats

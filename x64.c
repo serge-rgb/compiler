@@ -737,6 +737,10 @@ x64ImmediateFromToken(MachineX64* m, Token* tok) {
 
    if (tok->type == TType_FLOAT) {  // Float lhs, integer literal rhs
       imm.c.type = Type_DOUBLE;
+      imm.location.cast.real64 = tok->cast.real32;
+   }
+   else if (tok->type == TType_DOUBLE) {
+      imm.c.type = Type_DOUBLE;
       imm.location.cast.real64 = tok->cast.real64;
    }
    else if (tok->type == TType_NUMBER)  {
