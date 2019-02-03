@@ -569,8 +569,9 @@ struct Machine {
    ExprType* (*accumC)(void* machine, Ctype c);
 
 
-   // Conversion
+   // Conversion. Result in stack
    void (*convertFloatToInt)(void* machine, Location from);
+   void (*convertIntToFloat)(void* machine, Location from);
 };
 
 Machine* makeMachineX64(Arena* a, MachineConfigFlags mflags);

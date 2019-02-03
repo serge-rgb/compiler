@@ -261,7 +261,14 @@ x64StackPop(MachineX64* m, ExprType* et) {
    StackValue s = bufPop(m->s_stack);
    switch (s.type) {
       case Stack_QWORD: {
-         instructionReg(m, "pop %s", 64, et->location.reg);
+         RegisterEnum reg = et->location.reg;
+         if (reg < Reg_XMM0) {
+            instructionReg(m, "pop %s", 64, reg);
+         }
+         else {
+            instructionReg(m, "movsd %s, QWORD[rsp]", 64, reg);
+            instructionPrintf(m, "add rsp, 8");
+         }
          m->stack_offset -= 8;
       } break;
       case Stack_OFFSET: {
@@ -629,10 +636,22 @@ x64TestAndJump(MachineX64* m, u32 bits, char* then, char* els) {
 
 void
 x64Cmp(MachineX64* m, ExprType* dst, ExprType* src) {
-   u32 bits = typeBits(&dst->c);
-   instructionPrintf(m, "cmp %s, %s",
-                     locationString(m, dst->location, bits),
-                     locationString(m, src->location, bits));
+   if (isIntegerType(&src->c)) {
+      u32 bits = typeBits(&dst->c);
+      instructionPrintf(m, "cmp %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+   }
+   if (src->c.type == Type_FLOAT) {
+      u32 bits = typeBits(&dst->c);
+      instructionPrintf(m, "ucomiss %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+
+   }
+   else {
+      NotImplemented("cmp type");
+   }
 }
 
 void
@@ -674,6 +693,7 @@ x64CmpSetAccum(MachineX64* m, AstType type) {
       default: { InvalidCodePath; } break;
    }
    instructionReg(m, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
+   instructionPrintf(m, "and rax, 1");
 }
 
 ExprType*
@@ -1171,13 +1191,22 @@ x64Call(MachineX64* m, char* label) {
 
 Location
 x64StackPushReg(MachineX64* m, RegisterEnum reg) {
-   instructionPrintf(m, "push %s", locationString(m, registerLocation(reg), 64));
+   // Integer
+   if (reg < Reg_XMM0) {
+      instructionPrintf(m, "push %s", locationString(m, registerLocation(reg), 64));
+   }
+   // double
+   else {
+      instructionPrintf(m, "sub %rsp, 8");
+      instructionPrintf(m, "movsd QWORD[rsp], %s", locationString(m, registerLocation(reg), 64));
+   }
+   m->stack_offset += 8;
+
    Location location = (Location) {
       .type = Location_STACK,
       .offset = m->stack_offset,
    };
 
-   m->stack_offset += 8;
    bufPush(m->s_stack, (StackValue){ .type = Stack_QWORD });
    return location;
 }
@@ -1271,6 +1300,19 @@ x64AddressOf(MachineX64* m, Location* loc) {
 
 
 void
+x64ConvertIntToFloat(MachineX64* m, Location from) {
+   if (from.type == Location_REGISTER || from.type == Location_STACK) {
+      // char* from_str = g_registers[from.reg].reg;
+      instructionPrintf(m, "cvtsi2ss xmm1, %s", locationString(m, from, 32));
+      x64StackPushReg(m, m->machine.helperC(m,
+                                   (Ctype){ .type = Type_FLOAT })->location.reg);
+   }
+   else {
+      NotImplemented("X64 conversion instruction")
+   }
+}
+
+void
 x64ConvertFloatToInt(MachineX64* m, Location from) {
    if (from.type == Location_REGISTER) {
       char* from_str = g_registers[from.reg].reg;
@@ -1329,8 +1371,6 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->flags = mflags;
 
       // Function pointers
-      m->stackPop = x64StackPop;
-
       m->immediateFromToken = x64ImmediateFromToken;
 
       m->stackPop = x64StackPop;
@@ -1369,6 +1409,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->finish = x64Finish;
 
       m->convertFloatToInt = x64ConvertFloatToInt;
+      m->convertIntToFloat = x64ConvertIntToFloat;
    }
    #if defined(__MACH__)
       #pragma clang diagnostic pop

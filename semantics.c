@@ -197,12 +197,11 @@ arithmeticTypeConversion(Ctype a, Ctype b)
    if (ctypeEquals(a, b)) {
       result = a;
    }
-   // 6.3.14. Real and integer. Use integer type
    else if (isRealType(&a) && isIntegerType(&b)) {
-      result = b;
+      result = a;
    }
    else if (isRealType(&b) && isIntegerType(&a)) {
-      result = a;
+      result = b;
    }
    else if (isIntegerType(&a) && isIntegerType(&b)) {
       NotImplemented("Integer promotion rules");

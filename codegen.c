@@ -261,6 +261,7 @@ typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
 
 b32
 maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target, char* incompatibleError) {
+   Machine* m = c->m;
    b32 didConversion = true;
    if (!typesAreCompatible(c, target_type, value->c)) {
       codegenError(incompatibleError);
@@ -275,8 +276,17 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
             target_type.type == Type_INT) {
       if (target != Target_NONE) {
          c->m->convertFloatToInt(c->m, value->location);
-         if (target == Target_STACK) {
-            c->m->stackPushReg(c->m, c->m->accum(c->m, target_type.type, typeBits(&target_type))->location.reg);
+         if (target == Target_ACCUM) {
+            m->stackPop(m, m->accumC(m, target_type));
+         }
+      }
+   }
+   else if (value->c.type == Type_INT &&
+            target_type.type == Type_FLOAT) {
+      if (target != Target_NONE) {
+         c->m->convertIntToFloat(c->m, value->location);
+         if (target == Target_ACCUM) {
+            m->stackPop(m, m->accumC(m, target_type));
          }
       }
    }
@@ -637,7 +647,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             m->stackPop(m, helper);
 
             if (maybeEmitTypeConversion(c,
-                                       &right_type,
+                                       helper,
                                        target_type,
                                        Target_STACK,
                                        "Incompatible types in binary expression")) {
@@ -656,7 +666,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             m->cmp(m, accum, helper);
             m->cmpSetAccum(m, node->type);
 
-            expr_type->c = target_type;
+            expr_type->c = (Ctype) { .type = Type_INT };
 
             if (target == Target_ACCUM) {
                expr_type->location = accum->location;

@@ -4,8 +4,8 @@ struct foo {
 
 int main() {
    // float x = 16777217.0f; not representable
-   float x = 42.75f;
-   return x == 0;
+   float x = 42.0f;
+   return x == 42;
 
    // TODO: hexadecimal numbers
    // TODO: hexadecimal floats

@@ -356,7 +356,7 @@ lexNumberExpansion(FileStream* fs, NumberTokenType number_type, u64 integer, Tok
          }
 
          if (integer) {
-            // move exponent to beginning of mantissa
+            // move significand to beginning of mantissa
             if (exponent < 23) {
                integer <<= 23 - exponent;
             }
