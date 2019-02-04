@@ -164,6 +164,17 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 }
 
+ExprType*
+getAddress(Codegen* c, AstNode* node) {
+   ExprType* result = NULL;
+   switch(node->type) {
+      case Ast_ID: {
+         result = findSymbol(c, node->tok->cast.string);
+      } break;
+   }
+   return result;
+}
+
 void
 emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
    Assert(expr_type);
@@ -555,7 +566,14 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
 
             ExprType* accum = m->accumC(m, local_etype.c);
-            m->mov(c->m, &local_etype, accum);
+
+            ExprType* addr = getAddress(c, expr);
+            if (!addr) {
+               codegenError("Trying to modify non-addressable.");
+            }
+            else {
+               m->mov(c->m, addr, accum);
+            }
 
             if (target == Target_STACK) {
                // Result is already on the stack.

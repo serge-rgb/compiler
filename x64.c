@@ -642,7 +642,7 @@ x64Cmp(MachineX64* m, ExprType* dst, ExprType* src) {
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
    }
-   if (src->c.type == Type_FLOAT) {
+   else if (src->c.type == Type_FLOAT) {
       u32 bits = typeBits(&dst->c);
       instructionPrintf(m, "ucomiss %s, %s",
                         locationString(m, dst->location, bits),
@@ -1225,6 +1225,7 @@ x64StackPushImm(MachineX64* m, ExprType* et, i64 val) {
 
 Location
 x64StackPushOffset(MachineX64* m, u64 bytes) {
+   m->stack_offset += bytes;
    Location location = (Location) {
       .type = Location_STACK,
       .offset = m->stack_offset,
@@ -1232,7 +1233,6 @@ x64StackPushOffset(MachineX64* m, u64 bytes) {
 
    Assert(bytes);
    instructionPrintf(m, "sub rsp, %d", bytes);
-   m->stack_offset += bytes;
    StackValue val = { .type = Stack_OFFSET, .offset = bytes };
    bufPush(m->s_stack, val);
    return location;
