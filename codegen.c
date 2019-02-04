@@ -129,7 +129,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 
    int bits = typeBits(&tleft.c);
-   m->stackPop(m, m->helper(m, Type_INT, bits));
+   m->stackPop(m, m->helper(m, tright.c.type, bits));
 
    if (typeBits(&tleft.c) != typeBits(&tright.c) ||
        tleft.c.type != tright.c.type) {
@@ -190,11 +190,11 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       codegenError("Use of undeclared identifier %s", node->tok->cast.string);
    }
 
+   ExprType* accum = m->accumC(m, expr_type->c);
    if (typeBits(&entry->c) > 64) {
       if (target != Target_NONE) {
          m->stackAddressInAccum(m, entry);
          if (target == Target_STACK) {
-            ExprType* accum = m->accumC(m, expr_type->c);
             m->stackPushReg(m,
                             accum->location.reg);
             expr_type->location = accum->location;
@@ -208,7 +208,7 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
          m->mov(m, accum, entry);
 
          if (target == Target_STACK) {
-            Location loc = m->stackPushReg(m, Reg_RAX);
+            Location loc = m->stackPushReg(m, accum->location.reg);
             expr_type->location = loc;
          }
          else if (target == Target_ACCUM) {
@@ -486,8 +486,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          case Ast_NUMBER: {
             switch (target) {
                case Target_ACCUM: {
-                  // TODO: Literals with specific sizes.
-                  // TODO: Literals with non-int types.
+                  NotImplemented("float literals");
                   expr_type->c = (Ctype) {
                      .type = Type_INT,
                   };
