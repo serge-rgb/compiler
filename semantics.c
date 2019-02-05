@@ -189,9 +189,32 @@ ctypeEquals(Ctype a, Ctype b) {
    return equals;
 }
 
+int
+intRank(Ctype type) {
+   int rank = 0;
+   switch (type.type) {
+      case Type_UCHAR:
+      case Type_CHAR: {
+         rank = 1;
+      } break;
+      case Type_USHORT:
+      case Type_SHORT: {
+         rank = 2;
+      } break;
+      case Type_UINT:
+      case Type_INT: {
+         rank = 3;
+      } break;
+      case Type_ULONG:
+      case Type_LONG: {
+         rank = 4;
+      } break;
+   }
+}
+
+
 Ctype
-arithmeticTypeConversion(Ctype a, Ctype b)
-{
+arithmeticTypeConversion(Ctype a, Ctype b) {
    Ctype result = {0};
 
    if (ctypeEquals(a, b)) {
@@ -204,7 +227,14 @@ arithmeticTypeConversion(Ctype a, Ctype b)
       result = b;
    }
    else if (isIntegerType(&a) && isIntegerType(&b)) {
-      NotImplemented("Integer promotion rules");
+      Ctype* lesser  = (intRank(a) > intRank(b)) ? &b : &a;
+      Ctype* greater = (intRank(a) > intRank(b)) ? &a : &b;
+      // If both are unsigned or both are signed, use the one ranked higher.
+      if ((lesser->type & Type_UNSIGNED) == (greater->type & Type_UNSIGNED)) {
+         result = *greater;
+      } else {
+         NotImplemented("Continue with integer promotion");
+      }
    }
 
    return result;

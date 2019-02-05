@@ -131,19 +131,8 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    int bits = typeBits(&tleft.c);
    m->stackPop(m, m->helper(m, tright.c.type, bits));
 
-   if (typeBits(&tleft.c) != typeBits(&tright.c) ||
-       tleft.c.type != tright.c.type) {
-      // If both are integer types, then apply integer promotion rules.
-      if (isIntegerType(&tleft.c) && isIntegerType(&tright.c)) {
-         // ExprType* smaller = typeBits(&tleft.c) < typeBits(&tright.c) ? &tleft  : &tright;
-         // ExprType* bigger  = typeBits(&tleft.c) < typeBits(&tright.c) ? &tright : &tleft;
-
-         NotImplemented("Int promotion");
-      }
-      //
-      // If one of them is floating point... do floating point conversion.
-      // TODO: Implement floating point conversion rules.
-   }
+   Ctype new_ctype = arithmeticTypeConversion(tleft.c, tright.c);
+   tleft.c = tright.c = new_ctype;
 
    if (expr_type) {
       *expr_type = tleft;
@@ -190,9 +179,9 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
       codegenError("Use of undeclared identifier %s", node->tok->cast.string);
    }
 
-   ExprType* accum = m->accumC(m, expr_type->c);
    if (typeBits(&entry->c) > 64) {
       if (target != Target_NONE) {
+         ExprType* accum = m->accum(m, Type_INT, 64);
          m->stackAddressInAccum(m, entry);
          if (target == Target_STACK) {
             m->stackPushReg(m,
@@ -486,10 +475,15 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          case Ast_NUMBER: {
             switch (target) {
                case Target_ACCUM: {
-                  NotImplemented("float literals");
-                  expr_type->c = (Ctype) {
-                     .type = Type_INT,
-                  };
+                  if (node->tok->type == TType_NUMBER) {
+                     expr_type->c.type = Type_INT;
+                  }
+                  else if (node->tok->type == TType_FLOAT) {
+                     expr_type->c.type = Type_FLOAT;
+                  }
+                  else {
+                     NotImplemented("Number token type");
+                  }
                   m->movAccum(m, expr_type, node->tok);
                } break;
                case Target_STACK: {

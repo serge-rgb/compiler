@@ -916,6 +916,42 @@ x64AccumC(MachineX64* m, Ctype c) {
 }
 
 ExprType*
+x64Helper8(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      codegenError("Invalid size for floating point register.");
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_CHAR },
+         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
+x64Helper16(int type /*Ctype.type*/ ) {
+   ExprType* result = NULL;
+   if (type & Type_REAL) {
+      codegenError("Invalid size for floating point register.");
+   }
+   else if (type & Type_PEANO) {
+      static ExprType helper = {
+         .c = { .type = Type_SHORT },
+         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+      };
+      result = &helper;
+   }
+
+   Assert (result);
+   return result;
+}
+
+ExprType*
 x64Helper32(int type /*Ctype.type*/ ) {
    ExprType* result = NULL;
    if (type & Type_REAL) {
@@ -965,6 +1001,12 @@ ExprType*
 x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
+      case 8: {
+         result = x64Helper8(type);
+      } break;
+      case 16: {
+         result = x64Helper16(type);
+      } break;
       case 32: {
          result = x64Helper32(type);
       } break;

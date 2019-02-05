@@ -199,18 +199,25 @@ struct Ctype {
       Type_INT  = Type_ARITH | Type_PEANO | (1<<5),
       Type_LONG = Type_ARITH | Type_PEANO | (1<<6),
 
-      // Real types
-      Type_FLOAT = Type_ARITH | Type_REAL | (1<<7),
-      Type_DOUBLE = Type_ARITH | Type_REAL | (1<<8),
+      Type_UNSIGNED = (1 << 7),
 
-      Type_FUNC = (1<<9),
+      Type_UCHAR  = Type_CHAR | Type_UNSIGNED,
+      Type_USHORT  = Type_SHORT | Type_UNSIGNED,
+      Type_UINT  = Type_INT | Type_UNSIGNED,
+      Type_ULONG  = Type_LONG | Type_UNSIGNED,
+
+      // Real types
+      Type_FLOAT = Type_ARITH | Type_REAL | (1<<10),
+      Type_DOUBLE = Type_ARITH | Type_REAL | (1<<11),
+
+      Type_FUNC = (1<<12),
 
       // Structs and unions
-      Type_AGGREGATE = (1<<10),
+      Type_AGGREGATE = (1<<13),
 
       // Pointers
-      Type_POINTER = (1<<11),
-      Type_ARRAY = (1<<12),
+      Type_POINTER = (1<<14),
+      Type_ARRAY = (1<<15),
       // TODO atomic
    } type;
 
