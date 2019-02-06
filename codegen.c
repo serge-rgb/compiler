@@ -251,10 +251,15 @@ typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
              (isIntegerType(&from) || isRealType(&from))) {
             compatible = true;
          }
-         else {
-            NotImplemented("Compatibility rules");
+         else if ((into.type == Type_ENUM && isIntegerType(&from)) ||
+                  (from.type == Type_ENUM && isIntegerType(&into))) {
+            compatible = true;
          }
       }
+   }
+   if (compatible) {
+      // Check for identical qualifiers
+      compatible = into.qualifiers == from.qualifiers;
    }
    return compatible;
 }
@@ -288,6 +293,13 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
          if (target == Target_ACCUM) {
             m->stackPop(m, m->accumC(m, target_type));
          }
+      }
+   }
+   else if (value->c.type == Type_CHAR &&
+            target_type.type == Type_FLOAT) {
+      m->convertCharToFloat(m, value->location);
+      if (target == Target_ACCUM) {
+         m->stackPop(m, m->accumC(m, target_type));
       }
    }
    else {
@@ -935,9 +947,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          c->m->mov(c->m, entry, imm);
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
-         ExprType type = Zero;
-         emitExpression(c, rhs, &type, Target_ACCUM);
-         c->m->mov(c->m, entry, &type);
+         ExprType etype = Zero;
+         emitExpression(c, rhs, &etype, Target_ACCUM);
+         maybeEmitTypeConversion(c, &etype, entry->c, Target_ACCUM, "Attempting to assing from incompatible type.");
+         c->m->mov(c->m, entry, &etype);
       }
       else {
          // TODO: scc initializes to zero by default.

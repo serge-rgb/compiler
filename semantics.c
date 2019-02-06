@@ -210,6 +210,7 @@ intRank(Ctype type) {
          rank = 4;
       } break;
    }
+   return rank;
 }
 
 

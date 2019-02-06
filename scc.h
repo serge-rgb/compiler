@@ -210,6 +210,7 @@ struct Ctype {
       Type_FLOAT = Type_ARITH | Type_REAL | (1<<10),
       Type_DOUBLE = Type_ARITH | Type_REAL | (1<<11),
 
+
       Type_FUNC = (1<<12),
 
       // Structs and unions
@@ -218,7 +219,8 @@ struct Ctype {
       // Pointers
       Type_POINTER = (1<<14),
       Type_ARRAY = (1<<15),
-      // TODO atomic
+
+      Type_ENUM = (1<<16),
    } type;
 
    enum {
