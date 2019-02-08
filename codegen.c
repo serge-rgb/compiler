@@ -14,6 +14,7 @@ codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    // Constants
    c->one = makeAstNode(c->arena, Ast_NUMBER, 0,0);
    Token* one_tok = AllocType(c->arena, Token);
+   one_tok->type = TType_NUMBER;
    one_tok->value = 1;
    c->one->tok = one_tok;
 
@@ -478,6 +479,23 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             emitFunctionCall(c, node, expr_type, target);
          } break;
          case Ast_NUMBER: {
+            // Set type
+            switch (node->tok->type) {
+               case TType_NUMBER: {
+                  expr_type->c.type = Type_INT;
+               } break;
+               case TType_FLOAT: {
+                  expr_type->c.type = Type_FLOAT;
+               } break;
+               case TType_DOUBLE: {
+                  expr_type->c.type = Type_DOUBLE;
+               } break;
+               default: {
+                  InvalidCodePath;
+               }
+            }
+
+            // Move
             switch (target) {
                case Target_ACCUM: {
                   m->movAccum(m, expr_type, node->tok);
@@ -491,18 +509,6 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                      .immediate_value = node->tok->value,
                   };
                } break;
-            }
-            if (node->tok->type == TType_NUMBER) {
-               expr_type->c.type = Type_INT;
-            }
-            else if (node->tok->type == TType_FLOAT) {
-               expr_type->c.type = Type_FLOAT;
-            }
-            else if (node->tok->type == TType_DOUBLE) {
-               expr_type->c.type = Type_DOUBLE;
-            }
-            else {
-               InvalidCodePath;
             }
          } break;
          case Ast_ID: {
