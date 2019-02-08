@@ -286,20 +286,13 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
          }
       }
    }
-   else if (value->c.type == Type_INT &&
+   else if (isIntegerType(&value->c) &&
             target_type.type == Type_FLOAT) {
       if (target != Target_NONE) {
-         c->m->convertIntToFloat(c->m, value->location);
+         c->m->convertIntegerToFloat(c->m, value->location);
          if (target == Target_ACCUM) {
             m->stackPop(m, m->accumC(m, target_type));
          }
-      }
-   }
-   else if (value->c.type == Type_CHAR &&
-            target_type.type == Type_FLOAT) {
-      m->convertCharToFloat(m, value->location);
-      if (target == Target_ACCUM) {
-         m->stackPop(m, m->accumC(m, target_type));
       }
    }
    else {
@@ -487,15 +480,6 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          case Ast_NUMBER: {
             switch (target) {
                case Target_ACCUM: {
-                  if (node->tok->type == TType_NUMBER) {
-                     expr_type->c.type = Type_INT;
-                  }
-                  else if (node->tok->type == TType_FLOAT) {
-                     expr_type->c.type = Type_FLOAT;
-                  }
-                  else {
-                     NotImplemented("Number token type");
-                  }
                   m->movAccum(m, expr_type, node->tok);
                } break;
                case Target_STACK: {
@@ -508,7 +492,18 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   };
                } break;
             }
-            expr_type->c.type = Type_INT;
+            if (node->tok->type == TType_NUMBER) {
+               expr_type->c.type = Type_INT;
+            }
+            else if (node->tok->type == TType_FLOAT) {
+               expr_type->c.type = Type_FLOAT;
+            }
+            else if (node->tok->type == TType_DOUBLE) {
+               expr_type->c.type = Type_DOUBLE;
+            }
+            else {
+               InvalidCodePath;
+            }
          } break;
          case Ast_ID: {
             emitIdentifier(c, node, expr_type, target);
@@ -835,6 +830,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
    AstNode* specifier = node->child;
    AstNode* declarator = specifier->next;
    AstNode* rhs = declarator->next;
+   Machine* m = c->m;
 
    // TODO: Emit warning for empty declarations.
 
@@ -949,8 +945,13 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          ExprType etype = Zero;
          emitExpression(c, rhs, &etype, Target_ACCUM);
-         maybeEmitTypeConversion(c, &etype, entry->c, Target_ACCUM, "Attempting to assing from incompatible type.");
-         c->m->mov(c->m, entry, &etype);
+         if (maybeEmitTypeConversion(c, &etype, entry->c, Target_ACCUM, "Attempting to assing from incompatible type.")) {
+            c->m->mov(c->m, entry, m->accumC(m, entry->c));
+         }
+         else {
+            c->m->mov(c->m, entry, &etype);
+         }
+
       }
       else {
          // TODO: scc initializes to zero by default.

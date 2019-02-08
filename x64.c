@@ -1113,9 +1113,20 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
 
          }
          else if (isRealType(&dst->c)) {
-            instructionPrintf(m, "movss %s, %s",
-                              locationString(m, dst->location, bits),
-                              locationString(m, src->location, bits));
+            if (dst->c.type == Type_FLOAT) {
+               instructionPrintf(m, "movss %s, %s",
+                                 locationString(m, dst->location, bits),
+                                 locationString(m, src->location, bits));
+
+            }
+            else if (dst->c.type == Type_DOUBLE) {
+               instructionPrintf(m, "movsd %s, %s",
+                                 locationString(m, dst->location, bits),
+                                 locationString(m, src->location, bits));
+            }
+            else {
+               InvalidCodePath;
+            }
          }
          else {
             instructionPrintf(m, "mov %s, %s",
@@ -1340,9 +1351,8 @@ x64AddressOf(MachineX64* m, Location* loc) {
    }
 }
 
-
 void
-x64ConvertIntToFloat(MachineX64* m, Location from) {
+x64ConvertIntegerToFloat(MachineX64* m, Location from) {
    if (from.type == Location_REGISTER || from.type == Location_STACK) {
       // char* from_str = g_registers[from.reg].reg;
       instructionPrintf(m, "cvtsi2ss xmm1, %s", locationString(m, from, 32));
@@ -1451,7 +1461,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->finish = x64Finish;
 
       m->convertFloatToInt = x64ConvertFloatToInt;
-      m->convertIntToFloat = x64ConvertIntToFloat;
+      m->convertIntegerToFloat = x64ConvertIntegerToFloat;
    }
    #if defined(__MACH__)
       #pragma clang diagnostic pop
