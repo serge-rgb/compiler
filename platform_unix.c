@@ -101,17 +101,17 @@ b32
 findBinaryInPath(char* out_path, size_t size, char* name) {
    b32 found = false;
 
-   char tokens[PATH_MAX] = Zero; {
+   char tokens[PathMax] = Zero; {
       char* PATH = getenv("PATH");
       if (PATH) {
-         strncpy(tokens, PATH, PATH_MAX);
+         strncpy(tokens, PATH, PathMax);
       }
       else {
          fprintf(stderr, "no PATH env var.\n");
       }
    }
 
-   char binary_path[PATH_MAX] = Zero;
+   char binary_path[PathMax] = Zero;
 
    for (char* token = strtok(tokens, ":");
         token != NULL;
@@ -139,13 +139,13 @@ platformCompileAndLinkAsmFile(char* filename_without_extension) {
    snprintf(asm_file, PathMax, "%s.asm", filename_without_extension);
    printf("Running nasm\n");
 
-   char nasm_path[PATH_MAX] = Zero;
+   char nasm_path[PathMax] = Zero;
 
    if (findBinaryInPath(nasm_path, ArrayCount(nasm_path), "nasm")) {
 
       if (Ok == (ret = platformAssemble(nasm_path, asm_file))) {
 
-         char ld_path[PATH_MAX] = Zero;
+         char ld_path[PathMax] = Zero;
          if (findBinaryInPath(ld_path, ArrayCount(ld_path), "ld")) {
             ret = platformLink(ld_path, filename_without_extension);
          }

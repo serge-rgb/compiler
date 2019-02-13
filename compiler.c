@@ -12,7 +12,7 @@ elif [ `uname` = "MSYS_NT-10.0" ]; then
 else  # Assume it's macOS
    echo `uname`
    comment_for_cleanup="-Wno-switch"
-   clang -g -Wall -ObjC -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address $comment_for_cleanup compiler.c -o compiler # && ./compiler -t all
+   clang -g -Wall -ObjC -Wno-char-subscripts -Wno-missing-braces -fno-omit-frame-pointer -fsanitize=address $comment_for_cleanup compiler.c -o compiler # && ./compiler -t all
    exit $?
 fi
 
