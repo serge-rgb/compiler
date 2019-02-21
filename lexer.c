@@ -336,43 +336,60 @@ lexNumberExpansion(FileStream* fs, NumberTokenType number_type, u64 integer, Tok
       }
    }
 
+   u32 mantissa_size = 23;
+   u64 num_bits = 64;
+   u64 bits = 0;
+   i32 exp = 0;
+
    switch(t->type) {
       case TType_DOUBLE: {
-         NotImplemented("doubles");
+         mantissa_size = 52;
+         num_bits = 64;
+         exp = 1023 + exponent;
       } break;
       case TType_FLOAT: {
-         u8 exp = (u8)(i8)(127 + exponent);
-         u32 bits = exp << 23;
-         if (sign) {
-            bits |= (1<<31);
-         }
-
-         // Move fraction to beginning of mantissa.
-         if (frac_bits > 23) {
-            frac >>= frac_bits - 23;
-         }
-         else {
-            frac <<= 23 - frac_bits;
-         }
-
-         if (integer) {
-            // move significand to beginning of mantissa
-            if (exponent < 23) {
-               integer <<= 23 - exponent;
-            }
-            else {
-               integer >>= exponent - 23;
-            }
-            frac >>= exponent;
-            bits |= integer;
-         }
-         bits |= frac;
-
-         t->cast.real32 = *(float*)&bits;
+         mantissa_size = 23;
+         num_bits = 32;
+         exp = 127 + exponent;
       } break;
       default: {
          InvalidCodePath;
       }
+   }
+
+   bits = (u64)exp << mantissa_size;
+   if (sign) {
+      bits |= ((u64)1<<(num_bits-1));
+   }
+
+   // Move fraction to beginning of mantissa.
+   if (frac_bits > mantissa_size) {
+      frac >>= frac_bits - mantissa_size;
+   }
+   else {
+      frac <<= mantissa_size - frac_bits;
+   }
+
+   if (integer) {
+      // move significand to beginning of mantissa
+      if (exponent < mantissa_size) {
+         integer <<= mantissa_size - exponent;
+      }
+      else {
+         integer >>= exponent - mantissa_size;
+      }
+      frac >>= exponent;
+      bits |= integer;
+   }
+   bits |= frac;
+
+   switch(t->type) {
+      case TType_DOUBLE: {
+         t->cast.real64 = *(double*)&bits;
+      } break;
+      case TType_FLOAT: {
+         t->cast.real32 = *(float*)&bits;
+      } break;
    }
 }
 

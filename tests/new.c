@@ -4,7 +4,7 @@ struct foo {
 
 int main() {
    // float x = 16777217.0f; not representable
-   float x = 20.75f;
+   float x = 20.75;
    float y = 21.25f;
    return x+y == 42;
 

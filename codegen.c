@@ -938,12 +938,6 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       }
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
-         if (isRealType(&entry->c) &&
-             rhs->tok->type != TType_FLOAT)  {
-            Assert (rhs->tok->type == TType_NUMBER);
-            rhs->tok->type = TType_DOUBLE;
-            rhs->tok->cast.real64 = rhs->tok->cast.int32;
-         }
          ExprType* imm = c->m->immediateFromToken(c->m, rhs->tok);
 
          c->m->mov(c->m, entry, imm);

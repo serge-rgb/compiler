@@ -756,7 +756,7 @@ x64ImmediateFromToken(MachineX64* m, Token* tok) {
    };
 
    if (tok->type == TType_FLOAT) {  // Float lhs, integer literal rhs
-      imm.c.type = Type_DOUBLE;
+      imm.c.type = Type_FLOAT;
       imm.location.cast.real64 = tok->cast.real32;
    }
    else if (tok->type == TType_DOUBLE) {
@@ -1083,16 +1083,28 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
       }
       if (isRealType(&dst->c) &&
           isImmediate(src)) {
+         double imm = 0;
+
+         if (isRealType(&src->c)) {
+            imm = src->location.cast.real64;
+         }
+         else if (isIntegerType(&src->c)) {
+            imm = (double)src->location.cast.int64;
+         }
+         else {
+            InvalidCodePath;
+         }
+
          switch(typeBits(&dst->c)) {
             case 64: {
                instructionPrintf(m, "mov %s, __float64__(%f)",
                                  locationString(m, dst->location, bits),
-                                 src->location.cast.real64);
+                                 imm);
             } break;
             case 32: {
                instructionPrintf(m, "mov %s, __float32__(%f)",
                                  locationString(m, dst->location, bits),
-                                 src->location.cast.real64);
+                                 imm);
             } break;
             default: {
                codegenError("Invalid floating point variable size");

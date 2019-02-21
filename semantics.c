@@ -213,7 +213,6 @@ intRank(Ctype type) {
    return rank;
 }
 
-
 Ctype
 arithmeticTypeConversion(Ctype a, Ctype b) {
    Ctype result = {0};

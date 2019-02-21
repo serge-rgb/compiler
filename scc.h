@@ -287,6 +287,7 @@ struct Token {
          u8       character;
          u16      uint16;
          i32      int32;
+         i64      int64;
          f32      real32;
          f64      real64;
       } cast;
