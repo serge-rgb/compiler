@@ -559,6 +559,9 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
       case Keyword_float: {
          out->type = Type_FLOAT;
       } break;
+      case Keyword_double: {
+         out->type = Type_DOUBLE;
+      } break;
       case Keyword_struct: {
          AstNode* decl_list = NULL;
          out->type = Type_AGGREGATE;

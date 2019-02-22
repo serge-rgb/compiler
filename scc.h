@@ -582,6 +582,8 @@ struct Machine {
    // Conversion. Result in stack
    void (*convertFloatToInt)(void* machine, Location from);
    void (*convertIntegerToFloat)(void* machine, Location from);
+   void (*convertDoubleToInt)(void* machine, Location from);
+   void (*convertIntegerToDouble)(void* machine, Location from);
 };
 
 Machine* makeMachineX64(Arena* a, MachineConfigFlags mflags);

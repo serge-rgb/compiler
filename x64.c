@@ -1387,6 +1387,30 @@ x64ConvertFloatToInt(MachineX64* m, Location from) {
    }
 }
 
+void
+x64ConvertIntegerToDouble(MachineX64* m, Location from) {
+   if (from.type == Location_REGISTER || from.type == Location_STACK) {
+      // char* from_str = g_registers[from.reg].reg;
+      instructionPrintf(m, "cvtsi2sd xmm1, %s", locationString(m, from, 32));
+      x64StackPushReg(m, m->machine.helperC(m,
+                                   (Ctype){ .type = Type_FLOAT })->location.reg);
+   }
+   else {
+      NotImplemented("X64 conversion instruction")
+   }
+}
+
+void
+x64ConvertDoubleToInt(MachineX64* m, Location from) {
+   if (from.type == Location_REGISTER) {
+      char* from_str = g_registers[from.reg].reg;
+      instructionPrintf(m, "cvtsd2si rax, %s", from_str);
+   }
+   else {
+      NotImplemented("X64 conversion instruction")
+   }
+}
+
 
 Machine*
 makeMachineX64(Arena* a, MachineConfigFlags mflags) {
@@ -1474,6 +1498,8 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
 
       m->convertFloatToInt = x64ConvertFloatToInt;
       m->convertIntegerToFloat = x64ConvertIntegerToFloat;
+      m->convertDoubleToInt = x64ConvertDoubleToInt;
+      m->convertIntegerToDouble = x64ConvertIntegerToDouble;
    }
    #if defined(__MACH__)
       #pragma clang diagnostic pop

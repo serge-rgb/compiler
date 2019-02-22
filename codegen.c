@@ -278,6 +278,7 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
       // Nothing to do
       didConversion = false;
    }
+   // int <-> float
    else if (value->c.type == Type_FLOAT &&
             target_type.type == Type_INT) {
       if (target != Target_NONE) {
@@ -291,6 +292,23 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
             target_type.type == Type_FLOAT) {
       if (target != Target_NONE) {
          c->m->convertIntegerToFloat(c->m, value->location);
+         if (target == Target_ACCUM) {
+            m->stackPop(m, m->accumC(m, target_type));
+         }
+      }
+   }
+   // int <-> double
+   else if (value->c.type == Type_DOUBLE &&
+      target_type.type == Type_INT) {
+      m->convertDoubleToInt(m, value->location);
+      if (target == Target_ACCUM) {
+         m->stackPop(m, m->accumC(m, target_type));
+      }      
+   }
+   else if (isIntegerType(&value->c) && 
+      target_type.type == Type_DOUBLE) {
+      if (target != Target_NONE) {
+         m->convertIntegerToDouble(m, value->location);
          if (target == Target_ACCUM) {
             m->stackPop(m, m->accumC(m, target_type));
          }
