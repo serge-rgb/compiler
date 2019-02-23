@@ -649,6 +649,13 @@ x64Cmp(MachineX64* m, ExprType* dst, ExprType* src) {
                         locationString(m, src->location, bits));
 
    }
+   else if (src->c.type == Type_DOUBLE) {
+      u32 bits = typeBits(&dst->c);
+      instructionPrintf(m, "ucomisd %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+
+   }
    else {
       NotImplemented("cmp type");
    }
@@ -1181,10 +1188,19 @@ x64Add(MachineX64* m, ExprType* dst, ExprType* src) {
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
    }
-   else {
+   else if (dst->c.type == Type_FLOAT) {
       instructionPrintf(m, "addps %s, %s",
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
+   }
+   else if (dst->c.type == Type_DOUBLE) {
+      instructionPrintf(m, "addpd %s, %s",
+                        locationString(m, dst->location, bits),
+                        locationString(m, src->location, bits));
+
+   }
+   else {
+      InvalidCodePath;
    }
 }
 
@@ -1398,6 +1414,40 @@ x64ConvertFloatToInt(MachineX64* m, Location from, EmitTarget target) {
 }
 
 void
+x64ConvertFloatToDouble(MachineX64* m, Location from, EmitTarget target) {
+   //if (from.type == Location_REGISTER) {
+      char* from_str = locationString(m, from, 32);
+      if (target == Target_ACCUM) {
+         instructionPrintf(m, "cvtss2sd xmm0, %s", from_str);
+      }
+      else {
+         instructionPrintf(m, "cvtss2sd xmm1, %s", from_str);
+         x64StackPushReg(m, Reg_XMM1);
+      }
+   // }
+   // else {
+   //    NotImplemented("X64 conversion instruction")
+   // }
+}
+
+void
+x64ConvertDoubleToFloat(MachineX64* m, Location from, EmitTarget target) {
+   if (from.type == Location_REGISTER) {
+      char* from_str = g_registers[from.reg].reg;
+      if (target == Target_ACCUM) {
+         instructionPrintf(m, "cvtsd2ss xmm0, %s", from_str);
+      }
+      else {
+         instructionPrintf(m, "cvtsd2ss xmm1, %s", from_str);
+         x64StackPushReg(m, Reg_XMM1);
+      }
+   }
+   else {
+      NotImplemented("X64 conversion instruction")
+   }
+}
+
+void
 x64ConvertIntegerToDouble(MachineX64* m, Location from, EmitTarget target) {
    if (from.type == Location_REGISTER || from.type == Location_STACK) {
       // char* from_str = g_registers[from.reg].reg;
@@ -1522,6 +1572,8 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->convertIntegerToFloat = x64ConvertIntegerToFloat;
       m->convertDoubleToInt = x64ConvertDoubleToInt;
       m->convertIntegerToDouble = x64ConvertIntegerToDouble;
+      m->convertDoubleToFloat = x64ConvertDoubleToFloat;
+      m->convertFloatToDouble = x64ConvertFloatToDouble;
    }
    #if defined(__MACH__)
       #pragma clang diagnostic pop

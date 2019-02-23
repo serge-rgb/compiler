@@ -110,104 +110,6 @@ popInstructionOutput(Codegen* c) {
 // Forward declaration for recursive calls.
 void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
 
-void
-emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
-                    AstNode* left, AstNode* right, EmitTarget target) {
-
-   Machine* m = c->m;
-
-   ExprType tleft = {0};
-   ExprType tright = {0};
-
-   codegenEmit(c, right, &tright, Target_STACK);
-   codegenEmit(c, left, &tleft, Target_ACCUM);
-
-   if ( !isArithmeticType(tleft.c) ) {
-      codegenError("Left operator in binary expression is not arithmetic type.");
-   }
-   else if ( !isArithmeticType(tright.c) ) {
-      codegenError("Left operator in expression is not arithmetic type.");
-   }
-
-   int bits = typeBits(&tleft.c);
-   m->stackPop(m, m->helper(m, tright.c.type, bits));
-
-   Ctype new_ctype = arithmeticTypeConversion(tleft.c, tright.c);
-   tleft.c = tright.c = new_ctype;
-
-   if (expr_type) {
-      *expr_type = tleft;
-   }
-
-   ExprType* dst = m->accum(m, tleft.c.type, bits);
-   ExprType* src = m->helper(m, tright.c.type, bits);
-   switch (type) {
-      case Ast_ADD: { m->add(m, dst, src); } break;
-      case Ast_SUB: { m->sub(m, dst, src); } break;
-      case Ast_MUL: { m->mul(m, dst, src); } break;
-      case Ast_DIV: { m->div(m, dst, src); } break;
-      default: break;
-   }
-
-   if (target == Target_STACK) {
-      m->stackPushReg(m, m->accum(m, tleft.c.type, bits)->location.reg);
-   }
-}
-
-ExprType*
-getAddress(Codegen* c, AstNode* node) {
-   ExprType* result = NULL;
-   switch(node->type) {
-      case Ast_ID: {
-         result = findSymbol(c, node->tok->cast.string);
-      } break;
-   }
-   return result;
-}
-
-void
-emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
-   Assert(expr_type);
-
-   Machine* m = c->m;
-   char* id_str = node->tok->cast.string;
-   ExprType* entry = findSymbol(c, id_str);
-
-   expr_type->c = entry->c;
-   expr_type->location = entry->location;
-
-   if (!entry) {
-      codegenError("Use of undeclared identifier %s", node->tok->cast.string);
-   }
-
-   if (typeBits(&entry->c) > 64) {
-      if (target != Target_NONE) {
-         ExprType* accum = m->accum(m, Type_INT, 64);
-         m->stackAddressInAccum(m, entry);
-         if (target == Target_STACK) {
-            m->stackPushReg(m,
-                            accum->location.reg);
-            expr_type->location = accum->location;
-         }
-      }
-
-   }
-   else {
-      if (target != Target_NONE) {
-         ExprType* accum = m->accumC(m, entry->c);
-         m->mov(m, accum, entry);
-
-         if (target == Target_STACK) {
-            Location loc = m->stackPushReg(m, accum->location.reg);
-            expr_type->location = loc;
-         }
-         else if (target == Target_ACCUM) {
-            expr_type->location = accum->location;
-         }
-      }
-   }
-}
-
 b32
 typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
    b32 compatible = false;
@@ -302,11 +204,131 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
          m->convertIntegerToDouble(m, value->location, target);
       }
    }
+   else if (isRealType(&value->c) && isRealType(&target_type)) {
+      if (value->c.type == Type_DOUBLE) {
+         m->convertDoubleToFloat(m, value->location, target);
+      }
+      else {
+         m->convertFloatToDouble(m, value->location, target);
+      }
+   }
    else {
       NotImplemented("type conversion.");
    }
    return didConversion;
 }
+
+void
+emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
+                    AstNode* left, AstNode* right, EmitTarget target) {
+
+   Machine* m = c->m;
+
+   ExprType tleft = {0};
+   ExprType tright = {0};
+
+   codegenEmit(c, right, &tright, Target_STACK);
+   codegenEmit(c, left, &tleft, Target_ACCUM);
+
+   if ( !isArithmeticType(tleft.c) ) {
+      codegenError("Left operator in binary expression is not arithmetic type.");
+   }
+   else if ( !isArithmeticType(tright.c) ) {
+      codegenError("Left operator in expression is not arithmetic type.");
+   }
+
+   Ctype new_ctype = arithmeticTypeConversion(tleft.c, tright.c);
+   ExprType* helper = m->helper(m, tright.c.type, typeBits(&tright.c));
+   m->stackPop(m, helper);
+
+   maybeEmitTypeConversion(c,
+                           helper,
+                           new_ctype,
+                           Target_STACK,
+                           "Incompatible types in binary expression");
+
+   maybeEmitTypeConversion(c,
+                           &tleft,
+                           new_ctype,
+                           Target_ACCUM,
+                           "Incompatible types in binary expression");
+
+
+   if (expr_type) {
+      *expr_type = tleft;
+   }
+
+   ExprType* dst = m->accum(m, new_ctype.type, typeBits(&new_ctype));
+   ExprType* src = m->helper(m, new_ctype.type, typeBits(&new_ctype));
+   m->stackPop(m, helper);
+
+   switch (type) {
+      case Ast_ADD: { m->add(m, dst, src); } break;
+      case Ast_SUB: { m->sub(m, dst, src); } break;
+      case Ast_MUL: { m->mul(m, dst, src); } break;
+      case Ast_DIV: { m->div(m, dst, src); } break;
+      default: break;
+   }
+
+   if (target == Target_STACK) {
+      m->stackPushReg(m, m->accumC(m, new_ctype)->location.reg);
+   }
+}
+
+ExprType*
+getAddress(Codegen* c, AstNode* node) {
+   ExprType* result = NULL;
+   switch(node->type) {
+      case Ast_ID: {
+         result = findSymbol(c, node->tok->cast.string);
+      } break;
+   }
+   return result;
+}
+
+void
+emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+   Assert(expr_type);
+
+   Machine* m = c->m;
+   char* id_str = node->tok->cast.string;
+   ExprType* entry = findSymbol(c, id_str);
+
+   expr_type->c = entry->c;
+   expr_type->location = entry->location;
+
+   if (!entry) {
+      codegenError("Use of undeclared identifier %s", node->tok->cast.string);
+   }
+
+   if (typeBits(&entry->c) > 64) {
+      if (target != Target_NONE) {
+         ExprType* accum = m->accum(m, Type_INT, 64);
+         m->stackAddressInAccum(m, entry);
+         if (target == Target_STACK) {
+            m->stackPushReg(m,
+                            accum->location.reg);
+            expr_type->location = accum->location;
+         }
+      }
+
+   }
+   else {
+      if (target != Target_NONE) {
+         ExprType* accum = m->accumC(m, entry->c);
+         m->mov(m, accum, entry);
+
+         if (target == Target_STACK) {
+            Location loc = m->stackPushReg(m, accum->location.reg);
+            expr_type->location = loc;
+         }
+         else if (target == Target_ACCUM) {
+            expr_type->location = accum->location;
+         }
+      }
+   }
+}
+
 
 void
 emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {

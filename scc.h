@@ -584,6 +584,8 @@ struct Machine {
    void (*convertIntegerToFloat)(void* machine, Location from, EmitTarget target);
    void (*convertDoubleToInt)(void* machine, Location from, EmitTarget target);
    void (*convertIntegerToDouble)(void* machine, Location from, EmitTarget target);
+   void (*convertDoubleToFloat)(void* machine, Location from, EmitTarget target);
+   void (*convertFloatToDouble)(void* machine, Location from, EmitTarget target);
 };
 
 Machine* makeMachineX64(Arena* a, MachineConfigFlags mflags);

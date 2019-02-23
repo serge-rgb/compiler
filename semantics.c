@@ -236,7 +236,16 @@ arithmeticTypeConversion(Ctype a, Ctype b) {
          NotImplemented("Continue with integer promotion");
       }
    }
+   else if (isRealType(&a) && isRealType(&b)) {
+      if (typeBits(&a) > typeBits(&b)) {
+         result = a;
+      }
+      else {
+         result = b;
+      }
+   }
 
+   Assert (result.type != Type_NONE);
    return result;
 }
 
