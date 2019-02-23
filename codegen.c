@@ -241,11 +241,15 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    ExprType* helper = m->helper(m, tright.c.type, typeBits(&tright.c));
    m->stackPop(m, helper);
 
-   maybeEmitTypeConversion(c,
-                           helper,
-                           new_ctype,
-                           Target_STACK,
-                           "Incompatible types in binary expression");
+   if (maybeEmitTypeConversion(c,
+                            helper,
+                            new_ctype,
+                            Target_STACK,
+                            "Incompatible types in binary expression")) {
+
+      helper = m->helper(m, new_ctype.type, typeBits(&tright.c));
+      m->stackPop(m, helper);
+   }
 
    maybeEmitTypeConversion(c,
                            &tleft,
@@ -260,7 +264,6 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
 
    ExprType* dst = m->accum(m, new_ctype.type, typeBits(&new_ctype));
    ExprType* src = m->helper(m, new_ctype.type, typeBits(&new_ctype));
-   m->stackPop(m, helper);
 
    switch (type) {
       case Ast_ADD: { m->add(m, dst, src); } break;
