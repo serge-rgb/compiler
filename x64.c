@@ -1097,9 +1097,10 @@ x64Mov(MachineX64* m, ExprType* dst, ExprType* src) {
 
          switch(typeBits(&dst->c)) {
             case 64: {
-               instructionPrintf(m, "mov %s, __float64__(%f)",
-                                 locationString(m, dst->location, bits),
+               instructionPrintf(m, "mov rbx, __float64__(%f)",
                                  imm);
+               instructionPrintf(m, "mov %s, rbx",
+                                 locationString(m, dst->location, bits));
             } break;
             case 32: {
                instructionPrintf(m, "mov %s, __float32__(%f)",
@@ -1364,12 +1365,15 @@ x64AddressOf(MachineX64* m, Location* loc) {
 }
 
 void
-x64ConvertIntegerToFloat(MachineX64* m, Location from) {
+x64ConvertIntegerToFloat(MachineX64* m, Location from, EmitTarget target) {
    if (from.type == Location_REGISTER || from.type == Location_STACK) {
       // char* from_str = g_registers[from.reg].reg;
-      instructionPrintf(m, "cvtsi2ss xmm1, %s", locationString(m, from, 32));
-      x64StackPushReg(m, m->machine.helperC(m,
-                                   (Ctype){ .type = Type_FLOAT })->location.reg);
+      if (target == Target_ACCUM) {
+         instructionPrintf(m, "cvtsi2ss xmm0, %s", locationString(m, from, 32));
+      } else {
+         instructionPrintf(m, "cvtsi2ss xmm1, %s", locationString(m, from, 32));
+         x64StackPushReg(m, Reg_XMM1);
+      }
    }
    else {
       NotImplemented("X64 conversion instruction")
@@ -1377,10 +1381,16 @@ x64ConvertIntegerToFloat(MachineX64* m, Location from) {
 }
 
 void
-x64ConvertFloatToInt(MachineX64* m, Location from) {
+x64ConvertFloatToInt(MachineX64* m, Location from, EmitTarget target) {
    if (from.type == Location_REGISTER) {
       char* from_str = g_registers[from.reg].reg;
-      instructionPrintf(m, "cvtss2si rax, %s", from_str);
+      if (target == Target_ACCUM) {
+         instructionPrintf(m, "cvtss2si rax, %s", from_str);
+      }
+      else {
+         instructionPrintf(m, "cvtss2si rbx, %s", from_str);
+         x64StackPushReg(m, Reg_RBX);
+      }
    }
    else {
       NotImplemented("X64 conversion instruction")
@@ -1388,12 +1398,18 @@ x64ConvertFloatToInt(MachineX64* m, Location from) {
 }
 
 void
-x64ConvertIntegerToDouble(MachineX64* m, Location from) {
+x64ConvertIntegerToDouble(MachineX64* m, Location from, EmitTarget target) {
    if (from.type == Location_REGISTER || from.type == Location_STACK) {
       // char* from_str = g_registers[from.reg].reg;
-      instructionPrintf(m, "cvtsi2sd xmm1, %s", locationString(m, from, 32));
-      x64StackPushReg(m, m->machine.helperC(m,
-                                   (Ctype){ .type = Type_FLOAT })->location.reg);
+
+      if (target == Target_ACCUM) {
+         instructionPrintf(m, "cvtsi2sd xmm0, %s", locationString(m, from, 32));
+      }
+      else {
+         instructionPrintf(m, "cvtsi2sd xmm1, %s", locationString(m, from, 32));
+         x64StackPushReg(m, Reg_XMM1);
+      }
+      // x64StackPushReg(m, m->machine.helperC(m, (Ctype){ .type = Type_FLOAT })->location.reg);
    }
    else {
       NotImplemented("X64 conversion instruction")
@@ -1401,10 +1417,16 @@ x64ConvertIntegerToDouble(MachineX64* m, Location from) {
 }
 
 void
-x64ConvertDoubleToInt(MachineX64* m, Location from) {
+x64ConvertDoubleToInt(MachineX64* m, Location from, EmitTarget target) {
    if (from.type == Location_REGISTER) {
       char* from_str = g_registers[from.reg].reg;
-      instructionPrintf(m, "cvtsd2si rax, %s", from_str);
+      if (target == Target_ACCUM) {
+         instructionPrintf(m, "cvtsd2si rax, %s", from_str);
+      }
+      else {
+         instructionPrintf(m, "cvtsd2si rbx, %s", from_str);
+         x64StackPushReg(m, Reg_RBX);
+      }
    }
    else {
       NotImplemented("X64 conversion instruction")
