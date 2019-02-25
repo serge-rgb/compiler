@@ -30,7 +30,6 @@ struct MachineX64 {
 
 void        x64Mov(MachineX64* m, ExprType* dst, ExprType* src);
 Location    x64StackPushOffset(MachineX64* m, u64 bytes);
-ExprType*   x64Helper64(int type /*Ctype.type*/ );
 
 struct Register {
    char* reg;
@@ -678,7 +677,7 @@ x64CmpJmp(MachineX64* m, AstType ast_type, char* label) {
 void
 x64CmpJmpStackTop(MachineX64* m, AstType ast_type, ExprType* type, char* then, char* els) {
    u32 bits = typeBits(&type->c);
-   x64StackPop(m, x64Helper64(type->c.type));
+   x64StackPop(m, x64Helper(m, type->c.type, 64));
 
    instructionReg((MachineX64*)m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
 
@@ -789,128 +788,40 @@ x64ImmediateInt(u64 value) {
 }
 
 ExprType*
-x64HelperInt8() {
-   static ExprType helper = {
-      .c = { .type = Type_CHAR },
-      .location = { .type = Location_REGISTER, .reg = Reg_RBX },
-   };
-
-   return &helper;
-}
-
-ExprType*
-x64Accum64(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      static ExprType helper = {
-         .c = { .type = Type_DOUBLE },
-         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
-      };
-
-      result = &helper;
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_LONG },
-         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
-x64Accum32(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      static ExprType helper = {
-         .c = { .type = Type_FLOAT },
-         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
-      };
-
-      result = &helper;
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_INT },
-         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
-x64Accum8(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      static ExprType helper = {
-         .c = { .type = Type_FLOAT },
-         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
-      };
-
-      Assert(!"Floating point 8-bit register!");
-
-      result = &helper;
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_CHAR },
-         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
-x64Accum16(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      static ExprType helper = {
-         .c = { .type = Type_FLOAT },
-         .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
-      };
-
-      Assert(!"Floating point 16-bit register!");
-
-      result = &helper;
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_SHORT },
-         .location = { .type = Location_REGISTER, .reg = Reg_RAX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
 x64Accum(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
-      case 8: {
-         result = x64Accum8(type);
-      } break;
-      case 32: {
-         result = x64Accum32(type);
-      } break;
+      case 8:
+      case 16:
+      case 32:
       case 64: {
-         result = x64Accum64(type);
+         if (type & Type_REAL) {
+            static ExprType helper = {
+               .c = { .type = Type_NONE },
+               .location = { .type = Location_REGISTER, .reg = Reg_XMM0 },
+            };
+
+            helper.c.type = type;
+
+            result = &helper;
+         }
+         else if ((type & Type_PEANO) || type == Type_AGGREGATE) {
+            static ExprType helper = {
+               .c = { .type = Type_NONE },
+               .location = { .type = Location_REGISTER, .reg = Reg_RAX },
+            };
+            helper.c.type = type;
+            if (type == Type_AGGREGATE) {
+               helper.c.aggr.bits = bits;
+            }
+            result = &helper;
+         }
       } break;
       default: {
          NotImplemented("Unhandled size for accum register.");
       } break;
    }
+
    Assert (result);
    return result;
 }
@@ -923,108 +834,41 @@ x64AccumC(MachineX64* m, Ctype c) {
 }
 
 ExprType*
-x64Helper8(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      codegenError("Invalid size for floating point register.");
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_CHAR },
-         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
-x64Helper16(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      codegenError("Invalid size for floating point register.");
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_SHORT },
-         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
-x64Helper32(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      static ExprType helper = {
-         .c = { .type = Type_FLOAT },
-         .location = { .type = Location_REGISTER, .reg = Reg_XMM1 },
-      };
-
-      result = &helper;
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_INT },
-         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
-x64Helper64(int type /*Ctype.type*/ ) {
-   ExprType* result = NULL;
-   if (type & Type_REAL) {
-      static ExprType helper = {
-         .c = { .type = Type_DOUBLE },
-         .location = { .type = Location_REGISTER, .reg = Reg_XMM1 },
-      };
-
-      result = &helper;
-   }
-   else if (type & Type_PEANO) {
-      static ExprType helper = {
-         .c = { .type = Type_LONG },
-         .location = { .type = Location_REGISTER, .reg = Reg_RBX },
-      };
-      result = &helper;
-   }
-
-   Assert (result);
-   return result;
-}
-
-ExprType*
 x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
    switch (bits) {
-      case 8: {
-         result = x64Helper8(type);
-      } break;
-      case 16: {
-         result = x64Helper16(type);
-      } break;
-      case 32: {
-         result = x64Helper32(type);
-      } break;
+      case 8:
+      case 16:
+      case 32:
       case 64: {
-         result = x64Helper64(type);
+         if (type & Type_REAL) {
+            static ExprType helper = {
+               .c = { .type = Type_NONE },
+               .location = { .type = Location_REGISTER, .reg = Reg_XMM1 },
+            };
+
+            helper.c.type = type;
+            result = &helper;
+         }
+         else if (type & Type_PEANO) {
+            static ExprType helper = {
+               .c = { .type = Type_NONE },
+               .location = { .type = Location_REGISTER, .reg = Reg_RBX },
+            };
+            helper.c.type = type;
+            if (type == Type_AGGREGATE) {
+               helper.c.aggr.bits = bits;
+            }
+
+            result = &helper;
+         }
+
+         Assert (result);
       } break;
       default: {
          NotImplemented("Unhandled size for helper register.");
       } break;
    }
-   Assert (result);
    return result;
 }
 
@@ -1053,26 +897,6 @@ x64HelperInt64() {
    };
 
    return &helper;
-}
-
-ExprType*
-x64HelperInt_(u32 bits) {
-   ExprType* helper = NULL;
-   switch (bits) {
-      case 8: {
-         helper = x64HelperInt8();
-      } break;
-      case 32: {
-         helper = x64HelperInt32();
-      } break;
-      case 64: {
-         helper = x64HelperInt64();
-      } break;
-      default: {
-         NotImplemented("x64HelperInt()");
-      }
-   }
-   return helper;
 }
 
 void
@@ -1345,7 +1169,7 @@ x64FunctionEpilogue(MachineX64* m) {
    instructionPrintf(m, ".func_end:");
 
    while (bufCount(m->s_stack) > 0)  {
-      m->machine.stackPop(m, x64Helper64(Type_INT));
+      m->machine.stackPop(m, x64Helper(m, Type_LONG, 64));
    }
 
    // Restore non-volatile registers.
@@ -1382,104 +1206,71 @@ x64AddressOf(MachineX64* m, Location* loc) {
 
 void
 x64ConvertIntegerToFloat(MachineX64* m, Location from, EmitTarget target) {
-   if (from.type == Location_REGISTER || from.type == Location_STACK) {
-      // char* from_str = g_registers[from.reg].reg;
-      if (target == Target_ACCUM) {
-         instructionPrintf(m, "cvtsi2ss xmm0, %s", locationString(m, from, 32));
-      } else {
-         instructionPrintf(m, "cvtsi2ss xmm1, %s", locationString(m, from, 32));
-         x64StackPushReg(m, Reg_XMM1);
-      }
+   if (target == Target_ACCUM) {
+      instructionPrintf(m, "cvtsi2ss xmm0, %s", locationString(m, from, 32));
    }
-   else {
-      NotImplemented("X64 conversion instruction")
+   else if (target == Target_STACK) {
+      instructionPrintf(m, "cvtsi2ss xmm1, %s", locationString(m, from, 32));
+      x64StackPushReg(m, Reg_XMM1);
    }
 }
 
 void
 x64ConvertFloatToInt(MachineX64* m, Location from, EmitTarget target) {
-   if (from.type == Location_REGISTER) {
-      char* from_str = g_registers[from.reg].reg;
-      if (target == Target_ACCUM) {
-         instructionPrintf(m, "cvtss2si rax, %s", from_str);
-      }
-      else {
-         instructionPrintf(m, "cvtss2si rbx, %s", from_str);
-         x64StackPushReg(m, Reg_RBX);
-      }
+   char* from_str = locationString(m, from, 32);
+   if (target == Target_ACCUM) {
+      instructionPrintf(m, "cvtss2si rax, %s", from_str);
    }
-   else {
-      NotImplemented("X64 conversion instruction")
+   else if (target == Target_STACK) {
+      instructionPrintf(m, "cvtss2si rbx, %s", from_str);
+      x64StackPushReg(m, Reg_RBX);
    }
 }
 
 void
 x64ConvertFloatToDouble(MachineX64* m, Location from, EmitTarget target) {
-   //if (from.type == Location_REGISTER) {
-      char* from_str = locationString(m, from, 32);
-      if (target == Target_ACCUM) {
-         instructionPrintf(m, "cvtss2sd xmm0, %s", from_str);
-      }
-      else {
-         instructionPrintf(m, "cvtss2sd xmm1, %s", from_str);
-         x64StackPushReg(m, Reg_XMM1);
-      }
-   // }
-   // else {
-   //    NotImplemented("X64 conversion instruction")
-   // }
+   char* from_str = locationString(m, from, 32);
+   if (target == Target_ACCUM) {
+      instructionPrintf(m, "cvtss2sd xmm0, %s", from_str);
+   }
+   else if (target == Target_STACK) {
+      instructionPrintf(m, "cvtss2sd xmm1, %s", from_str);
+      x64StackPushReg(m, Reg_XMM1);
+   }
 }
 
 void
 x64ConvertDoubleToFloat(MachineX64* m, Location from, EmitTarget target) {
-   if (from.type == Location_REGISTER) {
-      char* from_str = g_registers[from.reg].reg;
-      if (target == Target_ACCUM) {
-         instructionPrintf(m, "cvtsd2ss xmm0, %s", from_str);
-      }
-      else {
-         instructionPrintf(m, "cvtsd2ss xmm1, %s", from_str);
-         x64StackPushReg(m, Reg_XMM1);
-      }
+   char* from_str = locationString(m, from, 64);
+   if (target == Target_ACCUM) {
+      instructionPrintf(m, "cvtsd2ss xmm0, %s", from_str);
    }
-   else {
-      NotImplemented("X64 conversion instruction")
+   else if (target == Target_STACK) {
+      instructionPrintf(m, "cvtsd2ss xmm1, %s", from_str);
+      x64StackPushReg(m, Reg_XMM1);
    }
 }
 
 void
 x64ConvertIntegerToDouble(MachineX64* m, Location from, EmitTarget target) {
-   if (from.type == Location_REGISTER || from.type == Location_STACK) {
-      // char* from_str = g_registers[from.reg].reg;
-
-      if (target == Target_ACCUM) {
-         instructionPrintf(m, "cvtsi2sd xmm0, %s", locationString(m, from, 32));
-      }
-      else {
-         instructionPrintf(m, "cvtsi2sd xmm1, %s", locationString(m, from, 32));
-         x64StackPushReg(m, Reg_XMM1);
-      }
-      // x64StackPushReg(m, m->machine.helperC(m, (Ctype){ .type = Type_FLOAT })->location.reg);
+   if (target == Target_ACCUM) {
+      instructionPrintf(m, "cvtsi2sd xmm0, %s", locationString(m, from, 32));
    }
-   else {
-      NotImplemented("X64 conversion instruction")
+   else if (target == Target_STACK) {
+      instructionPrintf(m, "cvtsi2sd xmm1, %s", locationString(m, from, 32));
+      x64StackPushReg(m, Reg_XMM1);
    }
 }
 
 void
 x64ConvertDoubleToInt(MachineX64* m, Location from, EmitTarget target) {
-   if (from.type == Location_REGISTER) {
-      char* from_str = g_registers[from.reg].reg;
-      if (target == Target_ACCUM) {
-         instructionPrintf(m, "cvtsd2si rax, %s", from_str);
-      }
-      else {
-         instructionPrintf(m, "cvtsd2si rbx, %s", from_str);
-         x64StackPushReg(m, Reg_RBX);
-      }
+   char* from_str = locationString(m, from, 64);
+   if (target == Target_ACCUM) {
+      instructionPrintf(m, "cvtsd2si rax, %s", from_str);
    }
-   else {
-      NotImplemented("X64 conversion instruction")
+   else if (target == Target_STACK) {
+      instructionPrintf(m, "cvtsd2si rbx, %s", from_str);
+      x64StackPushReg(m, Reg_RBX);
    }
 }
 

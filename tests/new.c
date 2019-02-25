@@ -1,9 +1,9 @@
-struct foo {
-   int f0;
-};
+float testFunc(float x, int pow) {
+   while (pow) {
+      x *= 2;
+   }
+}
 
 int main() {
-   double x = 1.0;
-   float y = 1.0;
-   return x+y == 2;
+   return testFunc(2, 10);
 }

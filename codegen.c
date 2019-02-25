@@ -558,11 +558,16 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
             int bits = typeBits(&lhs_type.c);
-            ExprType rhs_type = Zero;
-            codegenEmit(c, rhs, &rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
-            Assert (typeBits(&lhs_type.c) == typeBits(&rhs_type.c));
+            ExprType rhs_type_buf = Zero;
+            ExprType* rhs_type = &rhs_type_buf;
+            codegenEmit(c, rhs, rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
+
+            if (maybeEmitTypeConversion(c, rhs_type, lhs_type.c, Target_ACCUM, "Incompatible type in assignment")) {
+               rhs_type = m->accumC(m, lhs_type.c);
+            }
+
             if (op->value == '=') {
-               m->mov(c->m, &lhs_type, &rhs_type);
+               m->mov(c->m, &lhs_type, rhs_type);
             }
             else {
                Assert(bits < 64);
@@ -573,7 +578,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
-                     m->add(m, helper, m->accum(m, rhs_type.c.type, 32));
+                     m->add(m, helper, m->accum(m, rhs_type->c.type, 32));
                   } break;
                   default: {
                      NotImplemented("Different assignment expressions");

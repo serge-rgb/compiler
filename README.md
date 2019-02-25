@@ -25,10 +25,11 @@ Deviations from the C spec.
 
 To-Do (short term):
 -------------------
-- prefix addition & subtraction (++i, --i)
-- floating point
-- typedefs
-- arrays
+- language features
+   - all operators
+   - floating point
+   - typedefs
+   - arrays
 - external functions
 - global declarations
 - preprocessor
