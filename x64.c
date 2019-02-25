@@ -489,8 +489,13 @@ x64PushParameter(MachineX64* m, Scope* scope, ExprType* etype) {
                   case 3: { loc.reg = Reg_R9;  } break;
                }
             }
-            else {
-               NotImplemented("Float");
+            else  {
+               switch(m->params.n_param) {
+                  case 0: { loc.reg = Reg_XMM0; } break;
+                  case 1: { loc.reg = Reg_XMM1; } break;
+                  case 2: { loc.reg = Reg_XMM2; } break;
+                  case 3: { loc.reg = Reg_XMM3; } break;
+               }
             }
          }
          else {
@@ -610,7 +615,13 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
                }
             }
             if (isRealType(ctype)) {
-               NotImplemented("float params");
+               loc.type = Location_REGISTER;
+               switch (m->params.n_param) {
+                  case 0: { loc.reg = Reg_XMM0; } break;
+                  case 1: { loc.reg = Reg_XMM1; } break;
+                  case 2: { loc.reg = Reg_XMM2; } break;
+                  case 3: { loc.reg = Reg_XMM3; } break;
+               }
             }
          }
          else {
