@@ -184,13 +184,13 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
    else if (value->c.type == Type_FLOAT &&
             target_type.type == Type_INT) {
       if (target != Target_NONE) {
-         c->m->convertFloatToInt(c->m, value->location, target);
+         m->convertFloatToInt(m, value->location, target);
       }
    }
    else if (isIntegerType(&value->c) &&
             target_type.type == Type_FLOAT) {
       if (target != Target_NONE) {
-         c->m->convertIntegerToFloat(c->m, value->location, target);
+         m->convertIntegerToFloat(m, value->location, target);
       }
    }
    // int <-> double
@@ -221,7 +221,6 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
 void
 emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
                     AstNode* left, AstNode* right, EmitTarget target) {
-
    Machine* m = c->m;
 
    ExprType tleft = {0};
@@ -246,7 +245,6 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
                             new_ctype,
                             Target_STACK,
                             "Incompatible types in binary expression")) {
-
       helper = m->helper(m, new_ctype.type, typeBits(&tright.c));
       m->stackPop(m, helper);
    }
@@ -256,7 +254,6 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
                            new_ctype,
                            Target_ACCUM,
                            "Incompatible types in binary expression");
-
 
    if (expr_type) {
       *expr_type = tleft;
@@ -473,6 +470,8 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
             codegenError("Attempting to pass incompatible parameter to function.");
          }
 
+         NotImplemented("type conversion when passing parameters");
+
          m->pushParameter(m, c->scope, &et);
          expected_param = expected_param->next;
       }
@@ -532,7 +531,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   m->movAccum(m, expr_type, node->tok);
                } break;
                case Target_STACK: {
-                  m->stackPushImm(m, expr_type, node->tok->value);
+                  expr_type->location = m->stackPushImm(m, node->tok->value);
                } break;
                case Target_NONE: {
                   expr_type->location = (Location) {
@@ -567,7 +566,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
 
             if (op->value == '=') {
-               m->mov(c->m, &lhs_type, rhs_type);
+               m->mov(m, &lhs_type, rhs_type);
             }
             else {
                Assert(bits < 64);
@@ -576,19 +575,48 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                ExprType* helper = m->helper(m, lhs_type.c.type, 32);
                m->mov(m, helper, &lhs_type);
 
+               ExprType* accum = m->accum(m, rhs_type->c.type, 32);
+
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
-                     m->add(m, helper, m->accum(m, rhs_type->c.type, 32));
+                     m->add(m, helper, accum);
+                  } break;
+                  case ASSIGN_DECREMENT: {
+                     m->sub(m, helper, accum);
+                  } break;
+                  case ASSIGN_MODULUS: {
+                     m->mod(m, helper, accum);
+                  } break;
+                  case ASSIGN_BIT_AND: {
+                     m->bitAnd(m, helper, accum);
+                  } break;
+                  case ASSIGN_MULTIPLY: {
+                     m->mul(m, helper, accum);
+                  } break;
+                  case ASSIGN_DIVIDE: {
+                     m->div(m, helper, accum);
+                  } break;
+                  case ASSIGN_SHIFT_LEFT: {
+                     m->shiftLeft(m, helper, accum);
+                  } break;
+                  case ASSIGN_SHIFT_RIGHT: {
+                     m->shiftRight(m, helper, accum);
+                  } break;
+                  case ASSIGN_BIT_XOR: {
+                     m->bitXor(m, helper, accum);
+                  } break;
+                  case ASSIGN_BIT_OR: {
+                     m->bitOr(m, helper, accum);
                   } break;
                   default: {
-                     NotImplemented("Different assignment expressions");
+                     InvalidCodePath;
                   }
                }
 
                m->mov(m, &lhs_type, helper);
 
                if (target == Target_ACCUM) {
-                  m->mov(c->m, m->accumC(m, lhs_type.c), &lhs_type);
+                  m->mov(m, m->accumC(m, lhs_type.c), &lhs_type);
                }
             }
          } break;
@@ -1181,11 +1209,14 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
             Location param_loc = m->popParameter(m, c->scope, &param_type);
 
+            // In order for parameters to be l-values, they must be on the stack atm.
+            Location stack_loc = m->stackPush(m, param_loc);
+
             symInsert(&c->scope->symbol_table,
                                         id_str,
                                         (ExprType){
                                            .c = param_type,
-                                           .location = param_loc,
+                                           .location = stack_loc,
                                         });
 
 

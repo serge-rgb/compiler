@@ -529,8 +529,10 @@ struct Machine {
    u8 flags; // MachineConfigFlags
 
    void (*stackPop)(void* machine, ExprType* et);
+
+   Location (*stackPush)(void* machine, Location location);
    Location (*stackPushReg)(void* machine, RegisterEnum reg);
-   Location (*stackPushImm)(void* machine, ExprType* et, i64 value);
+   Location (*stackPushImm)(void* machine, i64 value);
    Location (*stackPushOffset)(void* machine, u64 bytes);
 
    void (*stackAddressInAccum)(void* machine, ExprType* entry);
@@ -539,13 +541,12 @@ struct Machine {
 
    void (*functionPrelude)(void* machine, char* func_name);
 
-   void (* beginFuncParams ) (void* machine);
+   void (*beginFuncParams ) (void* machine);
 
    void (*pushParameter)(void* machine, Scope* scope, ExprType* etype);
    Location (*popParameter)(void* machine, Scope* scope, Ctype* ctype);
 
-   void (* endFuncParams ) (void* machine);
-
+   void (*endFuncParams ) (void* machine);
 
    void (*functionEpilogue)(void* machine);
 
@@ -556,6 +557,13 @@ struct Machine {
    void (*sub)(void* machine, ExprType* dst, ExprType* src);
    void (*mul)(void* machine, ExprType* dst, ExprType* src);
    void (*div)(void* machine, ExprType* dst, ExprType* src);
+   void (*mod)(void* machine, ExprType* dst, ExprType* src);
+   void (*bitAnd)(void* machine, ExprType* dst, ExprType* src);
+   void (*bitOr)(void* machine, ExprType* dst, ExprType* src);
+   void (*bitXor)(void* machine, ExprType* dst, ExprType* src);
+   void (*shiftLeft)(void* machine, ExprType* dst, ExprType* src);
+   void (*shiftRight)(void* machine, ExprType* dst, ExprType* src);
+
    void (*cmp)(void* machine, ExprType* dst, ExprType* src);
    void (*cmpSetAccum)(void* machine, AstType type);
 

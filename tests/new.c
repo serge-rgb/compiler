@@ -1,6 +1,7 @@
 float testFunc(float x, int pow) {
    while (pow) {
       x *= 2;
+      pow--;
    }
 }
 

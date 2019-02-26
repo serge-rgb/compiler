@@ -1047,10 +1047,18 @@ x64Sub(MachineX64* m, ExprType* dst, ExprType* src) {
                         locationString(m, dst->location, bits),
                         locationString(m, src->location, bits));
    }
-   else {
+   else if (dst->c.type == Type_FLOAT) {
       instructionPrintf(m, "subps %s, %s",
-                        locationString(m, dst->location, bits),
-                        locationString(m, src->location, bits));
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+   }
+   else if (dst->c.type == Type_DOUBLE) {
+      instructionPrintf(m, "subpd %s, %s",
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+   }
+   else {
+      InvalidCodePath;
    }
 }
 
@@ -1063,8 +1071,18 @@ x64Mul(MachineX64* m, ExprType* dst, ExprType* src) {
          locationString(m, src->location, bits));
 
    }
+   else if (dst->c.type == Type_FLOAT) {
+      instructionPrintf(m, "mulps %s, %s",
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+   }
+   else if (dst->c.type == Type_DOUBLE) {
+      instructionPrintf(m, "mulpd %s, %s",
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+   }
    else {
-      NotImplemented("float mul");
+      InvalidCodePath;
    }
 }
 
@@ -1077,10 +1095,51 @@ x64Div(MachineX64* m, ExprType* dst, ExprType* src) {
          locationString(m, src->location, bits));
 
    }
+   else if (dst->c.type == Type_FLOAT) {
+      instructionPrintf(m, "divps %s, %s",
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+   }
+   else if (dst->c.type == Type_DOUBLE) {
+      instructionPrintf(m, "divpd %s, %s",
+         locationString(m, dst->location, bits),
+         locationString(m, src->location, bits));
+   }
    else {
-      NotImplemented("float div");
+      InvalidCodePath;
    }
 }
+
+void
+x64Mod(MachineX64* m, ExprType* dst, ExprType* src) {
+   NotImplemented("x64Mod");
+}
+
+void
+x64BitAnd(MachineX64* m, ExprType* dst, ExprType* src) {
+   NotImplemented("x64BitAnd");
+}
+
+void
+x64BitOr(MachineX64* m, ExprType* dst, ExprType* src) {
+   NotImplemented("x64BitOr");
+}
+
+void
+x64BitXor(MachineX64* m, ExprType* dst, ExprType* src) {
+   NotImplemented("x64BitXor");
+}
+
+void
+x64ShiftLeft(MachineX64* m, ExprType* dst, ExprType* src) {
+   NotImplemented("x64ShiftLeft");
+}
+
+void
+x64ShiftRight(MachineX64* m, ExprType* dst, ExprType* src) {
+   NotImplemented("x64ShiftRight");
+}
+
 
 void
 x64MovAccum(MachineX64* m, ExprType* et , Token* rhs_tok)  {
@@ -1129,15 +1188,15 @@ x64StackPushReg(MachineX64* m, RegisterEnum reg) {
 }
 
 Location
-x64StackPushImm(MachineX64* m, ExprType* et, i64 val) {
+x64StackPushImm(MachineX64* m, i64 val) {
    instructionPrintf(m, "push %d", val);
    m->stack_offset += 8;
    bufPush(m->s_stack, (StackValue){ .type = Stack_QWORD });
-   et->location = (Location) {
+   Location location /*location!*/= {
       .type = Location_STACK,
       .reg = m->stack_offset,
    };
-   return et->location;
+   return location;
 }
 
 Location
@@ -1154,6 +1213,26 @@ x64StackPushOffset(MachineX64* m, u64 bytes) {
    bufPush(m->s_stack, val);
    return location;
 }
+
+
+Location
+x64StackPush(MachineX64* m, Location location) {
+   Location loc = Zero;
+   switch (location.type) {
+      case Location_REGISTER: {
+         loc = x64StackPushReg(m, location.reg);
+      } break;
+      case Location_IMMEDIATE: {
+         loc = x64StackPushImm(m, location.immediate_value);
+      } break;
+      case Location_STACK:
+      case Location_POINTER: {
+         NotImplemented("Generic stack push from non-register non-immediate");
+      } break;
+   }
+   return loc;
+}
+
 
 void
 x64Finish(MachineX64* m) {
@@ -1336,6 +1415,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->immediateFromToken = x64ImmediateFromToken;
 
       m->stackPop = x64StackPop;
+      m->stackPush = x64StackPush;
       m->stackPushReg = x64StackPushReg;
       m->stackPushImm = x64StackPushImm;
       m->stackPushOffset = x64StackPushOffset;
@@ -1353,6 +1433,14 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->sub = x64Sub;
       m->mul = x64Mul;
       m->div = x64Div;
+
+      m->mod = x64Mod;
+      m->bitAnd = x64BitAnd;
+      m->bitOr = x64BitOr;
+      m->bitXor = x64BitXor;
+      m->shiftLeft = x64ShiftLeft;
+      m->shiftRight = x64ShiftRight;
+
       m->cmp = x64Cmp;
       m->cmpSetAccum = x64CmpSetAccum;
       m->cmpJmp = x64CmpJmp;
