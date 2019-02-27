@@ -3,8 +3,9 @@ float testFunc(float x, int pow) {
       x *= 2;
       pow--;
    }
+   return x;
 }
 
 int main() {
-   return testFunc(2, 10);
+   return testFunc(1, 10) == 1024;
 }

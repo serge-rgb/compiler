@@ -463,14 +463,16 @@ assignmentExpression(Parser* p) {
 AstNode*
 argumentExpressionList(Parser* p) {
    AstNode* args = NULL;
+   AstNode** iter = &args;
    while (true) {
       AstNode* assignment = assignmentExpression(p);
       if (!assignment) {
          parseError(p, "Expected argument in expression list");
       }
       else {
-         assignment->next = args;
-         args = assignment;
+         *iter = assignment;
+         iter = &(*iter)->next;
+
          if (peekPunctuator(p, ',')) {
             nextToken(p);
          }
@@ -684,16 +686,16 @@ parseDeclarationSpecifiers(Parser* p) {
 AstNode*
 parameterTypeList(Parser* p) {
    AstNode* result = NULL;
+   AstNode** iter = &result;
 
-   // Parse parameter, right to left.
    while (true) {
       AstNode* decl_spec = parseOrBacktrack(parseDeclarationSpecifiers, p);
       if (decl_spec) {
          AstNode* declarator = parseOrBacktrack(parseDeclarator, p);
          if (declarator) {
             AstNode* new = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
-            new->next = result;
-            result = new;
+            *iter = new;
+            iter = &(*iter)->next;
 
             if (peekPunctuator(p, ',')) {
                // There is another parameter.

@@ -180,40 +180,48 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
       // Nothing to do
       didConversion = false;
    }
-   // int <-> float
-   else if (value->c.type == Type_FLOAT &&
-            target_type.type == Type_INT) {
-      if (target != Target_NONE) {
-         m->convertFloatToInt(m, value->location, target);
+   else {
+      Location value_loc = value->location;
+      if (value_loc.type == Location_IMMEDIATE) {
+         ExprType* helper = m->helperC(m, value->c);
+         m->mov(m, helper, value);
+         value_loc = helper->location;
       }
-   }
-   else if (isIntegerType(&value->c) &&
-            target_type.type == Type_FLOAT) {
-      if (target != Target_NONE) {
-         m->convertIntegerToFloat(m, value->location, target);
+      // int <-> float
+      if (value->c.type == Type_FLOAT &&
+               target_type.type == Type_INT) {
+         if (target != Target_NONE) {
+            m->convertFloatToInt(m, value_loc, target);
+         }
       }
-   }
-   // int <-> double
-   else if (value->c.type == Type_DOUBLE &&
-      target_type.type == Type_INT) {
-      m->convertDoubleToInt(m, value->location, target);
-   }
-   else if (isIntegerType(&value->c) &&
-      target_type.type == Type_DOUBLE) {
-      if (target != Target_NONE) {
-         m->convertIntegerToDouble(m, value->location, target);
+      else if (isIntegerType(&value->c) &&
+               target_type.type == Type_FLOAT) {
+         if (target != Target_NONE) {
+            m->convertIntegerToFloat(m, value_loc, target);
+         }
       }
-   }
-   else if (isRealType(&value->c) && isRealType(&target_type)) {
-      if (value->c.type == Type_DOUBLE) {
-         m->convertDoubleToFloat(m, value->location, target);
+      // int <-> double
+      else if (value->c.type == Type_DOUBLE &&
+         target_type.type == Type_INT) {
+         m->convertDoubleToInt(m, value_loc, target);
+      }
+      else if (isIntegerType(&value->c) &&
+         target_type.type == Type_DOUBLE) {
+         if (target != Target_NONE) {
+            m->convertIntegerToDouble(m, value_loc, target);
+         }
+      }
+      else if (isRealType(&value->c) && isRealType(&target_type)) {
+         if (value->c.type == Type_DOUBLE) {
+            m->convertDoubleToFloat(m, value_loc, target);
+         }
+         else {
+            m->convertFloatToDouble(m, value_loc, target);
+         }
       }
       else {
-         m->convertFloatToDouble(m, value->location, target);
+         NotImplemented("type conversion.");
       }
-   }
-   else {
-      NotImplemented("type conversion.");
    }
    return didConversion;
 }
@@ -461,18 +469,21 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
       for (AstNode* param = params;
            param != NULL;
            param = param->next) {
-         ExprType et = {0};
-         emitExpression(c, param, &et, Target_NONE);
+         ExprType et_buf = {0};
+         ExprType* et = &et_buf;
+         emitExpression(c, param, et, Target_NONE);
          ExprType expected_et = {0};
          ExprType pointee = {0};
          expected_et.c.pointer.pointee = &pointee;
-         if (!typesAreCompatible(c, et.c, (paramType(&expected_et.c, expected_param), expected_et.c))) {
-            codegenError("Attempting to pass incompatible parameter to function.");
+         paramType(&expected_et.c, expected_param);
+
+         if (maybeEmitTypeConversion(c, et, expected_et.c, Target_STACK, "Attempting to pass incompatible parameter to function.")) {
+            ExprType* helper = m->helperC(m, expected_et.c);
+            m->stackPop(m, helper);
+            et = helper;
          }
 
-         NotImplemented("type conversion when passing parameters");
-
-         m->pushParameter(m, c->scope, &et);
+         m->pushParameter(m, c->scope, et);
          expected_param = expected_param->next;
       }
    }

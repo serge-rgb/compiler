@@ -376,6 +376,7 @@ void
 x64BeginFuncParams(MachineX64* m) {
    if (m->machine.flags & Config_TARGET_WIN) {
       m->params.offset = 16;  // Function prelude stack offset. RBP 8 bytes. Return address 8 bytes.
+      m->params.n_param = 0;
    }
    else {
       m->params.intIdx = 0;
@@ -391,10 +392,6 @@ x64EndFuncParams(MachineX64* m) {
 
 void
 x64PushParameter(MachineX64* m, Scope* scope, ExprType* etype) {
-   if (isRealType(&etype->c)) {
-      NotImplemented("Floating parameters.");
-   }
-
    if ((m->machine.flags & Config_TARGET_LINUX) || (m->machine.flags & Config_TARGET_MACOS)) {
       Location loc = {0};
       if (isIntegerType(&etype->c) || isDerivedType(&etype->c)) {
@@ -602,7 +599,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
          NotImplemented("Non integer types");
       }
    }
-   else if (m->machine.flags & Config_TARGET_WIN){
+   else if (m->machine.flags & Config_TARGET_WIN) {
       if (typeBits(ctype) <= 64) {
          if (m->params.n_param < 4) {
             if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
@@ -628,6 +625,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
             loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - m->params.offset };
             m->params.offset += typeBits(ctype);
          }
+         m->params.n_param++;
       }
       else {
          loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - m->params.offset };
