@@ -623,21 +623,21 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
          }
          else {
             loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - m->params.offset };
-            m->params.offset += typeBits(ctype);
+            m->params.offset += (typeBits(ctype) + 7) / 8;
          }
          m->params.n_param++;
       }
       else {
          loc = (Location){ .type = Location_STACK, .offset = m->stack_offset - m->params.offset };
-         m->params.offset += typeBits(ctype) / 8;
+         m->params.offset += (typeBits(ctype) + 7) / 8;
       }
    }
    return loc;
 }
 
 void
-x64TestAndJump(MachineX64* m, u32 bits, char* then, char* els) {
-   instructionReg(m, "test %s, %s", bits, Reg_RAX, Reg_RAX);
+x64TestAndJump(MachineX64* m, RegisterEnum reg, u32 bits, char* then, char* els) {
+   instructionReg(m, "test %s, %s", bits, reg, reg);
    instructionPrintf(m, "jne %s", then);
    instructionPrintf(m, "jmp %s", els);
 }
@@ -684,11 +684,11 @@ x64CmpJmp(MachineX64* m, AstType ast_type, char* label) {
 
 // Compare the accumulator with the top of the stack.
 void
-x64CmpJmpStackTop(MachineX64* m, AstType ast_type, ExprType* type, char* then, char* els) {
+x64CmpJmpStackTop(MachineX64* m, AstType ast_type, Location loc_to_compare, ExprType* type, char* then, char* els) {
    u32 bits = typeBits(&type->c);
-   x64StackPop(m, x64Helper(m, type->c.type, 64));
+   x64StackPop(m, x64Helper(m, type->c.type, bits));
 
-   instructionReg((MachineX64*)m, "cmp %s, %s", bits, Reg_RAX, Reg_RBX);
+   instructionReg((MachineX64*)m, "cmp %s, %s", bits, loc_to_compare.reg, Reg_RBX);
 
    x64CmpJmp(m, ast_type, then);
 
@@ -696,7 +696,7 @@ x64CmpJmpStackTop(MachineX64* m, AstType ast_type, ExprType* type, char* then, c
 }
 
 void
-x64CmpSetAccum(MachineX64* m, AstType type) {
+x64CmpSet(MachineX64* m, AstType type, Location dst) {
    char* instr = 0;
    switch(type) {
       case Ast_EQUALS: { instr = "sete %s"; } break;
@@ -707,7 +707,8 @@ x64CmpSetAccum(MachineX64* m, AstType type) {
       case Ast_NOT_EQUALS: { instr = "setne %s"; } break;
       default: { InvalidCodePath; } break;
    }
-   instructionReg(m, instr, 8 /* SETCC operates on byte registers*/, Reg_RAX);
+   Assert(dst.type == Location_REGISTER);
+   instructionReg(m, instr, 8 /* SETCC operates on byte registers*/, dst.reg);
    instructionPrintf(m, "and rax, 1");
 }
 
@@ -1138,24 +1139,10 @@ x64ShiftRight(MachineX64* m, ExprType* dst, ExprType* src) {
    NotImplemented("x64ShiftRight");
 }
 
-
 void
-x64MovAccum(MachineX64* m, ExprType* et , Token* rhs_tok)  {
-   instructionPrintf(m, "mov %s, %d",
-                     locationString(m, registerLocation(Reg_RAX), typeBits(&et->c)),
-                     rhs_tok->cast.int32);
-
-   et->location = (Location) {
-      .type = Location_REGISTER,
-      .reg = Reg_RAX,
-   };
-}
-
-// Puts the stack address in the accumulator.
-void
-x64StackAddressInAccum(MachineX64* m, ExprType* entry) {
+x64StackAddress(MachineX64* m, ExprType* entry, Location target_loc) {
    Assert(entry->location.type == Location_STACK);
-   instructionPrintf(m, "lea rax, [rsp + %d]", m->stack_offset - entry->location.offset);
+   instructionPrintf(m, "lea %s, [rsp + %d]", locationString(m, target_loc, 64), m->stack_offset - entry->location.offset);
 }
 
 void
@@ -1280,11 +1267,12 @@ x64Jmp(MachineX64* m, char* label) {
 }
 
 void
-x64AddressOf(MachineX64* m, Location* loc) {
+x64AddressOf(MachineX64* m, Location* loc, Location target_loc) {
    switch (loc->type) {
       case Location_STACK: {
-         instructionPrintf(m, "mov rax, rsp");
-         instructionPrintf(m, "add rax, %d", m->stack_offset - loc->offset);
+         char* loc_str = locationString(m, target_loc, 64);
+         instructionPrintf(m, "mov %s, rsp", loc_str);
+         instructionPrintf(m, "add %s, %d", loc_str, m->stack_offset - loc->offset);
       } break;
       default: {
          NotImplemented("Address of something not on the stack");
@@ -1417,7 +1405,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->stackPushReg = x64StackPushReg;
       m->stackPushImm = x64StackPushImm;
       m->stackPushOffset = x64StackPushOffset;
-      m->stackAddressInAccum = x64StackAddressInAccum;
+      m->stackAddress = x64StackAddress;
       m->addressOf = x64AddressOf;
       m->functionPrelude = x64FunctionPrelude;
       m->beginFuncParams = x64BeginFuncParams;
@@ -1426,7 +1414,6 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->endFuncParams = x64EndFuncParams;;
       m->functionEpilogue = x64FunctionEpilogue;
       m->mov = x64Mov;
-      m->movAccum = x64MovAccum;
       m->add = x64Add;
       m->sub = x64Sub;
       m->mul = x64Mul;
@@ -1440,7 +1427,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       m->shiftRight = x64ShiftRight;
 
       m->cmp = x64Cmp;
-      m->cmpSetAccum = x64CmpSetAccum;
+      m->cmpSet = x64CmpSet;
       m->cmpJmp = x64CmpJmp;
       m->cmpJmpStackTop = x64CmpJmpStackTop;
       m->testAndJump = x64TestAndJump;

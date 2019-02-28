@@ -310,29 +310,29 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
    }
 
    if (typeBits(&entry->c) > 64) {
-      if (target != Target_NONE) {
+      if (target == Target_ACCUM) {
          ExprType* accum = m->accum(m, Type_INT, 64);
-         m->stackAddressInAccum(m, entry);
-         if (target == Target_STACK) {
-            m->stackPushReg(m,
-                            accum->location.reg);
-            expr_type->location = accum->location;
-         }
+         m->stackAddress(m, entry, accum->location);
       }
-
+      else if (target == Target_STACK) {
+         ExprType* helper = m->helper(m, Type_INT, 64);
+         m->stackAddress(m, entry, helper->location);
+         m->stackPushReg(m,
+                         helper->location.reg);
+         expr_type->location = helper->location;
+      }
    }
    else {
-      if (target != Target_NONE) {
+      if (target == Target_STACK) {
+         ExprType* helper = m->helperC(m, entry->c);
+         m->mov(m, helper, entry);
+         Location loc = m->stackPushReg(m, helper->location.reg);
+         expr_type->location = loc;
+      }
+      else if (target == Target_ACCUM) {
          ExprType* accum = m->accumC(m, entry->c);
          m->mov(m, accum, entry);
-
-         if (target == Target_STACK) {
-            Location loc = m->stackPushReg(m, accum->location.reg);
-            expr_type->location = loc;
-         }
-         else if (target == Target_ACCUM) {
-            expr_type->location = accum->location;
-         }
+         expr_type->location = accum->location;
       }
    }
 }
@@ -385,35 +385,37 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    if (address.type == Location_STACK) {
       address.offset = symbol_entry->location.offset - member_offset;
 
-      if (target != Target_NONE) {
-         ExprType reg = {
-            .c = member->ctype,
-            .location = address,
-         };
+      ExprType reg = {
+         .c = member->ctype,
+         .location = address,
+      };
+      if (target == Target_ACCUM) {
          ExprType* accum = m->accumC(m, member->ctype);
          m->mov(m, accum, &reg);
-
-         if (target == Target_STACK) {
-            m->stackPushReg(m, accum->location.reg);
-         }
+      }
+      else if (target == Target_STACK) {
+         ExprType* helper = m->helperC(m, member->ctype);
+         m->mov(m, helper, &reg);
+         m->stackPushReg(m, helper->location.reg);
       }
    }
    else if (address.type == Location_REGISTER) {
-      if (target != Target_NONE) {
-         ExprType reg = {
-            .c = member->ctype,
-            .location = (Location){
-               .type = Location_STACK_FROM_REG,
-               .reg = address.reg,
-               .reg_offset = member_offset,
-            },
-         };
+      ExprType reg = {
+         .c = member->ctype,
+         .location = (Location){
+            .type = Location_STACK_FROM_REG,
+            .reg = address.reg,
+            .reg_offset = member_offset,
+         },
+      };
+      if (target == Target_ACCUM) {
          ExprType* accum = m->accumC(m, member->ctype);
-
          m->mov(m, accum, &reg);
-         if (target == Target_STACK) {
-            m->stackPushReg(m, address.reg);
-         }
+      }
+      else if (target == Target_STACK) {
+         ExprType* helper = m->helperC(m, member->ctype);
+         m->mov(m, helper, &reg);
+         m->stackPushReg(m, address.reg);
       }
    }
    if (expr_type) {
@@ -471,7 +473,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
            param = param->next) {
          ExprType et_buf = {0};
          ExprType* et = &et_buf;
-         emitExpression(c, param, et, Target_NONE);
+         emitExpression(c, param, et, Target_ACCUM);
          ExprType expected_et = {0};
          ExprType pointee = {0};
          expected_et.c.pointer.pointee = &pointee;
@@ -539,7 +541,11 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             // Move
             switch (target) {
                case Target_ACCUM: {
-                  m->movAccum(m, expr_type, node->tok);
+                  ExprType* accum = m->accumC(m, expr_type->c);
+                  m->mov(m,
+                     accum,
+                     m->immediateFromToken(m, node->tok));
+                  expr_type->location = accum->location;
                } break;
                case Target_STACK: {
                   expr_type->location = m->stackPushImm(m, node->tok->value);
@@ -702,21 +708,22 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                }
             }
 
-            if (target != Target_NONE) {
-               Location* loc = &result.c.pointer.pointee->location;
-               c->m->addressOf(c->m, loc);
+            Location* loc = &result.c.pointer.pointee->location;
+            if (target == Target_ACCUM) {
                ExprType* accum = m->accum(m, Type_INT, 64);
-               if (target == Target_STACK) {
-                  m->stackPushReg(m, accum->location.reg);
-
-                  MachineX64* m_totally_temp = (MachineX64*)c->m;
-                  result.location = (Location){ .type = Location_STACK, .offset = m_totally_temp->stack_offset };
-               }
-               else {
-                 result.location = accum->location;
-               }
-               *expr_type = result;
+               c->m->addressOf(c->m, loc, accum->location);
+               result.location = accum->location;
             }
+            else if (target == Target_STACK) {
+               ExprType* helper = m->helper(m, Type_INT, 64);
+               c->m->addressOf(c->m, loc, helper->location);
+
+               m->stackPushReg(m, helper->location.reg);
+
+               MachineX64* m_totally_temp = (MachineX64*)c->m;
+               result.location = (Location){ .type = Location_STACK, .offset = m_totally_temp->stack_offset };
+            }
+            *expr_type = result;
          } break;
          // Logical operators
          case Ast_ADD:
@@ -761,17 +768,18 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                                     "Incompatible types in binary expression");
 
             ExprType* accum = m->accumC(m, target_type);
-
             m->cmp(m, accum, helper);
-            m->cmpSetAccum(m, node->type);
 
             expr_type->c = (Ctype) { .type = Type_INT };
 
             if (target == Target_ACCUM) {
+               m->cmpSet(m, node->type, accum->location);
                expr_type->location = accum->location;
             }
             else if (target == Target_STACK) {
-               expr_type->location = m->stackPushReg(m, accum->location.reg);
+               ExprType* helper = m->helperC(m, target_type);
+               m->cmpSet(m, node->type, helper->location);
+               expr_type->location = m->stackPushReg(m, helper->location.reg);
             }
 
          } break;
@@ -845,15 +853,14 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
                   *expr_type = (ExprType){ .c = (Ctype) { .type = Type_INT } };
 
-                  if (target != Target_NONE) {
+                  if (target == Target_ACCUM) {
                      Location loc = m->accum(m, Type_INT, 32)->location;
-                     if (target == Target_ACCUM) {
-                        m->cmpSetAccum(m, Ast_NOT_EQUALS);
-                        expr_type->location = loc;
-                     }
-                     else if (target == Target_STACK) {
-                        m->stackPushReg(m, loc.reg);
-                     }
+                     m->cmpSet(m, Ast_NOT_EQUALS, loc);
+                     expr_type->location = loc;
+                  }
+                  else if (target == Target_STACK) {
+                     Location loc = m->helper(m, Type_INT, 32)->location;
+                     m->stackPushReg(m, loc.reg);
                   }
                }
                else {
@@ -894,11 +901,11 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
             NotImplemented("Promotion rules");
          }
 
-         c->m->cmpJmpStackTop(c->m, cond->type, &left_type, then, els);
+         c->m->cmpJmpStackTop(c->m, cond->type, c->m->accumC(c->m, left_type.c)->location, &left_type, then, els);
       } break;
       default: {
          codegenEmit(c, cond, &expr_type, Target_ACCUM);
-         c->m->testAndJump(c->m, typeBits(&expr_type.c), then, els);
+         c->m->testAndJump(c->m, c->m->accumC(c->m, expr_type.c)->location.reg, typeBits(&expr_type.c), then, els);
       } break;
    }
 }
@@ -1220,8 +1227,14 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
             Location param_loc = m->popParameter(m, c->scope, &param_type);
 
-            // In order for parameters to be l-values, they must be on the stack atm.
-            Location stack_loc = m->stackPush(m, param_loc);
+            Location stack_loc = Zero;
+            if (param_loc.type != Location_STACK) {
+               // In order for parameters to be l-values, they must be on the stack atm.
+                stack_loc = m->stackPush(m, param_loc);
+            }
+            else {
+               stack_loc = param_loc;
+            }
 
             symInsert(&c->scope->symbol_table,
                                         id_str,

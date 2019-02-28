@@ -535,9 +535,9 @@ struct Machine {
    Location (*stackPushImm)(void* machine, i64 value);
    Location (*stackPushOffset)(void* machine, u64 bytes);
 
-   void (*stackAddressInAccum)(void* machine, ExprType* entry);
+   void (*stackAddress)(void* machine, ExprType* entry, Location target_loc);
 
-   void (*addressOf)(void* machine, Location* loc);
+   void (*addressOf)(void* machine, Location* loc, Location target_loc);
 
    void (*functionPrelude)(void* machine, char* func_name);
 
@@ -551,7 +551,6 @@ struct Machine {
    void (*functionEpilogue)(void* machine);
 
    void (*mov)(void* machine, ExprType* dst, ExprType* src);
-   void (*movAccum)(void* machine, ExprType* dst, Token* rhs_tok);
 
    void (*add)(void* machine, ExprType* dst, ExprType* src);
    void (*sub)(void* machine, ExprType* dst, ExprType* src);
@@ -565,11 +564,11 @@ struct Machine {
    void (*shiftRight)(void* machine, ExprType* dst, ExprType* src);
 
    void (*cmp)(void* machine, ExprType* dst, ExprType* src);
-   void (*cmpSetAccum)(void* machine, AstType type);
+   void (*cmpSet)(void* machine, AstType type, Location dst);
 
    void (*cmpJmp)(void* machine, AstType ast_type, char* label);
-   void (*cmpJmpStackTop)(void* machine, AstType ast_type, ExprType* type, char* then, char* els);
-   void (*testAndJump)(void* machine, u32 bits, char* then, char* els);
+   void (*cmpJmpStackTop)(void* machine, AstType ast_type, Location loc_to_compare, ExprType* type, char* then, char* els);
+   void (*testAndJump)(void* machine, RegisterEnum reg, u32 bits, char* then, char* els);
    void (*jmp)(void* machine, char* label);
 
    void (*label)(void* machine, char* label);
