@@ -773,11 +773,12 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             expr_type->c = (Ctype) { .type = Type_INT };
 
             if (target == Target_ACCUM) {
+               accum = m->accum(m, Type_INT, 32);
                m->cmpSet(m, node->type, accum->location);
                expr_type->location = accum->location;
             }
             else if (target == Target_STACK) {
-               ExprType* helper = m->helperC(m, target_type);
+               ExprType* helper = m->helper(m, Type_INT, 32);
                m->cmpSet(m, node->type, helper->location);
                expr_type->location = m->stackPushReg(m, helper->location.reg);
             }

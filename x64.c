@@ -123,8 +123,7 @@ locationString(MachineX64* m, Location r, int bits) {
          else {
             codegenError("No size information.");
          }
-      }
-      break;
+      } break;
       case Location_IMMEDIATE: {
          char tmp_string[PathMax] = {0};
          sz size = snprintf(tmp_string, ArrayCount(tmp_string), "0x%x", (int)r.immediate_value);
@@ -602,7 +601,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
    else if (m->machine.flags & Config_TARGET_WIN) {
       if (typeBits(ctype) <= 64) {
          if (m->params.n_param < 4) {
-            if (isIntegerType(ctype) || ctype->type == Type_POINTER) {
+            if (isIntegerType(ctype) || ctype->type == Type_POINTER || isAggregateType(ctype)) {
                loc.type = Location_REGISTER;
                switch(m->params.n_param) {
                   case 0: { loc.reg = Reg_RCX; } break;
@@ -709,7 +708,7 @@ x64CmpSet(MachineX64* m, AstType type, Location dst) {
    }
    Assert(dst.type == Location_REGISTER);
    instructionReg(m, instr, 8 /* SETCC operates on byte registers*/, dst.reg);
-   instructionPrintf(m, "and rax, 1");
+   instructionReg(m, "and %s, 1", 64, dst.reg);
 }
 
 ExprType*
