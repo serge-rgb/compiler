@@ -810,7 +810,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   codegenEmit(c, left, &left_type, Target_ACCUM);
                   u64 bits = typeBits(&left_type.c);
 
-                  // TODO: special case for comparissons
+                  // TODO: special case for comparisons
                   /*
                   if (left->type == Ast_EQUALS ||
                       left->type == Ast_LESS ||
@@ -849,7 +849,6 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   }
 
                   m->label(m, end_label);
-
 
                   *expr_type = (ExprType){ .c = (Ctype) { .type = Type_INT } };
 
@@ -973,7 +972,6 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             offset = AlignPow2(offset, 8);
          }
          Assert(typeBits(&specifier->ctype) == offset);
-
       }
       else if (tag_str && declarator->type != Ast_NONE) {
          Tag* entry = findTag(c->scope, tag_str);
