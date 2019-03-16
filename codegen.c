@@ -353,7 +353,9 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    Location address = Zero;
    if (symbol_entry->c.type == Type_POINTER) {
       ctype = &symbol_entry->c.pointer.pointee->c;
-      address = symbol_entry->location;
+      ExprType* helper = m->helperC(m, symbol_entry->c);
+      m->mov(m, helper, symbol_entry);
+      address = helper->location;
    }
    else {
       Assert(symbol_entry->c.type = Type_AGGREGATE);

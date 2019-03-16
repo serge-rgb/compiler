@@ -814,7 +814,7 @@ x64Accum(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
 
             result = &helper;
          }
-         else if ((type & Type_PEANO) || type == Type_AGGREGATE) {
+         else if ((type & Type_PEANO) || type == Type_POINTER || type == Type_AGGREGATE) {
             static ExprType helper = {
                .c = { .type = Type_NONE },
                .location = { .type = Location_REGISTER, .reg = Reg_RAX },
@@ -842,6 +842,8 @@ x64AccumC(MachineX64* m, Ctype c) {
    return result;
 }
 
+
+// TODO: Helper and Accum should both call a common func
 ExprType*
 x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
    ExprType* result = NULL;
@@ -859,7 +861,7 @@ x64Helper(MachineX64* m, int type /*Ctype.type*/, u32 bits) {
             helper.c.type = type;
             result = &helper;
          }
-         else if (type & Type_PEANO) {
+         else if ((type & Type_PEANO) || type == Type_POINTER || type == Type_AGGREGATE) {
             static ExprType helper = {
                .c = { .type = Type_NONE },
                .location = { .type = Location_REGISTER, .reg = Reg_RBX },
