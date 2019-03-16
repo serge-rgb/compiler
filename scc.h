@@ -237,8 +237,10 @@ struct Ctype {
          u64 bits;
       } aggr;
 
+
       struct CtypeFunc {
          struct AstNode* node; // Funcdef ast node.
+         // TODO: Remove ast node from here. We need return type and parameter list in here.
       } func;
 
       struct CtypePointer {
@@ -313,12 +315,53 @@ typedef enum AstType_n {
 struct AstNode {
    AstType  type;
    union {
+
+      // Ast_DECLARATION_SPECIFIER
+      struct {
+         Ctype ctype;
+      } decl_specifier;
+
+      // Ast_NUMBER
+      struct {
+         Token* tok;
+      } number;
+
+      // Ast_ID
+      struct {
+         Token* tok;
+      } id;
+
+      // Ast_IF
+      struct {
+         struct AstNode* condition;
+         struct AstNode* then;
+         struct AstNode* else_;
+      } if_;
+
+      // Ast_ADDRESS
+      // Ast_POSTFIX_INC
+      // Ast_POSTFIX_DEC
+      // Ast_RETURN
+      struct {
+         struct AstNode* expr;
+      } single_expr;
+
+      // Ast_FUNCDEF
+      struct {
+         char* label;
+         Ctype return_type; // Declaration specifier
+         struct AstNode* declarator;
+         struct AstNode* compound_stmt;
+         Ctype ctype;  // Function type
+      } funcdef;
+
       // When the node corresponds to a token.
-      Token*   tok;
-      // Otherwise..
-      Ctype    ctype;
-      // When the node is Ast_DECLARATOR
-      b32 is_pointer;
+      // TODO: Get rid of all variables not inside a struct.
+         Token*   tok;
+         // Otherwise..
+         Ctype    ctype;
+         // When the node is Ast_DECLARATOR
+         b32 is_pointer;
    };
    struct AstNode* child;
    struct AstNode* next;

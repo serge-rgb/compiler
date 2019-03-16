@@ -1,18 +1,18 @@
 X(Ast_NONE)
-X(Ast_DECLARATION_SPECIFIER)   // no family. fills ctype member.
-X(Ast_NUMBER)           // token: number
-X(Ast_IF)               // children: condition, then, else
-X(Ast_ID)               // token: identifier
-X(Ast_ADDRESS)          // children: postfix expression
+X(Ast_DECLARATION_SPECIFIER)
+X(Ast_NUMBER)
+X(Ast_IF)
+X(Ast_ID)
+X(Ast_ADDRESS)
 X(Ast_STRUCT_MEMBER_ACCESS)
-X(Ast_POSTFIX_INC)      // children: expr
-X(Ast_POSTFIX_DEC)      // children: expr
+X(Ast_POSTFIX_INC)
+X(Ast_POSTFIX_DEC)
 X(Ast_FUNCDEF)          // children: declaration_spec, declarator, comp.statement
 X(Ast_FUNCCALL)         // children: identifier, arg expr list
 X(Ast_PARAMETER)        // children: decl.specifier, declarator
 X(Ast_DECLARATION)      // children: decl.specifier, declarator, initializer
 X(Ast_DECLARATOR)       // children: identifier,  [param-list]
-X(Ast_RETURN)           // children: expression
+X(Ast_RETURN)
 X(Ast_ADD)              // children: left, right
 X(Ast_SUB)              // children: left, right
 X(Ast_MUL)              // children: left, right

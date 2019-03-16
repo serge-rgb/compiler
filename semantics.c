@@ -129,15 +129,9 @@ isLiteral(AstNode* node) {
 }
 
 AstNode*
-funcDeclarationSpecifier(AstNode* node) {
-   Assert (node->type == Ast_FUNCDEF);
-   return node->child;
-}
-
-AstNode*
 funcDeclarator(AstNode* node) {
    Assert (node->type == Ast_FUNCDEF);
-   return node->child->next;
+   return node->funcdef.declarator;
 }
 
 AstNode*
@@ -157,12 +151,6 @@ funcNumParams(AstNode* node) {
       ++nparam;
    }
    return nparam;
-}
-
-Ctype
-funcReturnType(AstNode* node) {
-   Assert (node->type == Ast_FUNCDEF);
-   return funcDeclarationSpecifier(node)->ctype;
 }
 
 void
