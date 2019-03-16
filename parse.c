@@ -6,7 +6,6 @@ initParser(Parser* p) {
    p->flags = ParserFlag_FANSI;
 }
 
-
 void
 noneIfNull(Arena* a, AstNode** n) {
    if (!*n) {

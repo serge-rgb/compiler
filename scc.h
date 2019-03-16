@@ -182,7 +182,7 @@ void  deallocate(Arena* a);
 
 
 struct AstNode;
-struct ExprType;
+struct RegVar;
 
 struct Ctype {
    enum {
@@ -242,7 +242,7 @@ struct Ctype {
       } func;
 
       struct CtypePointer {
-         struct ExprType* pointee;
+         struct RegVar* pointee;
       } pointer;
    };
 } typedef Ctype;
@@ -403,7 +403,7 @@ struct Location {
       Location_REGISTER,
       Location_STACK,  // RSP relative
       Location_STACK_FROM_REG,  // Relative to register
-      Location_POINTER,
+      Location_POINTER,  // Stored address
    } type;
    union {
       // REGISTER
@@ -427,17 +427,17 @@ struct Location {
    };
 } typedef Location;
 
-struct ExprType {
+struct RegVar {
    Ctype    c;
    Location location;
-} typedef ExprType;
+} typedef RegVar;
 
 // SymTable definition
 struct SymTable;
 #define HashmapName     SymTable
 #define HashmapPrefix   sym
 #define HashmapKey      char*
-#define HashmapValue    ExprType
+#define HashmapValue    RegVar
 #define HashFunction    hashStrPtr
 #define KeyCompareFunc  compareStringKey
 #include "hashmap.inl"
@@ -457,7 +457,7 @@ struct TagMember {
 } typedef TagMember;
 
 struct Tag {
-   ExprType etype;
+   RegVar rvar;
    TagMember* s_members;
 } typedef Tag;
 
@@ -528,14 +528,14 @@ struct Codegen {
 struct Machine {
    u8 flags; // MachineConfigFlags
 
-   void (*stackPop)(void* machine, ExprType* et);
+   void (*stackPop)(void* machine, RegVar* et);
 
    Location (*stackPush)(void* machine, Location location);
    Location (*stackPushReg)(void* machine, RegisterEnum reg);
    Location (*stackPushImm)(void* machine, i64 value);
    Location (*stackPushOffset)(void* machine, u64 bytes);
 
-   void (*stackAddress)(void* machine, ExprType* entry, Location target_loc);
+   void (*stackAddress)(void* machine, RegVar* entry, Location target_loc);
 
    void (*addressOf)(void* machine, Location* loc, Location target_loc);
 
@@ -543,31 +543,31 @@ struct Machine {
 
    void (*beginFuncParams ) (void* machine);
 
-   void (*pushParameter)(void* machine, Scope* scope, ExprType* etype);
+   void (*pushParameter)(void* machine, Scope* scope, RegVar* rvar);
    Location (*popParameter)(void* machine, Scope* scope, Ctype* ctype);
 
    void (*endFuncParams ) (void* machine);
 
    void (*functionEpilogue)(void* machine);
 
-   void (*mov)(void* machine, ExprType* dst, ExprType* src);
+   void (*mov)(void* machine, RegVar* dst, RegVar* src);
 
-   void (*add)(void* machine, ExprType* dst, ExprType* src);
-   void (*sub)(void* machine, ExprType* dst, ExprType* src);
-   void (*mul)(void* machine, ExprType* dst, ExprType* src);
-   void (*div)(void* machine, ExprType* dst, ExprType* src);
-   void (*mod)(void* machine, ExprType* dst, ExprType* src);
-   void (*bitAnd)(void* machine, ExprType* dst, ExprType* src);
-   void (*bitOr)(void* machine, ExprType* dst, ExprType* src);
-   void (*bitXor)(void* machine, ExprType* dst, ExprType* src);
-   void (*shiftLeft)(void* machine, ExprType* dst, ExprType* src);
-   void (*shiftRight)(void* machine, ExprType* dst, ExprType* src);
+   void (*add)(void* machine, RegVar* dst, RegVar* src);
+   void (*sub)(void* machine, RegVar* dst, RegVar* src);
+   void (*mul)(void* machine, RegVar* dst, RegVar* src);
+   void (*div)(void* machine, RegVar* dst, RegVar* src);
+   void (*mod)(void* machine, RegVar* dst, RegVar* src);
+   void (*bitAnd)(void* machine, RegVar* dst, RegVar* src);
+   void (*bitOr)(void* machine, RegVar* dst, RegVar* src);
+   void (*bitXor)(void* machine, RegVar* dst, RegVar* src);
+   void (*shiftLeft)(void* machine, RegVar* dst, RegVar* src);
+   void (*shiftRight)(void* machine, RegVar* dst, RegVar* src);
 
-   void (*cmp)(void* machine, ExprType* dst, ExprType* src);
+   void (*cmp)(void* machine, RegVar* dst, RegVar* src);
    void (*cmpSet)(void* machine, AstType type, Location dst);
 
    void (*cmpJmp)(void* machine, AstType ast_type, char* label);
-   void (*cmpJmpStackTop)(void* machine, AstType ast_type, Location loc_to_compare, ExprType* type, char* then, char* els);
+   void (*cmpJmpStackTop)(void* machine, AstType ast_type, Location loc_to_compare, RegVar* type, char* then, char* els);
    void (*testAndJump)(void* machine, RegisterEnum reg, u32 bits, char* then, char* els);
    void (*jmp)(void* machine, char* label);
 
@@ -578,12 +578,12 @@ struct Machine {
 
    // Registers
 
-   ExprType* (*immediateFromToken)(void* machine, Token* tok);
+   RegVar* (*immediateFromToken)(void* machine, Token* tok);
 
-   ExprType* (*helper)(void* machine, int type /*Ctype.type*/, u32 bits);
-   ExprType* (*helperC)(void* machine, Ctype c);
-   ExprType* (*accum)(void* machine, int type /*Ctype.type*/, u32 bits);
-   ExprType* (*accumC)(void* machine, Ctype c);
+   RegVar* (*helper)(void* machine, int type /*Ctype.type*/, u32 bits);
+   RegVar* (*helperC)(void* machine, Ctype c);
+   RegVar* (*accum)(void* machine, int type /*Ctype.type*/, u32 bits);
+   RegVar* (*accumC)(void* machine, Ctype c);
 
 
    // Conversion. Result in stack

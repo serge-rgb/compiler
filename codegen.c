@@ -33,9 +33,9 @@ findTag(Scope* scope, char* name) {
    return tag;
 }
 
-ExprType*
+RegVar*
 findSymbol(Codegen* c, char* name) {
-   ExprType* entry = NULL;
+   RegVar* entry = NULL;
    Scope* scope = c->scope;
    while (scope) {
       entry = symGet(&scope->symbol_table, name);
@@ -108,7 +108,7 @@ popInstructionOutput(Codegen* c) {
 }
 
 // Forward declaration for recursive calls.
-void codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target);
+void codegenEmit(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target);
 
 b32
 typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
@@ -168,7 +168,7 @@ typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
 }
 
 b32
-maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarget target, char* incompatibleError) {
+maybeEmitTypeConversion(Codegen* c, RegVar* value, Ctype target_type, EmitTarget target, char* incompatibleError) {
    Machine* m = c->m;
    b32 didConversion = true;
    if (!typesAreCompatible(c, target_type, value->c)) {
@@ -183,7 +183,7 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
    else {
       Location value_loc = value->location;
       if (value_loc.type == Location_IMMEDIATE) {
-         ExprType* helper = m->helperC(m, value->c);
+         RegVar* helper = m->helperC(m, value->c);
          m->mov(m, helper, value);
          value_loc = helper->location;
       }
@@ -227,12 +227,12 @@ maybeEmitTypeConversion(Codegen* c, ExprType* value, Ctype target_type, EmitTarg
 }
 
 void
-emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
+emitArithBinaryExpr(Codegen* c, AstType type, RegVar* reg_var,
                     AstNode* left, AstNode* right, EmitTarget target) {
    Machine* m = c->m;
 
-   ExprType tleft = {0};
-   ExprType tright = {0};
+   RegVar tleft = {0};
+   RegVar tright = {0};
 
    codegenEmit(c, right, &tright, Target_STACK);
    codegenEmit(c, left, &tleft, Target_ACCUM);
@@ -245,7 +245,7 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 
    Ctype new_ctype = arithmeticTypeConversion(tleft.c, tright.c);
-   ExprType* helper = m->helper(m, tright.c.type, typeBits(&tright.c));
+   RegVar* helper = m->helper(m, tright.c.type, typeBits(&tright.c));
    m->stackPop(m, helper);
 
    if (maybeEmitTypeConversion(c,
@@ -263,12 +263,12 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
                            Target_ACCUM,
                            "Incompatible types in binary expression");
 
-   if (expr_type) {
-      *expr_type = tleft;
+   if (reg_var) {
+      *reg_var = tleft;
    }
 
-   ExprType* dst = m->accum(m, new_ctype.type, typeBits(&new_ctype));
-   ExprType* src = m->helper(m, new_ctype.type, typeBits(&new_ctype));
+   RegVar* dst = m->accum(m, new_ctype.type, typeBits(&new_ctype));
+   RegVar* src = m->helper(m, new_ctype.type, typeBits(&new_ctype));
 
    switch (type) {
       case Ast_ADD: { m->add(m, dst, src); } break;
@@ -283,9 +283,9 @@ emitArithBinaryExpr(Codegen* c, AstType type, ExprType* expr_type,
    }
 }
 
-ExprType*
+RegVar*
 getAddress(Codegen* c, AstNode* node) {
-   ExprType* result = NULL;
+   RegVar* result = NULL;
    switch(node->type) {
       case Ast_ID: {
          result = findSymbol(c, node->tok->cast.string);
@@ -295,15 +295,15 @@ getAddress(Codegen* c, AstNode* node) {
 }
 
 void
-emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target) {
-   Assert(expr_type);
+emitIdentifier(Codegen*c, AstNode* node, RegVar* reg_var, EmitTarget target) {
+   Assert(reg_var);
 
    Machine* m = c->m;
    char* id_str = node->tok->cast.string;
-   ExprType* entry = findSymbol(c, id_str);
+   RegVar* entry = findSymbol(c, id_str);
 
-   expr_type->c = entry->c;
-   expr_type->location = entry->location;
+   reg_var->c = entry->c;
+   reg_var->location = entry->location;
 
    if (!entry) {
       codegenError("Use of undeclared identifier %s", node->tok->cast.string);
@@ -311,40 +311,40 @@ emitIdentifier(Codegen*c, AstNode* node, ExprType* expr_type, EmitTarget target)
 
    if (typeBits(&entry->c) > 64) {
       if (target == Target_ACCUM) {
-         ExprType* accum = m->accum(m, Type_INT, 64);
+         RegVar* accum = m->accum(m, Type_INT, 64);
          m->stackAddress(m, entry, accum->location);
       }
       else if (target == Target_STACK) {
-         ExprType* helper = m->helper(m, Type_INT, 64);
+         RegVar* helper = m->helper(m, Type_INT, 64);
          m->stackAddress(m, entry, helper->location);
          m->stackPushReg(m,
                          helper->location.reg);
-         expr_type->location = helper->location;
+         reg_var->location = helper->location;
       }
    }
    else {
       if (target == Target_STACK) {
-         ExprType* helper = m->helperC(m, entry->c);
+         RegVar* helper = m->helperC(m, entry->c);
          m->mov(m, helper, entry);
          Location loc = m->stackPushReg(m, helper->location.reg);
-         expr_type->location = loc;
+         reg_var->location = loc;
       }
       else if (target == Target_ACCUM) {
-         ExprType* accum = m->accumC(m, entry->c);
+         RegVar* accum = m->accumC(m, entry->c);
          m->mov(m, accum, entry);
-         expr_type->location = accum->location;
+         reg_var->location = accum->location;
       }
    }
 }
 
 
 void
-emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+emitStructMemberAccess(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Machine* m = c->m;
 
    char* struct_str = node->child->tok->cast.string;
    char* field_str = node->child->next->tok->cast.string;
-   ExprType* symbol_entry = findSymbol(c, struct_str);
+   RegVar* symbol_entry = findSymbol(c, struct_str);
    if (!symbol_entry) {
       codegenError("%s undeclared.", struct_str);
    }
@@ -353,7 +353,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    Location address = Zero;
    if (symbol_entry->c.type == Type_POINTER) {
       ctype = &symbol_entry->c.pointer.pointee->c;
-      ExprType* helper = m->helperC(m, symbol_entry->c);
+      RegVar* helper = m->helperC(m, symbol_entry->c);
       m->mov(m, helper, symbol_entry);
       address = helper->location;
    }
@@ -387,22 +387,22 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
    if (address.type == Location_STACK) {
       address.offset = symbol_entry->location.offset - member_offset;
 
-      ExprType reg = {
+      RegVar reg = {
          .c = member->ctype,
          .location = address,
       };
       if (target == Target_ACCUM) {
-         ExprType* accum = m->accumC(m, member->ctype);
+         RegVar* accum = m->accumC(m, member->ctype);
          m->mov(m, accum, &reg);
       }
       else if (target == Target_STACK) {
-         ExprType* helper = m->helperC(m, member->ctype);
+         RegVar* helper = m->helperC(m, member->ctype);
          m->mov(m, helper, &reg);
          m->stackPushReg(m, helper->location.reg);
       }
    }
    else if (address.type == Location_REGISTER) {
-      ExprType reg = {
+      RegVar reg = {
          .c = member->ctype,
          .location = (Location){
             .type = Location_STACK_FROM_REG,
@@ -411,30 +411,30 @@ emitStructMemberAccess(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarge
          },
       };
       if (target == Target_ACCUM) {
-         ExprType* accum = m->accumC(m, member->ctype);
+         RegVar* accum = m->accumC(m, member->ctype);
          m->mov(m, accum, &reg);
       }
       else if (target == Target_STACK) {
-         ExprType* helper = m->helperC(m, member->ctype);
+         RegVar* helper = m->helperC(m, member->ctype);
          m->mov(m, helper, &reg);
          m->stackPushReg(m, address.reg);
       }
    }
-   if (expr_type) {
-      expr_type->c = member->ctype;
-      expr_type->location = address;
+   if (reg_var) {
+      reg_var->c = member->ctype;
+      reg_var->location = address;
    }
 }
 
-void emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target); // Forward decl.
+void emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target); // Forward decl.
 
 void
-emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Machine* m = c->m;
    AstNode* func = node->child;
    char* label = func->tok->cast.string;
 
-   ExprType* sym = findSymbol(c, label);
+   RegVar* sym = findSymbol(c, label);
    if (!sym) {
       codegenError("Call to undefined function. %s", label);
    }
@@ -473,16 +473,16 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
       for (AstNode* param = params;
            param != NULL;
            param = param->next) {
-         ExprType et_buf = {0};
-         ExprType* et = &et_buf;
+         RegVar et_buf = {0};
+         RegVar* et = &et_buf;
          emitExpression(c, param, et, Target_ACCUM);
-         ExprType expected_et = {0};
-         ExprType pointee = {0};
+         RegVar expected_et = {0};
+         RegVar pointee = {0};
          expected_et.c.pointer.pointee = &pointee;
          paramType(&expected_et.c, expected_param);
 
          if (maybeEmitTypeConversion(c, et, expected_et.c, Target_STACK, "Attempting to pass incompatible parameter to function.")) {
-            ExprType* helper = m->helperC(m, expected_et.c);
+            RegVar* helper = m->helperC(m, expected_et.c);
             m->stackPop(m, helper);
             et = helper;
          }
@@ -496,7 +496,7 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    m->call(m, label);
 
    while (bufCount(m_totally_temp->s_stack) != stack_top) {
-      ExprType* helper = m->helper(m, Type_INT, 64);
+      RegVar* helper = m->helper(m, Type_INT, 64);
       m->stackPop(m, helper);
    }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
@@ -509,31 +509,31 @@ emitFunctionCall(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget targ
    AstNode* funcdef = sym->c.func.node;
    Assert(funcdef->type == Ast_FUNCDEF);
 
-   expr_type->c = funcdef->child->ctype;
-   expr_type->location = m->accumC(m, return_type)->location;
+   reg_var->c = funcdef->child->ctype;
+   reg_var->location = m->accumC(m, return_type)->location;
 }
 
 void
-emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Machine* m = c->m;
    if (nodeIsExpression(node)) {
       AstNode* child0 = node->child;
 
       switch (node->type) {
          case Ast_FUNCCALL: {
-            emitFunctionCall(c, node, expr_type, target);
+            emitFunctionCall(c, node, reg_var, target);
          } break;
          case Ast_NUMBER: {
             // Set type
             switch (node->tok->type) {
                case TType_NUMBER: {
-                  expr_type->c.type = Type_INT;
+                  reg_var->c.type = Type_INT;
                } break;
                case TType_FLOAT: {
-                  expr_type->c.type = Type_FLOAT;
+                  reg_var->c.type = Type_FLOAT;
                } break;
                case TType_DOUBLE: {
-                  expr_type->c.type = Type_DOUBLE;
+                  reg_var->c.type = Type_DOUBLE;
                } break;
                default: {
                   InvalidCodePath;
@@ -543,17 +543,17 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             // Move
             switch (target) {
                case Target_ACCUM: {
-                  ExprType* accum = m->accumC(m, expr_type->c);
+                  RegVar* accum = m->accumC(m, reg_var->c);
                   m->mov(m,
                      accum,
                      m->immediateFromToken(m, node->tok));
-                  expr_type->location = accum->location;
+                  reg_var->location = accum->location;
                } break;
                case Target_STACK: {
-                  expr_type->location = m->stackPushImm(m, node->tok->value);
+                  reg_var->location = m->stackPushImm(m, node->tok->value);
                } break;
                case Target_NONE: {
-                  expr_type->location = (Location) {
+                  reg_var->location = (Location) {
                      .type = Location_IMMEDIATE,
                      .immediate_value = node->tok->value,
                   };
@@ -561,10 +561,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             }
          } break;
          case Ast_ID: {
-            emitIdentifier(c, node, expr_type, target);
+            emitIdentifier(c, node, reg_var, target);
          } break;
          case Ast_STRUCT_MEMBER_ACCESS: {
-            emitStructMemberAccess(c, node, expr_type, target);
+            emitStructMemberAccess(c, node, reg_var, target);
          } break;
          // Assignment expressions
          case Ast_ASSIGN_EXPR: {
@@ -572,12 +572,12 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             AstNode* rhs = lhs->next;
             Token* op = node->tok;
 
-            ExprType lhs_type = Zero;
+            RegVar lhs_type = Zero;
 
             codegenEmit(c, lhs, &lhs_type, Target_NONE); // Fill the location
             int bits = typeBits(&lhs_type.c);
-            ExprType rhs_type_buf = Zero;
-            ExprType* rhs_type = &rhs_type_buf;
+            RegVar rhs_type_buf = Zero;
+            RegVar* rhs_type = &rhs_type_buf;
             codegenEmit(c, rhs, rhs_type, Target_ACCUM);  // TODO: Don't emit mov if rhs is immediate.
 
             if (maybeEmitTypeConversion(c, rhs_type, lhs_type.c, Target_ACCUM, "Incompatible type in assignment")) {
@@ -591,10 +591,10 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                Assert(bits < 64);
                // TODO: Check for arithmetic type here.
 
-               ExprType* helper = m->helper(m, lhs_type.c.type, 32);
+               RegVar* helper = m->helper(m, lhs_type.c.type, 32);
                m->mov(m, helper, &lhs_type);
 
-               ExprType* accum = m->accum(m, rhs_type->c.type, 32);
+               RegVar* accum = m->accum(m, rhs_type->c.type, 32);
 
                switch (op->value) {
                   case ASSIGN_INCREMENT: {
@@ -642,9 +642,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          case Ast_POSTFIX_INC:
          case Ast_POSTFIX_DEC: {
             AstNode* expr = node->child;
-            ExprType local_etype = Zero;
-            emitExpression(c, expr, &local_etype, Target_STACK);
-            if (local_etype.location.type == Location_IMMEDIATE) {
+            RegVar local_rvar = Zero;
+            emitExpression(c, expr, &local_rvar, Target_STACK);
+            if (local_rvar.location.type == Location_IMMEDIATE) {
                codegenError("Attempting to increment an rvalue.");
             }
 
@@ -654,9 +654,9 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                default: { InvalidCodePath; }
             }
 
-            ExprType* accum = m->accumC(m, local_etype.c);
+            RegVar* accum = m->accumC(m, local_rvar.c);
 
-            ExprType* addr = getAddress(c, expr);
+            RegVar* addr = getAddress(c, expr);
             if (!addr) {
                codegenError("Trying to modify non-addressable.");
             }
@@ -674,17 +674,17 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
             else if (target == Target_NONE) {
                m->stackPop(m, m->helper(m, Type_INT, 64));
             }
-            if (expr_type) {
-               *expr_type = local_etype;
+            if (reg_var) {
+               *reg_var = local_rvar;
 
             }
          } break;
          case Ast_ADDRESS: {
             AstNode* expr = node->child;
-            ExprType* et = AllocType(c->arena, ExprType);
+            RegVar* et = AllocType(c->arena, RegVar);
             emitExpression(c, expr, et, Target_NONE);
 
-            ExprType result = Zero;
+            RegVar result = Zero;
 
             switch (et->c.type) {
                case Type_POINTER: {
@@ -712,12 +712,12 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
             Location* loc = &result.c.pointer.pointee->location;
             if (target == Target_ACCUM) {
-               ExprType* accum = m->accum(m, Type_INT, 64);
+               RegVar* accum = m->accum(m, Type_INT, 64);
                c->m->addressOf(c->m, loc, accum->location);
                result.location = accum->location;
             }
             else if (target == Target_STACK) {
-               ExprType* helper = m->helper(m, Type_INT, 64);
+               RegVar* helper = m->helper(m, Type_INT, 64);
                c->m->addressOf(c->m, loc, helper->location);
 
                m->stackPushReg(m, helper->location.reg);
@@ -725,7 +725,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                MachineX64* m_totally_temp = (MachineX64*)c->m;
                result.location = (Location){ .type = Location_STACK, .offset = m_totally_temp->stack_offset };
             }
-            *expr_type = result;
+            *reg_var = result;
          } break;
          // Logical operators
          case Ast_ADD:
@@ -733,7 +733,7 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          case Ast_MUL:
          case Ast_DIV: {
             AstNode* child1 = child0->next;
-            emitArithBinaryExpr(c, node->type, expr_type, child0, child1, target);
+            emitArithBinaryExpr(c, node->type, reg_var, child0, child1, target);
          } break;
 
          case Ast_LESS:
@@ -744,14 +744,14 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          case Ast_EQUALS: {
             AstNode* left = node->child;
             AstNode* right = node->child->next;
-            ExprType left_type = {0};
-            ExprType right_type = {0};
+            RegVar left_type = {0};
+            RegVar right_type = {0};
             codegenEmit(c, right, &right_type, Target_STACK);
             codegenEmit(c, left, &left_type, Target_ACCUM);
 
             Ctype target_type = arithmeticTypeConversion(left_type.c, right_type.c);
 
-            ExprType* helper = m->helperC(m, right_type.c);
+            RegVar* helper = m->helperC(m, right_type.c);
             m->stackPop(m, helper);
 
             if (maybeEmitTypeConversion(c,
@@ -769,20 +769,20 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                                     Target_ACCUM,
                                     "Incompatible types in binary expression");
 
-            ExprType* accum = m->accumC(m, target_type);
+            RegVar* accum = m->accumC(m, target_type);
             m->cmp(m, accum, helper);
 
-            expr_type->c = (Ctype) { .type = Type_INT };
+            reg_var->c = (Ctype) { .type = Type_INT };
 
             if (target == Target_ACCUM) {
                accum = m->accum(m, Type_INT, 32);
                m->cmpSet(m, node->type, accum->location);
-               expr_type->location = accum->location;
+               reg_var->location = accum->location;
             }
             else if (target == Target_STACK) {
-               ExprType* helper = m->helper(m, Type_INT, 32);
+               RegVar* helper = m->helper(m, Type_INT, 32);
                m->cmpSet(m, node->type, helper->location);
-               expr_type->location = m->stackPushReg(m, helper->location.reg);
+               reg_var->location = m->stackPushReg(m, helper->location.reg);
             }
 
          } break;
@@ -791,8 +791,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
          case Ast_LOGICAL_AND: {
             AstNode* left = node->child;
             AstNode* right = node->child->next;
-            ExprType left_type = {0};
-            ExprType right_type = {0};
+            RegVar left_type = {0};
+            RegVar right_type = {0};
 
             pushInstructionOutput(c, InstrOutput_DISABLED); {
                // Grab type
@@ -826,8 +826,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
                   else
                      */
                   {
-                     ExprType* accum = m->accum(m, left_type.c.type, bits);
-                     ExprType imm = {
+                     RegVar* accum = m->accum(m, left_type.c.type, bits);
+                     RegVar imm = {
                         .c = (Ctype) { .type = Type_LONG },
                         .location = (Location) { .type = Location_IMMEDIATE, .immediate_value = 0 },
                      };
@@ -843,8 +843,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
                   codegenEmit(c, right, &right_type, Target_ACCUM);
                   {
-                     ExprType* accum = m->accum(m, right_type.c.type, typeBits(&right_type.c));
-                     ExprType imm = {
+                     RegVar* accum = m->accum(m, right_type.c.type, typeBits(&right_type.c));
+                     RegVar imm = {
                         .c = (Ctype) { .type = Type_LONG },
                         .location = (Location) { .type = Location_IMMEDIATE, .immediate_value = 0 },
                      };
@@ -853,12 +853,12 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
                   m->label(m, end_label);
 
-                  *expr_type = (ExprType){ .c = (Ctype) { .type = Type_INT } };
+                  *reg_var = (RegVar){ .c = (Ctype) { .type = Type_INT } };
 
                   if (target == Target_ACCUM) {
                      Location loc = m->accum(m, Type_INT, 32)->location;
                      m->cmpSet(m, Ast_NOT_EQUALS, loc);
-                     expr_type->location = loc;
+                     reg_var->location = loc;
                   }
                   else if (target == Target_STACK) {
                      Location loc = m->helper(m, Type_INT, 32)->location;
@@ -883,8 +883,8 @@ emitExpression(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target
 
 void
 emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
-   ExprType expr_type = {0};
-   // codegenEmit(c, cond, &expr_type, Target_ACCUM);
+   RegVar reg_var = {0};
+   // codegenEmit(c, cond, &reg_var, Target_ACCUM);
    switch (cond->type) {
       case Ast_LESS:
       case Ast_LEQ:
@@ -894,8 +894,8 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
       case Ast_EQUALS: {
          AstNode* left = cond->child;
          AstNode* right = cond->child->next;
-         ExprType left_type = {0};
-         ExprType right_type = {0};
+         RegVar left_type = {0};
+         RegVar right_type = {0};
          codegenEmit(c, right, &right_type, Target_STACK);
          codegenEmit(c, left, &left_type, Target_ACCUM);
 
@@ -906,8 +906,8 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
          c->m->cmpJmpStackTop(c->m, cond->type, c->m->accumC(c->m, left_type.c)->location, &left_type, then, els);
       } break;
       default: {
-         codegenEmit(c, cond, &expr_type, Target_ACCUM);
-         c->m->testAndJump(c->m, c->m->accumC(c->m, expr_type.c)->location.reg, typeBits(&expr_type.c), then, els);
+         codegenEmit(c, cond, &reg_var, Target_ACCUM);
+         c->m->testAndJump(c->m, c->m->accumC(c->m, reg_var.c)->location.reg, typeBits(&reg_var.c), then, els);
       } break;
    }
 }
@@ -946,7 +946,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          // TODO: Parameter passing is tied to ABI. Move to machine abstraction
 
          Tag* tag = tagInsert(&c->scope->tag_table, tag_str, (Tag){0});
-         tag->etype = (ExprType) {
+         tag->rvar = (RegVar) {
             .c = specifier->ctype,
             // TODO: tag table should have different entry.
             .location = { .type = Location_STACK, .offset = 0 /*struct tag does not have a place*/ },
@@ -985,7 +985,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
          if (declarator->is_pointer)
             bits = pointerSizeBits();
          else
-            bits = typeBits(&entry->etype.c);
+            bits = typeBits(&entry->rvar.c);
       }
    }
 
@@ -1004,16 +1004,16 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
       MachineX64* m_totally_temp = (MachineX64*)c->m;
 
-      ExprType* entry = symInsert(&c->scope->symbol_table,
+      RegVar* entry = symInsert(&c->scope->symbol_table,
                                   id_str,
-                                  (ExprType){
+                                  (RegVar){
                                      .c = Zero,
                                      .location = { .type = Location_STACK, .offset = m_totally_temp->stack_offset },
                                   });
 
       if (declarator->is_pointer) {
          entry->c.type = Type_POINTER;
-         entry->c.pointer.pointee = AllocType(c->arena, ExprType);
+         entry->c.pointer.pointee = AllocType(c->arena, RegVar);
          entry->c.pointer.pointee->c = specifier->ctype;
       }
       else {
@@ -1021,18 +1021,18 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       }
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
-         ExprType* imm = c->m->immediateFromToken(c->m, rhs->tok);
+         RegVar* imm = c->m->immediateFromToken(c->m, rhs->tok);
 
          c->m->mov(c->m, entry, imm);
       }
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
-         ExprType etype = Zero;
-         emitExpression(c, rhs, &etype, Target_ACCUM);
-         if (maybeEmitTypeConversion(c, &etype, entry->c, Target_ACCUM, "Attempting to assing from incompatible type.")) {
+         RegVar rvar = Zero;
+         emitExpression(c, rhs, &rvar, Target_ACCUM);
+         if (maybeEmitTypeConversion(c, &rvar, entry->c, Target_ACCUM, "Attempting to assing from incompatible type.")) {
             c->m->mov(c->m, entry, m->accumC(m, entry->c));
          }
          else {
-            c->m->mov(c->m, entry, &etype);
+            c->m->mov(c->m, entry, &rvar);
          }
 
       }
@@ -1053,7 +1053,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          // Emit code for the expression and move it to rax.
 
          if (stmt->child) {
-            ExprType et = {0};
+            RegVar et = {0};
             emitExpression(c, stmt->child, &et, Target_ACCUM);
             Ctype ret_type = funcReturnType(c->current_function);
 
@@ -1084,7 +1084,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
 
          c->m->label(c->m, then_label);
 
-         ExprType et = Zero;
+         RegVar et = Zero;
          if (then) {
             codegenEmit(c, then, &et, Target_NONE);
          }
@@ -1181,7 +1181,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       char *func_name = declarator->child->tok->cast.string;
 
-      ExprType* entry = findSymbol(c, func_name);
+      RegVar* entry = findSymbol(c, func_name);
       if (entry) {
          codegenError("Redefining function %s", func_name);
       }
@@ -1189,7 +1189,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          // TODO: function ctype. grab pointer from declarator and type from specifier
          symInsert(&c->scope->symbol_table,
                    func_name,
-                   (ExprType) {
+                   (RegVar) {
                       .c = (Ctype) { .type = Type_FUNC, .func.node = node },
                       .location = { .type = Location_IMMEDIATE, .offset = 0 }, // TODO: location for functions
                    });
@@ -1219,7 +1219,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
             Ctype param_type;
             if (param_declarator->is_pointer) {
                param_type.type = Type_POINTER;
-               param_type.pointer.pointee = AllocType(c->arena, ExprType);
+               param_type.pointer.pointee = AllocType(c->arena, RegVar);
                param_type.pointer.pointee->c = param_type_spec->ctype;
             }
             else {
@@ -1239,7 +1239,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
             symInsert(&c->scope->symbol_table,
                                         id_str,
-                                        (ExprType){
+                                        (RegVar){
                                            .c = param_type,
                                            .location = stack_loc,
                                         });
@@ -1268,15 +1268,15 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
 
 void
-codegenEmit(Codegen* c, AstNode* node, ExprType* expr_type, EmitTarget target) {
+codegenEmit(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    if (node->type == Ast_FUNCDEF) {
       emitFunctionDefinition(c, node, target);
    }
    else if (nodeIsExpression(node)) {
-      if (expr_type == NULL) {
-         codegenError("expr_type is NULL when generating code for expression.");
+      if (reg_var == NULL) {
+         codegenError("reg_var is NULL when generating code for expression.");
       }
-      emitExpression(c, node, expr_type, target);
+      emitExpression(c, node, reg_var, target);
    }
    else if (node->type == Ast_COMPOUND_STMT) {
       emitCompoundStatement(c, node, target);

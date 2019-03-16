@@ -29,7 +29,7 @@ isAggregateType(Ctype* ctype) {
 }
 
 b32
-isImmediate(ExprType* src) {
+isImmediate(RegVar* src) {
    b32 imm = false;
    imm = src->location.type == Location_IMMEDIATE;
    return imm;
