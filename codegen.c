@@ -681,51 +681,34 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          } break;
          case Ast_ADDRESS: {
             AstNode* expr = node->single_expr.expr;
-            RegVar* et = AllocType(c->arena, RegVar);
-            emitExpression(c, expr, et, Target_NONE);
+            RegVar* pointee = AllocType(c->arena, RegVar);
+            emitExpression(c, expr, pointee, Target_NONE);
 
-            RegVar result = Zero;
-
-            switch (et->c.type) {
-               case Type_POINTER: {
-                  // result.c = *et.c.pointer.pointee;
-                  NotImplemented("address of a pointer");
-               } break;
-               case Type_AGGREGATE: {
-                  if (et->location.type == Location_STACK) {
-                     result.c.type = Type_POINTER;
-                     result.c.pointer.pointee = et;
-                  } else {
-                     NotImplemented("Aggregate somewhere other than the stack.");
-                  }
-               } break;
-               case Type_FUNC: {
-                  NotImplemented("address of func");
-               } break;
-               case Type_ARRAY: {
-                  NotImplemented("address of array");
-               } break;
-               default: {
-                  codegenError("Cannot take the address of this type of expression.");
-               }
+            if (pointee->location.type != Location_STACK) {
+               NotImplemented("Taking the address of something not on the stack");
             }
 
-            Location* loc = &result.c.pointer.pointee->location;
+
+            reg_var->c = (Ctype){ .type = Type_POINTER, .pointer.pointee = pointee };
+
             if (target == Target_ACCUM) {
                RegVar* accum = m->accum(m, Type_INT, 64);
-               c->m->addressOf(c->m, loc, accum->location);
-               result.location = accum->location;
+               reg_var->location = accum->location;
             }
             else if (target == Target_STACK) {
-               RegVar* helper = m->helper(m, Type_INT, 64);
-               c->m->addressOf(c->m, loc, helper->location);
+               m->stackPushOffset(m, pointerSizeBits() / 8);
+               // RegVar* accum = m->accum(m, Type_INT, 64);
+               // reg_var->location = accum->location;
+               // RegVar* helper = m->helper(m, Type_INT, 64);
+               // c->m->addressOf(c->m, loc, helper->location);
 
-               m->stackPushReg(m, helper->location.reg);
+               // m->stackPushReg(m, helper->location.reg);
 
                MachineX64* m_totally_temp = (MachineX64*)c->m;
-               result.location = (Location){ .type = Location_STACK, .offset = m_totally_temp->stack_offset };
+               reg_var->location = (Location){ .type = Location_STACK, .offset = m_totally_temp->stack_offset };
             }
-            *reg_var = result;
+
+            m->addressOf(m, &pointee->location, reg_var->location);
          } break;
          // Logical operators
          case Ast_ADD:
@@ -928,7 +911,12 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_AGGREGATE) {
-      bits = typeBits(&specifier->ctype);
+      if (declarator->is_pointer) {
+         bits = pointerSizeBits();
+      }
+      else {
+         bits = typeBits(&specifier->ctype);
+      }
    }
    else {
       char* tag_str = specifier->ctype.aggr.tag;
@@ -1028,7 +1016,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          RegVar rvar = Zero;
          emitExpression(c, rhs, &rvar, Target_ACCUM);
-         if (maybeEmitTypeConversion(c, &rvar, entry->c, Target_ACCUM, "Attempting to assing from incompatible type.")) {
+         if (maybeEmitTypeConversion(c, &rvar, entry->c, Target_ACCUM, "Attempting to assign from incompatible type.")) {
             c->m->mov(c->m, entry, m->accumC(m, entry->c));
          }
          else {

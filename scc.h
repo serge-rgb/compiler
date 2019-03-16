@@ -240,7 +240,10 @@ struct Ctype {
 
       struct CtypeFunc {
          struct AstNode* node; // Funcdef ast node.
+
          // TODO: Remove ast node from here. We need return type and parameter list in here.
+         // struct Ctype* return_type;
+         // struct Ctype* s_params;
       } func;
 
       struct CtypePointer {
