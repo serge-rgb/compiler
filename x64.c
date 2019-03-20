@@ -371,6 +371,12 @@ sysVIntegerRegisterEnum(u64 n_param) {
    return r;
 }
 
+RegisterEnum
+sysVFloatRegisterEnum(u64 n_param) {
+   RegisterEnum r = Reg_XMM0 + n_param;
+   return r;
+}
+
 void
 x64BeginFuncParams(MachineX64* m) {
    if (m->machine.flags & Config_TARGET_WIN) {
@@ -394,8 +400,8 @@ x64PushParameter(MachineX64* m, Scope* scope, RegVar* rvar) {
    if ((m->machine.flags & Config_TARGET_LINUX) || (m->machine.flags & Config_TARGET_MACOS)) {
       Location loc = {0};
       if (isIntegerType(&rvar->c) || isDerivedType(&rvar->c)) {
-         if (m->params.n_param < 6) {
-            loc = registerLocation(sysVIntegerRegisterEnum(m->params.n_param));
+         if (m->params.intIdx < ArrayCount(m->params.integerRegs)) {
+            loc = registerLocation(sysVIntegerRegisterEnum(m->params.intIdx++));
             RegVar reg = {
                .c = rvar->c,
                .location = loc,
@@ -404,6 +410,19 @@ x64PushParameter(MachineX64* m, Scope* scope, RegVar* rvar) {
          }
          else {
             NotImplemented("Pass integer param on stack");
+         }
+      }
+      else if (isRealType(&rvar->c)) {
+         if (m->params.floatParamIdx < ArrayCount(m->params.floatRegs)) {
+            loc = registerLocation(sysVFloatRegisterEnum(m->params.floatParamIdx++));
+            RegVar reg = {
+               .c = rvar->c,
+               .location = loc,
+            };
+            x64Mov(m, &reg, rvar);
+         }
+         else {
+            NotImplemented("Pass float param on stack");
          }
       }
       else if (rvar->c.type == Type_AGGREGATE) {
@@ -464,7 +483,7 @@ x64PushParameter(MachineX64* m, Scope* scope, RegVar* rvar) {
          }
       }
       else {
-         NotImplemented("Non integer types");
+         NotImplemented("Non integer types (push)");
       }
    }
    else {
@@ -521,11 +540,19 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
 
    if ((m->machine.flags & Config_TARGET_MACOS) || (m->machine.flags & Config_TARGET_LINUX)) {
       if (isIntegerType(ctype) || isDerivedType(ctype)) {
-         if (m->params.n_param < 6) {
-            loc = registerLocation(sysVIntegerRegisterEnum(m->params.n_param));
+         if (m->params.intIdx < ArrayCount(m->params.integerRegs)) {
+            loc = registerLocation(sysVIntegerRegisterEnum(m->params.intIdx++));
          }
          else {
             NotImplemented("Pass integer param on stack");
+         }
+      }
+      else if (isRealType(ctype)) {
+         if (m->params.floatParamIdx < ArrayCount(m->params.floatRegs)) {
+            loc = registerLocation(sysVFloatRegisterEnum(m->params.floatParamIdx++));
+         }
+         else {
+            NotImplemented("Pass real param on stack");
          }
       }
       else if (ctype->type == Type_AGGREGATE) {
@@ -595,7 +622,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
          }
       }
       else {
-         NotImplemented("Non integer types");
+         NotImplemented("Non integer types (pop)");
       }
    }
    else if (m->machine.flags & Config_TARGET_WIN) {

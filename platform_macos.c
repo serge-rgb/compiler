@@ -12,7 +12,7 @@ platformLink(char* ld_path, char* filename_without_extension) {
       snprintf(obj_file, PathMax, "%s.o", filename_without_extension);
    }
 
-   char* ld_args[] = { ld_path, "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", filename_without_extension };
+   char* ld_args[] = { ld_path, "-arch", "x86_64", "-e", "_start", obj_file, "/usr/lib/libSystem.dylib", "-o", filename_without_extension, "-macosx_version_min", "10.11" };
    if (Ok == platformRunProcess(ld_args, ArrayCount(ld_args), 0)) {
    }
    else {
