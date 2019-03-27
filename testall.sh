@@ -1,1 +1,1 @@
-./compiler.c && ./compiler -a | ag fail
+./compiler.c && ./compiler -a

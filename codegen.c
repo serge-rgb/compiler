@@ -302,6 +302,8 @@ emitIdentifier(Codegen*c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    char* id_str = node->id.tok->cast.string;
    RegVar* entry = findSymbol(c, id_str);
 
+   Assert (entry->location.type == Location_STACK);
+
    reg_var->c = entry->c;
    reg_var->location = entry->location;
 
@@ -311,15 +313,18 @@ emitIdentifier(Codegen*c, AstNode* node, RegVar* reg_var, EmitTarget target) {
 
    if (typeBits(&entry->c) > 64) {
       if (target == Target_ACCUM) {
-         RegVar* accum = m->accum(m, Type_INT, 64);
+         RegVar* accum = m->accum(m, entry->c.type, pointerSizeBits());
          m->stackAddress(m, entry, accum->location);
+         reg_var->location = (Location) {
+            .type = Location_REG_POINTER,
+            .reg = accum->location.reg,
+         };
       }
       else if (target == Target_STACK) {
-         RegVar* helper = m->helper(m, Type_INT, 64);
-         m->stackAddress(m, entry, helper->location);
-         m->stackPushReg(m,
-                         helper->location.reg);
-         reg_var->location = helper->location;
+         Location loc = m->stackPushOffset(m, typeBits(&entry->c)/8);
+         RegVar rvar = { .c = entry->c, .location = loc };
+         m->mov(m, &rvar, entry);
+         reg_var->location = loc;
       }
    }
    else {
@@ -405,7 +410,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget ta
       RegVar reg = {
          .c = member->ctype,
          .location = (Location){
-            .type = Location_STACK_FROM_REG,
+            .type = Location_REG_POINTER,
             .reg = address.reg,
             .reg_offset = member_offset,
          },

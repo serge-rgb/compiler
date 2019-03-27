@@ -152,18 +152,20 @@ locationString(MachineX64* m, Location r, int bits) {
             InvalidCodePath;
          res = getString(tmp_string);
       } break;
-      case Location_STACK_FROM_REG: {
+      case Location_REG_POINTER: {
 #define ResultSize 64
          char tmp_string[ResultSize] = {0};
          char* reg_str = g_registers[r.reg].reg;
+         char* sign = r.reg_offset >= 0 ? "+" : "-";
+         u32 offset = abs(r.reg_offset);
          if (bits == 8)
-            snprintf(tmp_string, ArrayCount(tmp_string), "BYTE [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+            snprintf(tmp_string, ArrayCount(tmp_string), "BYTE [ %s %s 0x%x ]", reg_str, sign, offset);
          else if (bits == 16)
-            snprintf(tmp_string, ArrayCount(tmp_string), "WORD [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+            snprintf(tmp_string, ArrayCount(tmp_string), "WORD [ %s %s 0x%x ]", reg_str, sign, offset);
          else if (bits == 32)
-            snprintf(tmp_string, ArrayCount(tmp_string), "DWORD [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+            snprintf(tmp_string, ArrayCount(tmp_string), "DWORD [ %s %s 0x%x ]", reg_str, sign, offset);
          else if (bits == 64)
-            snprintf(tmp_string, ArrayCount(tmp_string), "QWORD [ %s + 0x%x ]", reg_str, (int)r.reg_offset);
+            snprintf(tmp_string, ArrayCount(tmp_string), "QWORD [ %s %s 0x%x ]", reg_str, sign, offset);
          else
             InvalidCodePath;
          res = getString(tmp_string);
@@ -470,6 +472,9 @@ x64PushParameter(MachineX64* m, Scope* scope, RegVar* rvar) {
                   if (rvar->location.type == Location_STACK) {
                      partial_argument.location.offset -= 8;
                   }
+                  else if (rvar->location.type == Location_REG_POINTER) {
+                     partial_argument.location.reg_offset += 8;
+                  }
                   else {
                      NotImplemented("Shift big non-stack param.");
                   }
@@ -524,7 +529,7 @@ x64PushParameter(MachineX64* m, Scope* scope, RegVar* rvar) {
       }
       RegVar reg = {
          .c = rvar->c,
-         .location = loc,
+          .location = loc,
       };
       x64Mov(m, &reg, rvar);
       m->params.n_param++;
@@ -576,6 +581,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
                   .c = *ctype,
                   .location = x64StackPushOffset(m, bits / 8),
                };
+               Assert((bits % 8) == 0);
 
                loc = dst.location; // Result
 
@@ -585,7 +591,6 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
 
                   RegisterEnum regEnum = m->params.integerRegs[m->params.intIdx++];
                   Location src = registerLocation(regEnum);
-                  dst.location.offset  = loc.offset - bits/8;
 
                   RegVar reg = {
                      .c = (Ctype) {
@@ -612,6 +617,7 @@ x64PopParameter(MachineX64* m, Scope* scope, Ctype* ctype) {
 
                   x64Mov(m, &dst, &reg);
 
+                  dst.location.offset  = loc.offset - 8;
                   bits -= 64;
                }
 
@@ -983,8 +989,8 @@ x64Mov(MachineX64* m, RegVar* dst, RegVar* src) {
       }
       else {
          // If both locations are on the stack, use the accumulator as a temp register.
-         if (   (dst->location.type == Location_STACK || dst->location.type == Location_STACK_FROM_REG)
-             && (src->location.type == Location_STACK || src->location.type == Location_STACK_FROM_REG)) {
+         if (   (dst->location.type == Location_STACK || dst->location.type == Location_REG_POINTER)
+             && (src->location.type == Location_STACK || src->location.type == Location_REG_POINTER)) {
             instructionPrintf(m, "mov %s, %s",
                               locationString(m, x64AccumInt(bits)->location, bits),
                               locationString(m, src->location, bits));
@@ -1238,8 +1244,7 @@ x64StackPush(MachineX64* m, Location location) {
       case Location_IMMEDIATE: {
          loc = x64StackPushImm(m, location.immediate_value);
       } break;
-      case Location_STACK:
-      case Location_POINTER: {
+      default: {
          NotImplemented("Generic stack push from non-register non-immediate");
       } break;
    }

@@ -448,15 +448,15 @@ struct Location {
       Location_IMMEDIATE,
       Location_REGISTER,
       Location_STACK,  // RSP relative
-      Location_STACK_FROM_REG,  // Relative to register
-      Location_POINTER,  // Stored address
+
+      Location_REG_POINTER,  // Pointer relative to register
    } type;
    union {
       // REGISTER
       struct {
          RegisterEnum reg;
          // STACK_FROM_REG
-         u32          reg_offset;
+         i32          reg_offset;
       };
       // IMMEDIATE
       union {
