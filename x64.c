@@ -1035,6 +1035,12 @@ x64Mov(MachineX64* m, RegVar* dst, RegVar* src) {
          else if (src->location.type == Location_STACK) {
             instructionPrintf(m, "lea rsi, [ rsp + %d ]", m->stack_offset - src->location.offset);
          }
+         else if (src->location.type == Location_REG_POINTER) {
+            instructionPrintf(m, "lea rsi, [ %s + %d ]", g_registers[src->location.reg].reg, src->location.reg_offset);
+         }
+         else {
+            NotImplemented("Location for big mov");
+         }
          instructionPrintf(m, "mov rdi, rsp");
          if (dst->location.offset != m->stack_offset) {
             instructionPrintf(m, "add rdi, %d", m->stack_offset - dst->location.offset);
