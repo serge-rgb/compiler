@@ -475,6 +475,9 @@ x64PushParameter(MachineX64* m, Scope* scope, RegVar* rvar) {
                   else if (rvar->location.type == Location_REG_POINTER) {
                      partial_argument.location.reg_offset += 8;
                   }
+                  else if (rvar->location.type == Location_REGISTER) {
+                     Assert (bits <= 64);
+                  }
                   else {
                      NotImplemented("Shift big non-stack param.");
                   }
@@ -1198,7 +1201,7 @@ x64StackPushReg(MachineX64* m, RegisterEnum reg) {
    }
    // double
    else {
-      instructionPrintf(m, "sub %rsp, 8");
+      instructionPrintf(m, "sub rsp, 8");
       instructionPrintf(m, "movsd QWORD[rsp], %s", locationString(m, registerLocation(reg), 64));
    }
    m->stack_offset += 8;
