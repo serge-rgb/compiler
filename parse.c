@@ -690,23 +690,32 @@ parseDeclarationSpecifiers(Parser* p) {
 AstNode*
 parameterTypeList(Parser* p) {
    AstNode* result = NULL;
-   AstNode** iter = &result;
+   struct AstNodeParameter* param = NULL;
 
    while (true) {
       AstNode* decl_spec = parseOrBacktrack(parseDeclarationSpecifiers, p);
       if (decl_spec) {
+         if (!result) {
+            Assert(!param);
+            result = makeAstNode(p->arena, Ast_PARAMETER, 0, 0);
+            param = &result->parameter;
+         }
+         else {
+            param->next = AllocType(p->arena, struct AstNodeParameter);
+            param = param->next;
+         }
+
+         param->decl_specifier = decl_spec;
+
          AstNode* declarator = parseOrBacktrack(parseDeclarator, p);
          if (declarator) {
-            AstNode* new = makeAstNode(p->arena, Ast_PARAMETER, decl_spec, declarator);
-            *iter = new;
-            iter = &(*iter)->next;
-
-            if (peekPunctuator(p, ',')) {
-               // There is another parameter.
-               nextToken(p);
-            } else {
-               break;
-            }
+            param->declarator = declarator;
+         }
+         if (peekPunctuator(p, ',')) {
+            // There is another parameter.
+            nextToken(p);
+         } else {
+            break;
          }
       }
       else {
@@ -717,15 +726,16 @@ parameterTypeList(Parser* p) {
    return result;
 }
 
+// TODO: Implement declarators completely
 AstNode*
 parseDeclarator(Parser* p) {
    AstNode* r = NULL;
    Token* t;
    Token* bt = marktrack(p);
-   b32 is_ptr = false;
+   u32 pointer_stars = 0;
 
    if (nextPunctuator(p, '*')) {
-      is_ptr = true;
+      pointer_stars++;
    }
 
    if (nextPunctuator(p, '(')) {
@@ -741,17 +751,17 @@ parseDeclarator(Parser* p) {
    if ((t = nextToken(p)) && (t->type == TType_ID)) {
       AstNode* node = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
       node->id.tok = t;
+      AstNode* params = NULL;
       if (nextPunctuator(p, '(')) {
-         AstNode* params = parseOrBacktrack(parameterTypeList, p);
-         if (params) {
-            node->next = params;
-         }
+         params = parseOrBacktrack(parameterTypeList, p);
          if (!nextPunctuator(p, ')')) {
-            parseError(p, "Expected ) in declarator");
+            parseError(p, "Expected ) in declarator after parameter list");
          }
       }
       r = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATOR, node, NULL, t->line_number);
-      r->is_pointer = is_ptr;
+      r->declarator.id = t->cast.string;
+      r->declarator.params = params;
+      r->declarator.pointer_stars = pointer_stars;
    }
    else {
       backtrack(p, bt);
@@ -978,13 +988,37 @@ parseFunctionDefinition(Parser* p) {
       else {
          AstNode* node = makeAstNode(p->arena, Ast_FUNCDEF, 0, 0);
 
+         struct AstNodeParameter* param = declarator->declarator.params ? &declarator->declarator.params->parameter : NULL;
+
+         Ctype* s_params = NULL;
+
+         while (param) {
+            Ctype* type = &param->decl_specifier->decl_specifier.ctype;
+            u32 stars = param->declarator->declarator.pointer_stars;
+            while (stars) {
+               Ctype* new_type = AllocType(p->arena, Ctype);
+               new_type->type = Type_POINTER;
+               new_type->pointer.pointee = type;
+               type = new_type;
+               --stars;
+            }
+            bufPush(s_params, *type);
+            param = param->next;
+         }
+
+         Ctype* return_type = &declaration_specifier->ctype;
+
+         // TODO: pointer return type
+
          Ctype type = {
             .type = Type_FUNC,
-            .func = (struct CtypeFunc){ .node = node  },
+            .func = (struct CtypeFunc){
+               .return_type = return_type,
+               .s_params = s_params,
+            },
          };
 
          node->funcdef.label = declarator->child->tok->cast.string;
-         node->funcdef.return_type = declaration_specifier->ctype;
          node->funcdef.declarator = declarator;
          node->funcdef.compound_stmt = stmts;
          node->funcdef.ctype = type;

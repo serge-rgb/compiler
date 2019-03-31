@@ -5,4 +5,5 @@ int main()
    int* y = &x;
 
    return x;
+   //return *y;
 }

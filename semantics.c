@@ -128,31 +128,6 @@ isLiteral(AstNode* node) {
    return result;
 }
 
-AstNode*
-funcDeclarator(AstNode* node) {
-   Assert (node->type == Ast_FUNCDEF);
-   return node->funcdef.declarator;
-}
-
-AstNode*
-funcParams(AstNode* node) {
-   Assert (node->type == Ast_FUNCDEF);
-   AstNode* params = funcDeclarator(node)->child->next;
-   return params;
-}
-
-i32
-funcNumParams(AstNode* node) {
-   Assert (node->type == Ast_FUNCDEF);
-   i32 nparam = 0;
-   for(AstNode* param = funcDeclarator(node)->child->next;
-       param != NULL;
-       param = param->next) {
-      ++nparam;
-   }
-   return nparam;
-}
-
 void
 paramType(Ctype* out, AstNode* node) {
    Assert(node->type == Ast_PARAMETER);
@@ -160,10 +135,10 @@ paramType(Ctype* out, AstNode* node) {
    AstNode* type_spec = node->child;
    AstNode* declarator = type_spec->next;
 
-   if (declarator->is_pointer) {
+   if (declarator->declarator.pointer_stars) {
       out->type = Type_POINTER;
       Assert(out->pointer.pointee);
-      out->pointer.pointee->c = type_spec->ctype;
+      out->pointer.pointee = &type_spec->ctype;
    }
    else {
       *out = type_spec->ctype;

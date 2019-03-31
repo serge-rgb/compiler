@@ -150,19 +150,19 @@ ErrorCode platformLink(char* ld_path, char* filename_without_extension);
         allocate(arena, sizeof(type) * (count))
 
 #define ArenaBootstrap(object, arenaName)    \
-{                                            \
-   size_t sz = sizeof(*object);              \
-               u8* block = arenaBlock(&sz);  \
-               block += sizeof(ArenaHeader); \
-               Arena a = {                   \
-                  .used = 0,                 \
-                          .size = sz,        \
-                          .block = block,    \
-               };                            \
-Arena* p = allocate(&a, sizeof(Arena));      \
-        *p = a;                              \
-        object->arenaName = p;               \
-}
+        {                                            \
+         size_t sz = sizeof(*object);              \
+         u8* block = arenaBlock(&sz);  \
+         block += sizeof(ArenaHeader); \
+         Arena a = {                   \
+            .used = 0,                 \
+            .size = sz,        \
+            .block = block,    \
+         };                            \
+         Arena* p = allocate(&a, sizeof(Arena));      \
+         *p = a;                              \
+         object->arenaName = p;               \
+      }
 
 
 struct Arena {
@@ -237,17 +237,13 @@ struct Ctype {
          u64 bits;
       } aggr;
 
-
       struct CtypeFunc {
-         struct AstNode* node; // Funcdef ast node.
-
-         // TODO: Remove ast node from here. We need return type and parameter list in here.
-         // struct Ctype* return_type;
-         // struct Ctype* s_params;
+         struct Ctype* return_type;
+         struct Ctype* s_params;
       } func;
 
       struct CtypePointer {
-         struct RegVar* pointee;
+         struct Ctype* pointee;
       } pointer;
    };
 } typedef Ctype;
@@ -349,13 +345,26 @@ struct AstNode {
          struct AstNode* expr;
       } single_expr;
 
+      // Ast_PARAMETER
+      struct AstNodeParameter {
+         struct AstNode* decl_specifier;
+         struct AstNode* declarator;
+         struct AstNodeParameter* next;
+      } parameter;
+
+      // Ast_DECLARATOR
+      struct {
+         char* id;
+         struct AstNode* params;  // Ast_PARAMETER
+         u32 pointer_stars;
+      } declarator;
+
       // Ast_FUNCDEF
       struct {
          char* label;
-         Ctype return_type; // Declaration specifier
+         Ctype ctype;  // Function type (return type & param types)
          struct AstNode* declarator;
          struct AstNode* compound_stmt;
-         Ctype ctype;  // Function type
       } funcdef;
 
       // When the node corresponds to a token.
@@ -363,8 +372,6 @@ struct AstNode {
          Token*   tok;
          // Otherwise..
          Ctype    ctype;
-         // When the node is Ast_DECLARATOR
-         b32 is_pointer;
    };
    struct AstNode* child;
    struct AstNode* next;

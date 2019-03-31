@@ -11,5 +11,6 @@ del tests\*.exe
 del tests\*.asm
 del tests\*.ilk
 del tests\*.obj
+del tests\*.o
 
 

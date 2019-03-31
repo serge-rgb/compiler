@@ -116,8 +116,8 @@ typesAreCompatible(Codegen* c, Ctype into, Ctype from) {
    if (into.type == from.type) {
       if (into.type == Type_POINTER) {
          compatible = typesAreCompatible(c,
-                                         into.pointer.pointee->c,
-                                         from.pointer.pointee->c);
+                                         *into.pointer.pointee,
+                                         *from.pointer.pointee);
       }
       else {
          switch (into.type) {
@@ -357,7 +357,7 @@ emitStructMemberAccess(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget ta
    Ctype *ctype = NULL;
    Location address = Zero;
    if (symbol_entry->c.type == Type_POINTER) {
-      ctype = &symbol_entry->c.pointer.pointee->c;
+      ctype = symbol_entry->c.pointer.pointee;
       RegVar* helper = m->helperC(m, symbol_entry->c);
       m->mov(m, helper, symbol_entry);
       address = helper->location;
@@ -463,7 +463,7 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
          n_param++;
       }
 
-      u64 expected_nparam = funcNumParams(sym->c.func.node);
+      u64 expected_nparam = bufCount(sym->c.func.s_params);
       if (n_param != expected_nparam) {
          codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
                       label, expected_nparam, n_param);
@@ -471,29 +471,31 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
    }
 
    // Put the parameters in registers and/or the stack.
-   AstNode* expected_param = funcParams(sym->c.func.node);
+   Ctype* s_expected_params = sym->c.func.s_params;
 
    m->beginFuncParams(m);
    {
+      u32 arg_idx = 0;
       for (AstNode* arg = args;
            arg != NULL;
            arg = arg->next) {
          RegVar et_buf = {0};
          RegVar* et = &et_buf;
          emitExpression(c, arg, et, Target_ACCUM);
-         RegVar expected_et = {0};
-         RegVar pointee = {0};
-         expected_et.c.pointer.pointee = &pointee;
-         paramType(&expected_et.c, expected_param);
+         Ctype expected_type = {0};
+         //expected_et.c.pointer.pointee = &pointee;
+         //paramType(&expected_et.c, expected_param);
+         expected_type = s_expected_params[arg_idx];
 
-         if (maybeEmitTypeConversion(c, et, expected_et.c, Target_STACK, "Attempting to pass incompatible parameter to function.")) {
-            RegVar* helper = m->helperC(m, expected_et.c);
+         if (maybeEmitTypeConversion(c, et, expected_type, Target_STACK, "Attempting to pass incompatible parameter to function.")) {
+            RegVar* helper = m->helperC(m, expected_type);
             m->stackPop(m, helper);
             et = helper;
          }
 
          m->pushParameter(m, c->scope, et);
-         expected_param = expected_param->next;
+
+         arg_idx++;
       }
    }
    m->endFuncParams(m);
@@ -506,15 +508,14 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
    }
    // TODO: Restore registers. Not necessary at the moment because of DDCG
 
-   AstNode* func_node = sym->c.func.node;
-   Ctype return_type = func_node->funcdef.return_type;
+   Ctype return_type = *sym->c.func.return_type;
    if (target == Target_STACK) {
       m->stackPushReg(m, m->accumC(m, return_type)->location.reg);
    }
 
-   Assert(func_node->type == Ast_FUNCDEF);
+   //Assert(func_node->type == Ast_FUNCDEF);
 
-   reg_var->c = func_node->funcdef.return_type;
+   reg_var->c = return_type;
    reg_var->location = m->accumC(m, return_type)->location;
 }
 
@@ -693,8 +694,7 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
                NotImplemented("Taking the address of something not on the stack");
             }
 
-
-            reg_var->c = (Ctype){ .type = Type_POINTER, .pointer.pointee = pointee };
+            reg_var->c = (Ctype){ .type = Type_POINTER, .pointer.pointee = &pointee->c };
 
             if (target == Target_ACCUM) {
                RegVar* accum = m->accum(m, Type_INT, 64);
@@ -916,7 +916,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_AGGREGATE) {
-      if (declarator->is_pointer) {
+      if (declarator->declarator.pointer_stars) {
          bits = pointerSizeBits();
       }
       else {
@@ -957,7 +957,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             bufPush(tag->s_members, member);
 
             Ctype* ctype = NULL;
-            if (declarator->is_pointer) {
+            if (declarator->declarator.pointer_stars) {
                NotImplemented("struct member is pointer");
             }
             else {
@@ -975,7 +975,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             codegenError("Use of undeclared struct %s", tag_str);
          }
 
-         if (declarator->is_pointer)
+         if (declarator->declarator.pointer_stars)
             bits = pointerSizeBits();
          else
             bits = typeBits(&entry->rvar.c);
@@ -1004,10 +1004,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
                                      .location = { .type = Location_STACK, .offset = m_totally_temp->stack_offset },
                                   });
 
-      if (declarator->is_pointer) {
+      if (declarator->declarator.pointer_stars) {
          entry->c.type = Type_POINTER;
          entry->c.pointer.pointee = AllocType(c->arena, RegVar);
-         entry->c.pointer.pointee->c = specifier->ctype;
+         entry->c.pointer.pointee = &specifier->ctype;
       }
       else {
          entry->c = specifier->ctype;
@@ -1048,7 +1048,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          if (stmt->single_expr.expr) {
             RegVar et = {0};
             emitExpression(c, stmt->single_expr.expr, &et, Target_ACCUM);
-            Ctype ret_type = c->current_function->funcdef.return_type;
+            Ctype ret_type = *c->current_function->funcdef.ctype.func.return_type;
 
             maybeEmitTypeConversion(c,
                                     &et,
@@ -1178,11 +1178,19 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          codegenError("Redefining function %s", func_name);
       }
       else {
+         Ctype* return_type = node->funcdef.ctype.func.return_type;
+
+         Ctype* s_params = node->funcdef.ctype.func.s_params;
+
          // TODO: function ctype. grab pointer from declarator and type from specifier
          symInsert(&c->scope->symbol_table,
                    func_name,
                    (RegVar) {
-                      .c = (Ctype) { .type = Type_FUNC, .func.node = node },
+                      .c = (Ctype) {
+                        .type = Type_FUNC,
+                        .func.return_type = return_type,
+                        .func.s_params = s_params,
+                      },
                       .location = { .type = Location_IMMEDIATE, .offset = 0 }, // TODO: location for functions
                    });
       }
@@ -1196,51 +1204,47 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       m->beginFuncParams(m);
 
 
-      AstNode* params = declarator->child->next;
-      if (params) {
-         AstNode* p = params;
-         while (p) {
-            Assert (p->type == Ast_PARAMETER);
-            AstNode* param_type_spec = p->child;
-            AstNode* param_declarator = param_type_spec->next;
-            char* id_str = param_declarator->child->tok->cast.string;
+      struct AstNodeParameter* param = declarator->declarator.params ? &declarator->declarator.params->parameter : NULL;
+      while (param) {
+         AstNode* param_type_spec = param->decl_specifier;
+         AstNode* param_declarator = param->declarator;
+         char* id_str = param_declarator->declarator.id;
 
-            Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
-            Assert (param_declarator && param_declarator->child->type == Ast_ID);
+         Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
+         Assert (param_declarator && param_declarator->child->type == Ast_ID);
 
-            Ctype param_type;
-            if (param_declarator->is_pointer) {
-               param_type.type = Type_POINTER;
-               param_type.pointer.pointee = AllocType(c->arena, RegVar);
-               param_type.pointer.pointee->c = param_type_spec->decl_specifier.ctype;
-            }
-            else {
-               param_type = param_type_spec->ctype;
-            }
-
-            Location param_loc = m->popParameter(m, c->scope, &param_type);
-
-            Location stack_loc = Zero;
-            if (param_loc.type != Location_STACK) {
-               // In order for parameters to be l-values, they must be on the stack atm.
-                stack_loc = m->stackPush(m, param_loc);
-            }
-            else {
-               stack_loc = param_loc;
-            }
-
-            symInsert(&c->scope->symbol_table,
-                                        id_str,
-                                        (RegVar){
-                                           .c = param_type,
-                                           .location = stack_loc,
-                                        });
-
-
-            p = p->next;
+         Ctype param_type;
+         if (param_declarator->declarator.pointer_stars) {
+            param_type.type = Type_POINTER;
+            param_type.pointer.pointee = AllocType(c->arena, RegVar);
+            param_type.pointer.pointee = &param_type_spec->decl_specifier.ctype;
          }
-         m->endFuncParams(m);
+         else {
+            param_type = param_type_spec->ctype;
+         }
+
+         Location param_loc = m->popParameter(m, c->scope, &param_type);
+
+         Location stack_loc = Zero;
+         if (param_loc.type != Location_STACK) {
+            // In order for parameters to be l-values, they must be on the stack atm.
+             stack_loc = m->stackPush(m, param_loc);
+         }
+         else {
+            stack_loc = param_loc;
+         }
+
+         symInsert(&c->scope->symbol_table,
+                                     id_str,
+                                     (RegVar){
+                                        .c = param_type,
+                                        .location = stack_loc,
+                                     });
+
+
+         param = param->next;
       }
+      m->endFuncParams(m);
 
 
       emitCompoundStatement(c, compound, Target_ACCUM);
