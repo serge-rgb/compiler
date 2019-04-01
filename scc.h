@@ -352,6 +352,12 @@ struct AstNode {
          struct AstNodeParameter* next;
       } parameter;
 
+      // Ast_ARGUMENT_EXPR_LIST
+      struct AstNodeArgument{
+         struct AstNode* expr;
+         struct AstNodeArgument* next;
+      } arg_expr_list;
+
       // Ast_DECLARATOR
       struct {
          char* id;
@@ -367,10 +373,15 @@ struct AstNode {
          struct AstNode* compound_stmt;
       } funcdef;
 
+      struct AstNodeAssignExpr {
+         struct AstNode* lhs;
+         Token* op;
+         struct AstNode* rhs;
+      } assignment_expr;
+
       // When the node corresponds to a token.
       // TODO: Get rid of all variables not inside a struct.
          Token*   tok;
-         // Otherwise..
          Ctype    ctype;
    };
    struct AstNode* child;

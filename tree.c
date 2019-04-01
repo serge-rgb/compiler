@@ -14,7 +14,7 @@ makeAstNodeWithLineNumber(Arena* a, AstType type, AstNode* left, AstNode* right,
    n->child = left;
    if (left) {
       if (right) {
-         Assert(left->next == NULL);
+         //Assert(left->next == NULL);
          left->next = right;
       }
    }

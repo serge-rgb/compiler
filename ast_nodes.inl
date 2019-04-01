@@ -7,11 +7,12 @@ X(Ast_ADDRESS)
 X(Ast_STRUCT_MEMBER_ACCESS)
 X(Ast_POSTFIX_INC)
 X(Ast_POSTFIX_DEC)
-X(Ast_FUNCDEF)          // children: declaration_spec, declarator, comp.statement
-X(Ast_FUNCCALL)         // children: identifier, arg expr list
-X(Ast_PARAMETER)        // children: decl.specifier, declarator
-X(Ast_DECLARATION)      // children: decl.specifier, declarator, initializer
-X(Ast_DECLARATOR)       // children: identifier,  [param-list]
+X(Ast_FUNCDEF)
+X(Ast_FUNCCALL)  // children: primary, arg expr list
+X(Ast_PARAMETER)
+X(Ast_DECLARATION)  // children: specifiers, declarator
+X(Ast_DECLARATOR)
+X(Ast_ARGUMENT_EXPR_LIST)
 X(Ast_RETURN)
 X(Ast_ADD)              // children: left, right
 X(Ast_SUB)              // children: left, right
@@ -27,4 +28,4 @@ X(Ast_GEQ)              // children: left, right
 X(Ast_LOGICAL_OR)       // children: left, right
 X(Ast_COMPOUND_STMT)    // children: stmt,stmt,stmt,stmt,etc
 X(Ast_ITERATION)        // children: declaration, control before, after (might be control), body.
-X(Ast_ASSIGN_EXPR)      // children: unary expr, assignment expr. token: assignment punctuator
+X(Ast_ASSIGN_EXPR)

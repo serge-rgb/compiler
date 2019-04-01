@@ -128,23 +128,6 @@ isLiteral(AstNode* node) {
    return result;
 }
 
-void
-paramType(Ctype* out, AstNode* node) {
-   Assert(node->type == Ast_PARAMETER);
-
-   AstNode* type_spec = node->child;
-   AstNode* declarator = type_spec->next;
-
-   if (declarator->declarator.pointer_stars) {
-      out->type = Type_POINTER;
-      Assert(out->pointer.pointee);
-      out->pointer.pointee = &type_spec->ctype;
-   }
-   else {
-      *out = type_spec->ctype;
-   }
-}
-
 b32
 ctypeEquals(Ctype a, Ctype b) {
    b32 equals = (a.type == b.type);

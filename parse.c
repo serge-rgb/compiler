@@ -168,13 +168,16 @@ postfixExpr(Parser* p) {
       else if (nextPunctuator(p, '(')) {
          if (nextPunctuator(p, ')')) {
             right = left;
-            left = makeAstNode(p->arena, Ast_FUNCCALL, right, NULL);
+            left = makeAstNode(p->arena, Ast_FUNCCALL, 0, NULL);
+            left->child = right;
          }
          else {
-            AstNode* params = argumentExpressionList(p);
+            AstNode* args = argumentExpressionList(p);
             if (nextPunctuator(p, ')')) {
                right = left;
-               left = makeAstNode(p->arena, Ast_FUNCCALL, right, params);
+               left = makeAstNode(p->arena, Ast_FUNCCALL, 0,0);
+               left->child = right;
+               left->child->next = args;
             }
             else {
                parseError(p, "Expected ) in function call.");
@@ -192,16 +195,19 @@ postfixExpr(Parser* p) {
          }
          AstNode* right = makeAstNode(p->arena, Ast_ID, 0, 0);
          right->id.tok = id;
-         left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, left, right);
+         AstNode* child = left;
+         left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, 0,0);
+         left->child = child;
+         left->child->next = right;
       }
       else if (nextPunctuator(p, INCREMENT)) {
          AstNode* expr = left;
-         left = makeAstNode(p->arena, Ast_POSTFIX_INC, left, 0);
+         left = makeAstNode(p->arena, Ast_POSTFIX_INC, 0, 0);
          left->single_expr.expr = expr;
       }
       else if (nextPunctuator(p, DECREMENT)) {
          AstNode* expr = left;
-         left = makeAstNode(p->arena, Ast_POSTFIX_DEC, left, 0);
+         left = makeAstNode(p->arena, Ast_POSTFIX_DEC, 0, 0);
          left->single_expr.expr = expr;
       }
 
@@ -270,7 +276,10 @@ multiplicativeExpr(Parser* p) {
          AstNode* right     = castExpr(p);
          if (right) {
             int   node_type = optok->cast.character == '*' ? Ast_MUL : Ast_DIV;
-            left            = makeAstNode(p->arena, node_type, left, right);
+            AstNode* child = left;
+            left            = makeAstNode(p->arena, node_type, 0,0);
+            left->child = child;
+            left->child->next = right;
          } else {
             parseError(p, "Expected expression after '*'");
          }
@@ -290,7 +299,10 @@ additiveExpr(Parser* p) {
          AstNode* right     = multiplicativeExpr(p);
          if (right) {
             int   node_type = optok->cast.character == '+' ? Ast_ADD : Ast_SUB;
-            left            = makeAstNode(p->arena, node_type, left, right);
+            AstNode* child = left;
+            left            = makeAstNode(p->arena, node_type, 0,0);
+            left->child = child;
+            left->child->next = right;
          } else {
             parseError(p, "Expected expression after '+'");
          }
@@ -326,7 +338,11 @@ relationalExpression(Parser* p) {
                 t = Ast_LEQ;
             } break;
          }
+         AstNode* child = left;
          left = makeAstNode(p->arena, t, left, right);
+         left->child = child;
+         left->child->next = right;
+
       }
    }
    return left;
@@ -342,8 +358,10 @@ equalityExpression(Parser* p) {
       while ((eq = nextPunctuator(p, EQUALS)) || (eq = nextPunctuator(p, NOT_EQUALS))) {
          AstNode* right = relationalExpression(p);
          if (!right) { parseError(p, "Expected expression after equality operator."); }
-
-         left = makeAstNode(p->arena, eq->value == EQUALS? Ast_EQUALS : Ast_NOT_EQUALS, left, right);
+         AstNode* child = left;
+         left = makeAstNode(p->arena, eq->value == EQUALS? Ast_EQUALS : Ast_NOT_EQUALS, 0,0 );
+         left->child = child;
+         left->child->next = right;
       }
    }
 
@@ -453,8 +471,11 @@ assignmentExpression(Parser* p) {
    if ((unary = unaryExpr(p))
        && (op = assignmentOperator(p))
        && (assignment = assignmentExpression(p))) {
-      t = makeAstNode(p->arena, Ast_ASSIGN_EXPR, unary, assignment);
-      t->tok = op;
+      t = makeAstNode(p->arena, Ast_ASSIGN_EXPR, 0, 0);
+
+      t->assignment_expr.op = op;
+      t->assignment_expr.lhs = unary;
+      t->assignment_expr.rhs = assignment;
    }
    else {
       backtrack(p, bt);
@@ -466,18 +487,20 @@ assignmentExpression(Parser* p) {
 
 AstNode*
 argumentExpressionList(Parser* p) {
-   AstNode* args = NULL;
-   AstNode** iter = &args;
+   AstNode* res = makeAstNode(p->arena, Ast_ARGUMENT_EXPR_LIST,0,0);
+
+   struct AstNodeArgument* arg = &res->arg_expr_list;
+
    while (true) {
       AstNode* assignment = assignmentExpression(p);
       if (!assignment) {
          parseError(p, "Expected argument in expression list");
       }
       else {
-         *iter = assignment;
-         iter = &(*iter)->next;
-
+         arg->expr = assignment;
          if (peekPunctuator(p, ',')) {
+            arg->next = AllocType(p->arena, struct AstNodeArgument);
+            arg = arg->next;
             nextToken(p);
          }
          else {
@@ -485,7 +508,7 @@ argumentExpressionList(Parser* p) {
          }
       }
    }
-   return args;
+   return res;
 }
 
 
@@ -543,6 +566,8 @@ parseStructDeclarationList(Parser* p) {
       expectPunctuator(p, ';');
 
       *decls_iter = makeAstNode(p->arena, Ast_DECLARATION, specs, decl);
+      (*decls_iter)->child = specs;
+      (*decls_iter)->child->next = decl;
       decls_iter = &(*decls_iter)->next;
    }
 end:
@@ -734,7 +759,7 @@ parseDeclarator(Parser* p) {
    Token* bt = marktrack(p);
    u32 pointer_stars = 0;
 
-   if (nextPunctuator(p, '*')) {
+   while (nextPunctuator(p, '*')) {
       pointer_stars++;
    }
 
@@ -802,7 +827,9 @@ parseDeclaration(Parser* p) {
       expectPunctuator(p, ';');
 
       noneIfNull(p->arena, &declarator);
-      result = makeAstNode(p->arena, Ast_DECLARATION, specifiers, declarator);
+      result = makeAstNode(p->arena, Ast_DECLARATION, 0,0);
+      result->child = specifiers;
+      result->child->next = declarator;
    }
    return result;
 }
@@ -847,7 +874,8 @@ parseCompoundStatement(Parser* p) {
          }
          if (!*cur) {
             if (nextPunctuator(p, '}')) {
-               compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, first_stmt, NULL);
+               compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, NULL, NULL);
+               compound_stmt->child = first_stmt;
             }
          }
       } while (*cur);
@@ -927,6 +955,7 @@ parseStatement(Parser* p) {
             body->next = NULL;
 
             stmt = makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
+            stmt->child = declarations;
          }
       }
    }
@@ -962,9 +991,22 @@ parseStatement(Parser* p) {
          control->next = after;
          after->next = body;
          stmt = makeAstNode(p->arena, Ast_ITERATION, declaration, NULL);
+         stmt->child = declaration;
       }
    }
    return stmt;
+}
+
+Ctype*
+resolveTypeAndDeclarator(Arena* arena, Ctype* type, u32 stars) {
+   Ctype* result = type;
+   while (stars--) {
+      Ctype* new_type = AllocType(arena, Ctype);
+      new_type->type = Type_POINTER;
+      new_type->pointer.pointee = result;
+      result = new_type;
+   }
+   return result;
 }
 
 AstNode*
@@ -993,22 +1035,13 @@ parseFunctionDefinition(Parser* p) {
          Ctype* s_params = NULL;
 
          while (param) {
-            Ctype* type = &param->decl_specifier->decl_specifier.ctype;
             u32 stars = param->declarator->declarator.pointer_stars;
-            while (stars) {
-               Ctype* new_type = AllocType(p->arena, Ctype);
-               new_type->type = Type_POINTER;
-               new_type->pointer.pointee = type;
-               type = new_type;
-               --stars;
-            }
+            Ctype* type = resolveTypeAndDeclarator(p->arena, &param->decl_specifier->decl_specifier.ctype, stars);
             bufPush(s_params, *type);
             param = param->next;
          }
 
-         Ctype* return_type = &declaration_specifier->ctype;
-
-         // TODO: pointer return type
+         Ctype* return_type = resolveTypeAndDeclarator(p->arena, &declaration_specifier->ctype, declarator->declarator.pointer_stars);
 
          Ctype type = {
             .type = Type_FUNC,
@@ -1018,7 +1051,7 @@ parseFunctionDefinition(Parser* p) {
             },
          };
 
-         node->funcdef.label = declarator->child->tok->cast.string;
+         node->funcdef.label = declarator->declarator.id;
          node->funcdef.declarator = declarator;
          node->funcdef.compound_stmt = stmts;
          node->funcdef.ctype = type;

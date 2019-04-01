@@ -448,7 +448,7 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
       codegenError("%s is not a function.", label);
    }
 
-   AstNode* args = node->child->next;
+   struct AstNodeArgument* args = &node->child->next->arg_expr_list;
 
    // TODO: Remove reference to MachineX64
    MachineX64* m_totally_temp = (MachineX64*)c->m;
@@ -456,17 +456,17 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
 
    // Check count
    {
-      u64 n_param = 0;
-      for (AstNode* arg = args;
+      u64 n_arg = 0;
+      for (struct AstNodeArgument* arg = args;
            arg != NULL;
            arg = arg->next) {
-         n_param++;
+         n_arg++;
       }
 
       u64 expected_nparam = bufCount(sym->c.func.s_params);
-      if (n_param != expected_nparam) {
+      if (n_arg != expected_nparam) {
          codegenError("Wrong number of arguments in call to %s. Expected %d but got %d.",
-                      label, expected_nparam, n_param);
+                      label, expected_nparam, n_arg);
       }
    }
 
@@ -476,12 +476,12 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
    m->beginFuncParams(m);
    {
       u32 arg_idx = 0;
-      for (AstNode* arg = args;
+      for (struct AstNodeArgument* arg = args;
            arg != NULL;
            arg = arg->next) {
          RegVar et_buf = {0};
          RegVar* et = &et_buf;
-         emitExpression(c, arg, et, Target_ACCUM);
+         emitExpression(c, arg->expr, et, Target_ACCUM);
          Ctype expected_type = {0};
          //expected_et.c.pointer.pointee = &pointee;
          //paramType(&expected_et.c, expected_param);
@@ -574,9 +574,9 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          } break;
          // Assignment expressions
          case Ast_ASSIGN_EXPR: {
-            AstNode* lhs = node->child;
-            AstNode* rhs = lhs->next;
-            Token* op = node->tok;
+            AstNode* lhs = node->assignment_expr.lhs;
+            AstNode* rhs = node->assignment_expr.rhs;
+            Token* op = node->assignment_expr.op;
 
             RegVar lhs_type = Zero;
 
@@ -914,14 +914,11 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    u64 bits = 0;
 
+   Ctype* type = resolveTypeAndDeclarator(c->arena, &specifier->ctype, declarator->declarator.pointer_stars);
+
    // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_AGGREGATE) {
-      if (declarator->declarator.pointer_stars) {
-         bits = pointerSizeBits();
-      }
-      else {
-         bits = typeBits(&specifier->ctype);
-      }
+      bits = typeBits(type);
    }
    else {
       char* tag_str = specifier->ctype.aggr.tag;
@@ -936,8 +933,6 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             codegenError("Struct identifier redeclared: %s");
          }
 
-         // TODO: Parameter passing is tied to ABI. Move to machine abstraction
-
          Tag* tag = tagInsert(&c->scope->tag_table, tag_str, (Tag){0});
          tag->rvar = (RegVar) {
             .c = specifier->ctype,
@@ -950,19 +945,13 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
               decl = decl->next) {
             AstNode* spec = decl->child;
             AstNode* declarator = spec->next;
-            char* member_id = declarator->child->tok->cast.string;
+            char* member_id = declarator->declarator.id;
 
             Assert(offset % 8 == 0);
             struct TagMember member = { member_id, spec->ctype, offset/8 };
             bufPush(tag->s_members, member);
 
-            Ctype* ctype = NULL;
-            if (declarator->declarator.pointer_stars) {
-               NotImplemented("struct member is pointer");
-            }
-            else {
-               ctype = &spec->ctype;
-            }
+            Ctype* ctype = resolveTypeAndDeclarator(c->arena, &spec->ctype, declarator->declarator.pointer_stars);
 
             offset += typeBits(ctype);
             offset = AlignPow2(offset, 8);
@@ -975,10 +964,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             codegenError("Use of undeclared struct %s", tag_str);
          }
 
-         if (declarator->declarator.pointer_stars)
-            bits = pointerSizeBits();
-         else
-            bits = typeBits(&entry->rvar.c);
+         bits = typeBits(&entry->rvar.c);
       }
    }
 
@@ -986,8 +972,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    // Declare a new symbol.
    if (declarator->type != Ast_NONE) {
-      AstNode* ast_id = declarator->child;
-      char* id_str = ast_id->tok->cast.string;
+      char* id_str = declarator->declarator.id;
       if (symGet(&c->scope->symbol_table, id_str) != NULL) {
          codegenError("Symbol redeclared in scope");
       }
@@ -1004,14 +989,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
                                      .location = { .type = Location_STACK, .offset = m_totally_temp->stack_offset },
                                   });
 
-      if (declarator->declarator.pointer_stars) {
-         entry->c.type = Type_POINTER;
-         entry->c.pointer.pointee = AllocType(c->arena, RegVar);
-         entry->c.pointer.pointee = &specifier->ctype;
-      }
-      else {
-         entry->c = specifier->ctype;
-      }
+      entry->c = *type;
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
          RegVar* imm = c->m->immediateFromToken(c->m, rhs->tok);
@@ -1171,7 +1149,7 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    if (declarator && compound) {
       c->current_function = node;
 
-      char *func_name = declarator->child->tok->cast.string;
+      char *func_name = declarator->declarator.id;
 
       RegVar* entry = findSymbol(c, func_name);
       if (entry) {
@@ -1211,7 +1189,6 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
          char* id_str = param_declarator->declarator.id;
 
          Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
-         Assert (param_declarator && param_declarator->child->type == Ast_ID);
 
          Ctype param_type;
          if (param_declarator->declarator.pointer_stars) {
