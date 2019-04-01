@@ -433,11 +433,23 @@ emitStructMemberAccess(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget ta
 
 void emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target); // Forward decl.
 
+char*
+getFunctionLabel(Codegen* g, AstNode* id) {
+   char* result = NULL;
+   if (id->type == Ast_ID) {
+      result = id->as_id.tok->cast.string;
+   }
+   else {
+      NotImplemented("Function label for non-id primary expressions");
+   }
+   return result;
+}
+
 void
 emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Machine* m = c->m;
-   AstNode* id = node->child;
-   char* label = id->tok->cast.string;
+
+   char* label = getFunctionLabel(c, node->as_funccall.expr);
 
    RegVar* sym = findSymbol(c, label);
    if (!sym) {
@@ -448,7 +460,7 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
       codegenError("%s is not a function.", label);
    }
 
-   struct AstNodeArgument* args = &node->child->next->as_arg_expr_list;
+   struct AstNodeArgument* args = node->as_funccall.arg_expr_list;
 
    // TODO: Remove reference to MachineX64
    MachineX64* m_totally_temp = (MachineX64*)c->m;
@@ -905,16 +917,16 @@ void emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target);
 
 void
 emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
-   AstNode* specifier = node->child;
-   AstNode* declarator = specifier->next;
-   AstNode* rhs = declarator->next;
+   struct AstNodeDeclSpec* specifier = node->as_declaration.decl_spec;
+   struct AstNodeDeclarator* declarator = node->as_declaration.declarator;
+   AstNode* rhs = node->as_declaration.rhs;
    Machine* m = c->m;
 
    // TODO: Emit warning for empty declarations.
 
    u64 bits = 0;
 
-   Ctype* type = resolveTypeAndDeclarator(c->arena, &specifier->ctype, declarator->as_declarator.pointer_stars);
+   Ctype* type = resolveTypeAndDeclarator(c->arena, &specifier->ctype, declarator->pointer_stars);
 
    // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_AGGREGATE) {
@@ -948,17 +960,17 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             char* member_id = declarator->as_declarator.id;
 
             Assert(offset % 8 == 0);
-            struct TagMember member = { member_id, spec->ctype, offset/8 };
+            struct TagMember member = { member_id, spec->as_decl_specifier.ctype, offset/8 };
             bufPush(tag->s_members, member);
 
-            Ctype* ctype = resolveTypeAndDeclarator(c->arena, &spec->ctype, declarator->as_declarator.pointer_stars);
+            Ctype* ctype = resolveTypeAndDeclarator(c->arena, &spec->as_decl_specifier.ctype, declarator->as_declarator.pointer_stars);
 
             offset += typeBits(ctype);
             offset = AlignPow2(offset, 8);
          }
          Assert(typeBits(&specifier->ctype) == offset);
       }
-      else if (tag_str && declarator->type != Ast_NONE) {
+      else if (tag_str && specifier) {
          Tag* entry = findTag(c->scope, tag_str);
          if (!entry) {
             codegenError("Use of undeclared struct %s", tag_str);
@@ -971,8 +983,8 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
    Assert (bits != 0);
 
    // Declare a new symbol.
-   if (declarator->type != Ast_NONE) {
-      char* id_str = declarator->as_declarator.id;
+   if (declarator) {
+      char* id_str = declarator->id;
       if (symGet(&c->scope->symbol_table, id_str) != NULL) {
          codegenError("Symbol redeclared in scope");
       }
@@ -990,12 +1002,12 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
                                   });
 
 
-      if (isLiteral(rhs)) {               // Literal right-hand-side
+      if (rhs && isLiteral(rhs)) {               // Literal right-hand-side
          RegVar* imm = c->m->immediateFromToken(c->m, rhs->tok);
 
          c->m->mov(c->m, entry, imm);
       }
-      else if (rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
+      else if (rhs && rhs->type != Ast_NONE) {    // Non-literal right-hand-side.
          RegVar rvar = Zero;
          emitExpression(c, rhs, &rvar, Target_ACCUM);
          if (maybeEmitTypeConversion(c, &rvar, entry->c, Target_ACCUM, "Attempting to assign from incompatible type.")) {
@@ -1142,13 +1154,13 @@ void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    Machine* m = c->m;
 
-   AstNode* declarator  = node->as_funcdef.declarator;
-   AstNode* compound    = node->as_funcdef.compound_stmt;
+   struct AstNodeDeclarator* declarator  = node->as_funcdef.declarator;
+   struct AstNode* compound    = node->as_funcdef.compound_stmt;
 
    if (declarator && compound) {
       c->current_function = node;
 
-      char *func_name = declarator->as_declarator.id;
+      char *func_name = declarator->id;
 
       RegVar* entry = findSymbol(c, func_name);
       if (entry) {
@@ -1180,23 +1192,22 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
 
       m->beginFuncParams(m);
 
-
-      struct AstNodeParameter* param = declarator->as_declarator.params ? &declarator->as_declarator.params->as_parameter : NULL;
+      struct AstNodeParameter* param = declarator->params ? &declarator->params->as_parameter : NULL;
       while (param) {
          AstNode* param_type_spec = param->decl_specifier;
-         AstNode* param_declarator = param->declarator;
-         char* id_str = param_declarator->as_declarator.id;
+         struct AstNodeDeclarator* param_declarator = param->declarator;
+         char* id_str = param_declarator->id;
 
          Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
 
          Ctype param_type;
-         if (param_declarator->as_declarator.pointer_stars) {
+         if (param_declarator->pointer_stars) {
             param_type.type = Type_POINTER;
             param_type.pointer.pointee = AllocType(c->arena, RegVar);
             param_type.pointer.pointee = &param_type_spec->as_decl_specifier.ctype;
          }
          else {
-            param_type = param_type_spec->ctype;
+            param_type = param_type_spec->as_decl_specifier.ctype;
          }
 
          Location param_loc = m->popParameter(m, c->scope, &param_type);

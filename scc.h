@@ -314,11 +314,17 @@ typedef enum AstType_n {
 struct AstNode {
    AstType  type;
    union {
-
       // Ast_DECLARATION_SPECIFIER
-      struct {
+      struct AstNodeDeclSpec {
          Ctype ctype;
       } as_decl_specifier;
+
+      // Ast_DECLARATOR
+      struct AstNodeDeclarator {
+         char* id;
+         struct AstNode* params;  // Ast_PARAMETER
+         u32 pointer_stars;
+      } as_declarator;
 
       // Ast_NUMBER
       struct {
@@ -348,42 +354,54 @@ struct AstNode {
       // Ast_PARAMETER
       struct AstNodeParameter {
          struct AstNode* decl_specifier;
-         struct AstNode* declarator;
+         struct AstNodeDeclarator* declarator;
          struct AstNodeParameter* next;
       } as_parameter;
 
       // Ast_ARGUMENT_EXPR_LIST
-      struct AstNodeArgument{
+      struct AstNodeArgument {
          struct AstNode* expr;
          struct AstNodeArgument* next;
       } as_arg_expr_list;
-
-      // Ast_DECLARATOR
-      struct {
-         char* id;
-         struct AstNode* params;  // Ast_PARAMETER
-         u32 pointer_stars;
-      } as_declarator;
 
       // Ast_FUNCDEF
       struct {
          char* label;
          Ctype ctype;  // Function type (return type & param types)
-         struct AstNode* declarator;
+         struct AstNodeDeclarator* declarator;
          struct AstNode* compound_stmt;
       } as_funcdef;
 
+      // Ast_ASSIGN_EXPR
       struct AstNodeAssignExpr {
          struct AstNode* lhs;
          Token* op;
          struct AstNode* rhs;
       } as_assignment_expr;
 
+      // Ast_FUNCCALL
+      struct {
+          struct AstNode* expr;
+          struct AstNodeArgument* arg_expr_list;
+      } as_funccall;
+
+      // Ast_DECLARATION
+      struct AstNodeDeclaration {
+        struct AstNodeDeclSpec* decl_spec;
+        struct AstNodeDeclarator* declarator;
+        struct AstNode* rhs;
+      } as_declaration;
+
+      // Ast_DECLARATION_LIST
+      struct AstNodeDeclarationList {
+        struct AstNodeDeclaration* declaration;
+        struct AstNodeDeclarationList* next;
+      } as_decl_list;
+
       // When the node corresponds to a token.
       // TODO: Get rid of all variables not inside a struct.
-       Token*   tok;
-       Ctype    ctype;
    };
+   Token*   tok;
    struct AstNode* child;
    struct AstNode* next;
 

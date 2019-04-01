@@ -8,10 +8,11 @@ X(Ast_STRUCT_MEMBER_ACCESS)
 X(Ast_POSTFIX_INC)
 X(Ast_POSTFIX_DEC)
 X(Ast_FUNCDEF)
-X(Ast_FUNCCALL)  // children: primary, arg expr list
+X(Ast_FUNCCALL)
 X(Ast_PARAMETER)
 X(Ast_DECLARATION)  // children: specifiers, declarator
 X(Ast_DECLARATOR)
+X(Ast_DECLARATION_LIST)
 X(Ast_ARGUMENT_EXPR_LIST)
 X(Ast_RETURN)
 X(Ast_ADD)              // children: left, right

@@ -169,15 +169,15 @@ postfixExpr(Parser* p) {
          if (nextPunctuator(p, ')')) {
             right = left;
             left = makeAstNode(p->arena, Ast_FUNCCALL, 0, NULL);
-            left->child = right;
+            left->as_funccall.expr = right;
          }
          else {
             AstNode* args = argumentExpressionList(p);
             if (nextPunctuator(p, ')')) {
                right = left;
                left = makeAstNode(p->arena, Ast_FUNCCALL, 0,0);
-               left->child = right;
-               left->child->next = args;
+               left->as_funccall.expr = right;
+               left->as_funccall.arg_expr_list = &args->as_arg_expr_list;
             }
             else {
                parseError(p, "Expected ) in function call.");
@@ -526,8 +526,9 @@ AstNode* parseDeclarator(Parser* p);
 
 AstNode*
 parseStructDeclarationList(Parser* p) {
-   AstNode* decls = NULL;
-   AstNode** decls_iter = &decls;
+   AstNode* decls = makeAstNode(p->arena, Ast_DECLARATION_LIST, 0,0);
+   struct AstNodeDeclarationList* list = &decls->as_decl_list;
+   struct AstNodeDeclarationList** list_iter = &list;
    // Parse struct declarations
    while (true) {
       // Parse a list of type specifiers
@@ -565,10 +566,13 @@ parseStructDeclarationList(Parser* p) {
 
       expectPunctuator(p, ';');
 
-      *decls_iter = makeAstNode(p->arena, Ast_DECLARATION, specs, decl);
-      (*decls_iter)->child = specs;
-      (*decls_iter)->child->next = decl;
-      decls_iter = &(*decls_iter)->next;
+      if (!*list_iter) { *list_iter = AllocType(p->arena, struct AstNodeDeclarationList); }
+
+      (*list_iter)->declaration = AllocType(p->arena, struct AstNodeDeclaration);
+      (*list_iter)->declaration->decl_spec = &specs->as_decl_specifier;
+      (*list_iter)->declaration->declarator = &decl->as_declarator;
+
+      list_iter = &(*list_iter)->next;
    }
 end:
 
@@ -616,10 +620,11 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
             }
          }
          if (decl_list) {
-            for (AstNode* decl = decl_list;
-                 decl;
-                 decl = decl->next) {
-               AstNode* spec = decl->child;
+            for (struct AstNodeDeclarationList* decls = &decl_list->as_decl_list;
+                 decls;
+                 decls = decls->next) {
+               struct AstNodeDeclaration* decl = decls->declaration;
+               struct AstNodeDeclSpec* spec = decl->decl_spec;
                out->aggr.bits += typeBits(&spec->ctype);
                out->aggr.bits = AlignPow2(out->aggr.bits, 8);
             }
@@ -706,7 +711,7 @@ parseDeclarationSpecifiers(Parser* p) {
    }
    if (ctype.type != Type_NONE) {
       result = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, line_number);
-      result->ctype = ctype;
+      result->as_decl_specifier.ctype = ctype;
    }
 
    return result;
@@ -734,7 +739,7 @@ parameterTypeList(Parser* p) {
 
          AstNode* declarator = parseOrBacktrack(parseDeclarator, p);
          if (declarator) {
-            param->declarator = declarator;
+            param->declarator = &declarator->as_declarator;
          }
          if (peekPunctuator(p, ',')) {
             // There is another parameter.
@@ -814,9 +819,9 @@ parseDeclaration(Parser* p) {
    if (specifiers) {
       AstNode* declarator = parseDeclarator(p);
 
-      if (declarator) {
-         AstNode* initializer = NULL;
+      AstNode* initializer = NULL;
 
+      if (declarator) {
          if (nextPunctuator(p, '=')) {
             initializer = parseInitializer(p);
          }
@@ -826,10 +831,10 @@ parseDeclaration(Parser* p) {
 
       expectPunctuator(p, ';');
 
-      noneIfNull(p->arena, &declarator);
       result = makeAstNode(p->arena, Ast_DECLARATION, 0,0);
-      result->child = specifiers;
-      result->child->next = declarator;
+      result->as_declaration.decl_spec = &specifiers->as_decl_specifier;
+      result->as_declaration.declarator = &declarator->as_declarator;
+      result->as_declaration.rhs = initializer;
    }
    return result;
 }
@@ -1035,13 +1040,13 @@ parseFunctionDefinition(Parser* p) {
          Ctype* s_params = NULL;
 
          while (param) {
-            u32 stars = param->declarator->as_declarator.pointer_stars;
+            u32 stars = param->declarator->pointer_stars;
             Ctype* type = resolveTypeAndDeclarator(p->arena, &param->decl_specifier->as_decl_specifier.ctype, stars);
             bufPush(s_params, *type);
             param = param->next;
          }
 
-         Ctype* return_type = resolveTypeAndDeclarator(p->arena, &declaration_specifier->ctype, declarator->as_declarator.pointer_stars);
+         Ctype* return_type = resolveTypeAndDeclarator(p->arena, &declaration_specifier->as_decl_specifier.ctype, declarator->as_declarator.pointer_stars);
 
          Ctype type = {
             .type = Type_FUNC,
@@ -1052,7 +1057,7 @@ parseFunctionDefinition(Parser* p) {
          };
 
          node->as_funcdef.label = declarator->as_declarator.id;
-         node->as_funcdef.declarator = declarator;
+         node->as_funcdef.declarator = &declarator->as_declarator;
          node->as_funcdef.compound_stmt = stmts;
          node->as_funcdef.ctype = type;
 
