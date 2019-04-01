@@ -128,12 +128,12 @@ primaryExpr(Parser* p) {
        tok->type == TType_DOUBLE) {
       t       = newNode(p->arena);
       t->type = Ast_NUMBER;
-      t->number.tok  = tok;
+      t->as_number.tok  = tok;
    }
    else if (tok->type == TType_ID) {
       t       = newNode(p->arena);
       t->type = Ast_ID;
-      t->id.tok  = tok;
+      t->as_id.tok  = tok;
    }
    else if (tok->type == TType_STRING_LITERAL) {
       NotImplemented("String literal");
@@ -194,7 +194,7 @@ postfixExpr(Parser* p) {
             parseError(p, "Expected identifier after '.' or '->'");
          }
          AstNode* right = makeAstNode(p->arena, Ast_ID, 0, 0);
-         right->id.tok = id;
+         right->as_id.tok = id;
          AstNode* child = left;
          left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, 0,0);
          left->child = child;
@@ -203,12 +203,12 @@ postfixExpr(Parser* p) {
       else if (nextPunctuator(p, INCREMENT)) {
          AstNode* expr = left;
          left = makeAstNode(p->arena, Ast_POSTFIX_INC, 0, 0);
-         left->single_expr.expr = expr;
+         left->as_single_expr.expr = expr;
       }
       else if (nextPunctuator(p, DECREMENT)) {
          AstNode* expr = left;
          left = makeAstNode(p->arena, Ast_POSTFIX_DEC, 0, 0);
-         left->single_expr.expr = expr;
+         left->as_single_expr.expr = expr;
       }
 
       if (!right) {
@@ -245,7 +245,7 @@ unaryExpr(Parser* p) {
          parseError(p, "Expected expression after &");
       }
       t = makeAstNode(p->arena, Ast_ADDRESS, 0, 0);
-      t->single_expr.expr = postfix;
+      t->as_single_expr.expr = postfix;
    }
    else {
       t = postfixExpr(p);
@@ -473,9 +473,9 @@ assignmentExpression(Parser* p) {
        && (assignment = assignmentExpression(p))) {
       t = makeAstNode(p->arena, Ast_ASSIGN_EXPR, 0, 0);
 
-      t->assignment_expr.op = op;
-      t->assignment_expr.lhs = unary;
-      t->assignment_expr.rhs = assignment;
+      t->as_assignment_expr.op = op;
+      t->as_assignment_expr.lhs = unary;
+      t->as_assignment_expr.rhs = assignment;
    }
    else {
       backtrack(p, bt);
@@ -489,7 +489,7 @@ AstNode*
 argumentExpressionList(Parser* p) {
    AstNode* res = makeAstNode(p->arena, Ast_ARGUMENT_EXPR_LIST,0,0);
 
-   struct AstNodeArgument* arg = &res->arg_expr_list;
+   struct AstNodeArgument* arg = &res->as_arg_expr_list;
 
    while (true) {
       AstNode* assignment = assignmentExpression(p);
@@ -541,7 +541,7 @@ parseStructDeclarationList(Parser* p) {
          }
          nextToken(p);
          AstNode* spec = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, p->token->line_number);
-         spec->decl_specifier.ctype = ctype;
+         spec->as_decl_specifier.ctype = ctype;
          (*iter) = spec;
          iter = &spec->next;
       }
@@ -723,7 +723,7 @@ parameterTypeList(Parser* p) {
          if (!result) {
             Assert(!param);
             result = makeAstNode(p->arena, Ast_PARAMETER, 0, 0);
-            param = &result->parameter;
+            param = &result->as_parameter;
          }
          else {
             param->next = AllocType(p->arena, struct AstNodeParameter);
@@ -775,7 +775,7 @@ parseDeclarator(Parser* p) {
 
    if ((t = nextToken(p)) && (t->type == TType_ID)) {
       AstNode* node = makeAstNodeWithLineNumber(p->arena, Ast_ID, NULL, NULL, t->line_number);
-      node->id.tok = t;
+      node->as_id.tok = t;
       AstNode* params = NULL;
       if (nextPunctuator(p, '(')) {
          params = parseOrBacktrack(parameterTypeList, p);
@@ -784,9 +784,9 @@ parseDeclarator(Parser* p) {
          }
       }
       r = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATOR, node, NULL, t->line_number);
-      r->declarator.id = t->cast.string;
-      r->declarator.params = params;
-      r->declarator.pointer_stars = pointer_stars;
+      r->as_declarator.id = t->cast.string;
+      r->as_declarator.params = params;
+      r->as_declarator.pointer_stars = pointer_stars;
    }
    else {
       backtrack(p, bt);
@@ -844,7 +844,7 @@ parseJumpStatement(Parser* p) {
    if (t->type == TType_KEYWORD && t->value == Keyword_return) {
       AstNode* expr = parseOrBacktrack(parseExpression, p);
       stmt = makeAstNode(p->arena, Ast_RETURN, 0, NULL);
-      stmt->single_expr.expr = expr;
+      stmt->as_single_expr.expr = expr;
       expectPunctuator(p, ';');
    }
    else {
@@ -915,12 +915,12 @@ parseStatement(Parser* p) {
          AstNode* then = parseStatement(p);
          if (then) {
             stmt = makeAstNode(p->arena, Ast_IF, 0, 0);
-            stmt->if_.condition = cond;
-            stmt->if_.then = then;
+            stmt->as_if.condition = cond;
+            stmt->as_if.then = then;
 
             if (nextKeyword(p, Keyword_else)) {
                AstNode* else_ = parseStatement(p);
-               stmt->if_.else_ = else_;
+               stmt->as_if.else_ = else_;
             }
          } else {
             parseError(p, "Expected else clause after if.");
@@ -1030,18 +1030,18 @@ parseFunctionDefinition(Parser* p) {
       else {
          AstNode* node = makeAstNode(p->arena, Ast_FUNCDEF, 0, 0);
 
-         struct AstNodeParameter* param = declarator->declarator.params ? &declarator->declarator.params->parameter : NULL;
+         struct AstNodeParameter* param = declarator->as_declarator.params ? &declarator->as_declarator.params->as_parameter : NULL;
 
          Ctype* s_params = NULL;
 
          while (param) {
-            u32 stars = param->declarator->declarator.pointer_stars;
-            Ctype* type = resolveTypeAndDeclarator(p->arena, &param->decl_specifier->decl_specifier.ctype, stars);
+            u32 stars = param->declarator->as_declarator.pointer_stars;
+            Ctype* type = resolveTypeAndDeclarator(p->arena, &param->decl_specifier->as_decl_specifier.ctype, stars);
             bufPush(s_params, *type);
             param = param->next;
          }
 
-         Ctype* return_type = resolveTypeAndDeclarator(p->arena, &declaration_specifier->ctype, declarator->declarator.pointer_stars);
+         Ctype* return_type = resolveTypeAndDeclarator(p->arena, &declaration_specifier->ctype, declarator->as_declarator.pointer_stars);
 
          Ctype type = {
             .type = Type_FUNC,
@@ -1051,10 +1051,10 @@ parseFunctionDefinition(Parser* p) {
             },
          };
 
-         node->funcdef.label = declarator->declarator.id;
-         node->funcdef.declarator = declarator;
-         node->funcdef.compound_stmt = stmts;
-         node->funcdef.ctype = type;
+         node->as_funcdef.label = declarator->as_declarator.id;
+         node->as_funcdef.declarator = declarator;
+         node->as_funcdef.compound_stmt = stmts;
+         node->as_funcdef.ctype = type;
 
          result = node;
       }

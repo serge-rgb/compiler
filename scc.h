@@ -318,24 +318,24 @@ struct AstNode {
       // Ast_DECLARATION_SPECIFIER
       struct {
          Ctype ctype;
-      } decl_specifier;
+      } as_decl_specifier;
 
       // Ast_NUMBER
       struct {
          Token* tok;
-      } number;
+      } as_number;
 
       // Ast_ID
       struct {
          Token* tok;
-      } id;
+      } as_id;
 
       // Ast_IF
       struct {
          struct AstNode* condition;
          struct AstNode* then;
          struct AstNode* else_;
-      } if_;
+      } as_if /*lol*/;
 
       // Ast_ADDRESS
       // Ast_POSTFIX_INC
@@ -343,27 +343,27 @@ struct AstNode {
       // Ast_RETURN
       struct {
          struct AstNode* expr;
-      } single_expr;
+      } as_single_expr;
 
       // Ast_PARAMETER
       struct AstNodeParameter {
          struct AstNode* decl_specifier;
          struct AstNode* declarator;
          struct AstNodeParameter* next;
-      } parameter;
+      } as_parameter;
 
       // Ast_ARGUMENT_EXPR_LIST
       struct AstNodeArgument{
          struct AstNode* expr;
          struct AstNodeArgument* next;
-      } arg_expr_list;
+      } as_arg_expr_list;
 
       // Ast_DECLARATOR
       struct {
          char* id;
          struct AstNode* params;  // Ast_PARAMETER
          u32 pointer_stars;
-      } declarator;
+      } as_declarator;
 
       // Ast_FUNCDEF
       struct {
@@ -371,18 +371,18 @@ struct AstNode {
          Ctype ctype;  // Function type (return type & param types)
          struct AstNode* declarator;
          struct AstNode* compound_stmt;
-      } funcdef;
+      } as_funcdef;
 
       struct AstNodeAssignExpr {
          struct AstNode* lhs;
          Token* op;
          struct AstNode* rhs;
-      } assignment_expr;
+      } as_assignment_expr;
 
       // When the node corresponds to a token.
       // TODO: Get rid of all variables not inside a struct.
-         Token*   tok;
-         Ctype    ctype;
+       Token*   tok;
+       Ctype    ctype;
    };
    struct AstNode* child;
    struct AstNode* next;

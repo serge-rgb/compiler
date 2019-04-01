@@ -16,7 +16,7 @@ codegenInit(Codegen* c, char* outfile, MachineConfigFlags mflags) {
    Token* one_tok = AllocType(c->arena, Token);
    one_tok->type = TType_NUMBER;
    one_tok->value = 1;
-   c->one->number.tok = one_tok;
+   c->one->as_number.tok = one_tok;
 
    c->instrOutputStack[ c->n_instrOutputStack++ ] = InstrOutput_ENABLED;
 }
@@ -288,7 +288,7 @@ getAddress(Codegen* c, AstNode* node) {
    RegVar* result = NULL;
    switch(node->type) {
       case Ast_ID: {
-         result = findSymbol(c, node->id.tok->cast.string);
+         result = findSymbol(c, node->as_id.tok->cast.string);
       } break;
    }
    return result;
@@ -299,7 +299,7 @@ emitIdentifier(Codegen*c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Assert(reg_var);
 
    Machine* m = c->m;
-   char* id_str = node->id.tok->cast.string;
+   char* id_str = node->as_id.tok->cast.string;
    RegVar* entry = findSymbol(c, id_str);
 
    Assert (entry->location.type == Location_STACK);
@@ -308,7 +308,7 @@ emitIdentifier(Codegen*c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    reg_var->location = entry->location;
 
    if (!entry) {
-      codegenError("Use of undeclared identifier %s", node->id.tok->cast.string);
+      codegenError("Use of undeclared identifier %s", node->as_id.tok->cast.string);
    }
 
    if (typeBits(&entry->c) > 64) {
@@ -448,7 +448,7 @@ emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) 
       codegenError("%s is not a function.", label);
    }
 
-   struct AstNodeArgument* args = &node->child->next->arg_expr_list;
+   struct AstNodeArgument* args = &node->child->next->as_arg_expr_list;
 
    // TODO: Remove reference to MachineX64
    MachineX64* m_totally_temp = (MachineX64*)c->m;
@@ -531,7 +531,7 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          } break;
          case Ast_NUMBER: {
             // Set type
-            switch (node->number.tok->type) {
+            switch (node->as_number.tok->type) {
                case TType_NUMBER: {
                   reg_var->c.type = Type_INT;
                } break;
@@ -552,16 +552,16 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
                   RegVar* accum = m->accumC(m, reg_var->c);
                   m->mov(m,
                      accum,
-                     m->immediateFromToken(m, node->number.tok));
+                     m->immediateFromToken(m, node->as_number.tok));
                   reg_var->location = accum->location;
                } break;
                case Target_STACK: {
-                  reg_var->location = m->stackPushImm(m, node->number.tok->value);
+                  reg_var->location = m->stackPushImm(m, node->as_number.tok->value);
                } break;
                case Target_NONE: {
                   reg_var->location = (Location) {
                      .type = Location_IMMEDIATE,
-                     .immediate_value = node->number.tok->value,
+                     .immediate_value = node->as_number.tok->value,
                   };
                } break;
             }
@@ -574,9 +574,9 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          } break;
          // Assignment expressions
          case Ast_ASSIGN_EXPR: {
-            AstNode* lhs = node->assignment_expr.lhs;
-            AstNode* rhs = node->assignment_expr.rhs;
-            Token* op = node->assignment_expr.op;
+            AstNode* lhs = node->as_assignment_expr.lhs;
+            AstNode* rhs = node->as_assignment_expr.rhs;
+            Token* op = node->as_assignment_expr.op;
 
             RegVar lhs_type = Zero;
 
@@ -647,7 +647,7 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          } break;
          case Ast_POSTFIX_INC:
          case Ast_POSTFIX_DEC: {
-            AstNode* expr = node->single_expr.expr;
+            AstNode* expr = node->as_single_expr.expr;
             RegVar local_rvar = Zero;
             emitExpression(c, expr, &local_rvar, Target_STACK);
             if (local_rvar.location.type == Location_IMMEDIATE) {
@@ -686,7 +686,7 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
             }
          } break;
          case Ast_ADDRESS: {
-            AstNode* expr = node->single_expr.expr;
+            AstNode* expr = node->as_single_expr.expr;
             RegVar* pointee = AllocType(c->arena, RegVar);
             emitExpression(c, expr, pointee, Target_NONE);
 
@@ -914,7 +914,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    u64 bits = 0;
 
-   Ctype* type = resolveTypeAndDeclarator(c->arena, &specifier->ctype, declarator->declarator.pointer_stars);
+   Ctype* type = resolveTypeAndDeclarator(c->arena, &specifier->ctype, declarator->as_declarator.pointer_stars);
 
    // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_AGGREGATE) {
@@ -945,13 +945,13 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
               decl = decl->next) {
             AstNode* spec = decl->child;
             AstNode* declarator = spec->next;
-            char* member_id = declarator->declarator.id;
+            char* member_id = declarator->as_declarator.id;
 
             Assert(offset % 8 == 0);
             struct TagMember member = { member_id, spec->ctype, offset/8 };
             bufPush(tag->s_members, member);
 
-            Ctype* ctype = resolveTypeAndDeclarator(c->arena, &spec->ctype, declarator->declarator.pointer_stars);
+            Ctype* ctype = resolveTypeAndDeclarator(c->arena, &spec->ctype, declarator->as_declarator.pointer_stars);
 
             offset += typeBits(ctype);
             offset = AlignPow2(offset, 8);
@@ -972,7 +972,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    // Declare a new symbol.
    if (declarator->type != Ast_NONE) {
-      char* id_str = declarator->declarator.id;
+      char* id_str = declarator->as_declarator.id;
       if (symGet(&c->scope->symbol_table, id_str) != NULL) {
          codegenError("Symbol redeclared in scope");
       }
@@ -985,11 +985,10 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
       RegVar* entry = symInsert(&c->scope->symbol_table,
                                   id_str,
                                   (RegVar){
-                                     .c = Zero,
+                                     .c = *type,
                                      .location = { .type = Location_STACK, .offset = m_totally_temp->stack_offset },
                                   });
 
-      entry->c = *type;
 
       if (isLiteral(rhs)) {               // Literal right-hand-side
          RegVar* imm = c->m->immediateFromToken(c->m, rhs->tok);
@@ -1023,10 +1022,10 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
       case Ast_RETURN: {
          // Emit code for the expression and move it to rax.
 
-         if (stmt->single_expr.expr) {
+         if (stmt->as_single_expr.expr) {
             RegVar et = {0};
-            emitExpression(c, stmt->single_expr.expr, &et, Target_ACCUM);
-            Ctype ret_type = *c->current_function->funcdef.ctype.func.return_type;
+            emitExpression(c, stmt->as_single_expr.expr, &et, Target_ACCUM);
+            Ctype ret_type = *c->current_function->as_funcdef.ctype.func.return_type;
 
             maybeEmitTypeConversion(c,
                                     &et,
@@ -1041,9 +1040,9 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          emitDeclaration(c, stmt, target);
       } break;
       case Ast_IF: {
-         AstNode* cond = stmt->if_.condition;
-         AstNode* then = stmt->if_.then;
-         AstNode* els = stmt->if_.else_;
+         AstNode* cond = stmt->as_if.condition;
+         AstNode* then = stmt->as_if.then;
+         AstNode* els = stmt->as_if.else_;
          char then_label[LabelMax] = {0};
          char else_label[LabelMax] = {0};
          char end_label[LabelMax] = {0};
@@ -1143,22 +1142,22 @@ void
 emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
    Machine* m = c->m;
 
-   AstNode* declarator  = node->funcdef.declarator;
-   AstNode* compound    = node->funcdef.compound_stmt;
+   AstNode* declarator  = node->as_funcdef.declarator;
+   AstNode* compound    = node->as_funcdef.compound_stmt;
 
    if (declarator && compound) {
       c->current_function = node;
 
-      char *func_name = declarator->declarator.id;
+      char *func_name = declarator->as_declarator.id;
 
       RegVar* entry = findSymbol(c, func_name);
       if (entry) {
          codegenError("Redefining function %s", func_name);
       }
       else {
-         Ctype* return_type = node->funcdef.ctype.func.return_type;
+         Ctype* return_type = node->as_funcdef.ctype.func.return_type;
 
-         Ctype* s_params = node->funcdef.ctype.func.s_params;
+         Ctype* s_params = node->as_funcdef.ctype.func.s_params;
 
          // TODO: function ctype. grab pointer from declarator and type from specifier
          symInsert(&c->scope->symbol_table,
@@ -1182,19 +1181,19 @@ emitFunctionDefinition(Codegen* c, AstNode* node, EmitTarget target) {
       m->beginFuncParams(m);
 
 
-      struct AstNodeParameter* param = declarator->declarator.params ? &declarator->declarator.params->parameter : NULL;
+      struct AstNodeParameter* param = declarator->as_declarator.params ? &declarator->as_declarator.params->as_parameter : NULL;
       while (param) {
          AstNode* param_type_spec = param->decl_specifier;
          AstNode* param_declarator = param->declarator;
-         char* id_str = param_declarator->declarator.id;
+         char* id_str = param_declarator->as_declarator.id;
 
          Assert (param_type_spec && param_type_spec->type == Ast_DECLARATION_SPECIFIER);
 
          Ctype param_type;
-         if (param_declarator->declarator.pointer_stars) {
+         if (param_declarator->as_declarator.pointer_stars) {
             param_type.type = Type_POINTER;
             param_type.pointer.pointee = AllocType(c->arena, RegVar);
-            param_type.pointer.pointee = &param_type_spec->decl_specifier.ctype;
+            param_type.pointer.pointee = &param_type_spec->as_decl_specifier.ctype;
          }
          else {
             param_type = param_type_spec->ctype;
