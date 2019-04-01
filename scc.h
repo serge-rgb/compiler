@@ -10,23 +10,23 @@
 // ==============================
 
 enum ErrorCode {
-  Ok = 0,
-  Fail = 1,
+   Ok = 0,
+   Fail = 1,
 
-  CouldNotReadFile,
-  CouldNotOpenDir,
-  NotADirectory,
-  WrongNumberOfArguments,
-  InvalidArgument,
+   CouldNotReadFile,
+   CouldNotOpenDir,
+   NotADirectory,
+   WrongNumberOfArguments,
+   InvalidArgument,
 
-  // Argument parsing.
-  Filename,
-  Flag,
+   // Argument parsing.
+   Filename,
+   Flag,
 
-  // Compiler work flow
-  IntParse,
-  CouldNotAssemble,
-  CouldNotLink,
+   // Compiler work flow
+   IntParse,
+   CouldNotAssemble,
+   CouldNotLink,
 } typedef ErrorCode;
 
 static char* SccErrorMessage;
@@ -387,16 +387,46 @@ struct AstNode {
 
       // Ast_DECLARATION
       struct AstNodeDeclaration {
-        struct AstNodeDeclSpec* decl_spec;
-        struct AstNodeDeclarator* declarator;
-        struct AstNode* rhs;
+         struct AstNodeDeclSpec* decl_spec;
+         struct AstNodeDeclarator* declarator;
+         struct AstNode* rhs;
       } as_declaration;
 
       // Ast_DECLARATION_LIST
       struct AstNodeDeclarationList {
-        struct AstNodeDeclaration* declaration;
-        struct AstNodeDeclarationList* next;
+         struct AstNodeDeclaration* declaration;
+         struct AstNodeDeclarationList* next;
       } as_decl_list;
+
+      // Ast_STRUCT_MEMBER_ACCESS
+      struct {
+         struct AstNode* primary_expr;
+         char* field;
+      } as_member_access;
+
+      // Binary expressions
+      // Ast_ADD
+      // Ast_SUB
+      // Ast_MUL
+      // Ast_DIV
+      // Ast_LOGICAL_AND
+      // Ast_EQUALS
+      // Ast_NOT_EQUALS
+      // Ast_LESS
+      // Ast_LEQ
+      // Ast_GREATER
+      // Ast_GEQ
+      // Ast_LOGICAL_OR
+      struct {
+         struct AstNode* left;
+         struct AstNode* right;
+      } as_binary_expr;
+
+      // Ast_COMPOUND_STMT
+      struct AstNodeCompoundStmt {
+         struct AstNode* stmt;
+         struct AstNodeCompoundStmt* next;
+      } as_compound_stmt;
 
       // When the node corresponds to a token.
       // TODO: Get rid of all variables not inside a struct.

@@ -10,23 +10,23 @@ X(Ast_POSTFIX_DEC)
 X(Ast_FUNCDEF)
 X(Ast_FUNCCALL)
 X(Ast_PARAMETER)
-X(Ast_DECLARATION)  // children: specifiers, declarator
+X(Ast_DECLARATION)
 X(Ast_DECLARATOR)
 X(Ast_DECLARATION_LIST)
 X(Ast_ARGUMENT_EXPR_LIST)
 X(Ast_RETURN)
-X(Ast_ADD)              // children: left, right
-X(Ast_SUB)              // children: left, right
-X(Ast_MUL)              // children: left, right
-X(Ast_DIV)              // children: left, right
-X(Ast_LOGICAL_AND)      // children: left, right
-X(Ast_EQUALS)           // children: left, right
-X(Ast_NOT_EQUALS)       // children: left, right
-X(Ast_LESS)             // children: left, right
-X(Ast_LEQ)              // children: left, right
-X(Ast_GREATER)          // children: left, right
-X(Ast_GEQ)              // children: left, right
-X(Ast_LOGICAL_OR)       // children: left, right
-X(Ast_COMPOUND_STMT)    // children: stmt,stmt,stmt,stmt,etc
+X(Ast_ADD)
+X(Ast_SUB)
+X(Ast_MUL)
+X(Ast_DIV)
+X(Ast_LOGICAL_AND)
+X(Ast_EQUALS)
+X(Ast_NOT_EQUALS)
+X(Ast_LESS)
+X(Ast_LEQ)
+X(Ast_GREATER)
+X(Ast_GEQ)
+X(Ast_LOGICAL_OR)
+X(Ast_COMPOUND_STMT)
 X(Ast_ITERATION)        // children: declaration, control before, after (might be control), body.
 X(Ast_ASSIGN_EXPR)

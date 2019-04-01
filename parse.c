@@ -19,6 +19,15 @@ newNode(Arena* a) {
    return r;
 }
 
+AstNode*
+makeBinaryExpr(Arena* a, AstType type, AstNode* left, AstNode* right) {
+   AstNode* n = AllocType(a, AstNode);
+   n->type = type;
+   n->as_binary_expr.left = left;
+   n->as_binary_expr.right = right;
+   return n;
+}
+
 void
 parseError(Parser* p, char* msg, ...) {
    va_list args;
@@ -43,6 +52,7 @@ peekPunctuator(Parser* p, int c) {
 
 Token*
 marktrack(Parser* p) {
+   // TODO: allocator should be able to rewind as well
    Token* result = p->token;
    return result;
 }
@@ -197,8 +207,8 @@ postfixExpr(Parser* p) {
          right->as_id.tok = id;
          AstNode* child = left;
          left = makeAstNode(p->arena, Ast_STRUCT_MEMBER_ACCESS, 0,0);
-         left->child = child;
-         left->child->next = right;
+         left->as_member_access.primary_expr = child;
+         left->as_member_access.field = right->as_id.tok->cast.string;
       }
       else if (nextPunctuator(p, INCREMENT)) {
          AstNode* expr = left;
@@ -276,10 +286,7 @@ multiplicativeExpr(Parser* p) {
          AstNode* right     = castExpr(p);
          if (right) {
             int   node_type = optok->cast.character == '*' ? Ast_MUL : Ast_DIV;
-            AstNode* child = left;
-            left            = makeAstNode(p->arena, node_type, 0,0);
-            left->child = child;
-            left->child->next = right;
+            left            = makeBinaryExpr(p->arena, node_type, left, right);
          } else {
             parseError(p, "Expected expression after '*'");
          }
@@ -300,7 +307,7 @@ additiveExpr(Parser* p) {
          if (right) {
             int   node_type = optok->cast.character == '+' ? Ast_ADD : Ast_SUB;
             AstNode* child = left;
-            left            = makeAstNode(p->arena, node_type, 0,0);
+            left            = makeBinaryExpr(p->arena, node_type, left, right);
             left->child = child;
             left->child->next = right;
          } else {
@@ -338,10 +345,7 @@ relationalExpression(Parser* p) {
                 t = Ast_LEQ;
             } break;
          }
-         AstNode* child = left;
-         left = makeAstNode(p->arena, t, left, right);
-         left->child = child;
-         left->child->next = right;
+         left = makeBinaryExpr(p->arena, t, left, right);
 
       }
    }
@@ -358,10 +362,7 @@ equalityExpression(Parser* p) {
       while ((eq = nextPunctuator(p, EQUALS)) || (eq = nextPunctuator(p, NOT_EQUALS))) {
          AstNode* right = relationalExpression(p);
          if (!right) { parseError(p, "Expected expression after equality operator."); }
-         AstNode* child = left;
-         left = makeAstNode(p->arena, eq->value == EQUALS? Ast_EQUALS : Ast_NOT_EQUALS, 0,0 );
-         left->child = child;
-         left->child->next = right;
+         left = makeBinaryExpr(p->arena, eq->value == EQUALS? Ast_EQUALS : Ast_NOT_EQUALS, left, right);
       }
    }
 
@@ -389,7 +390,7 @@ logicalAndExpr(Parser* p) {
          nextToken(p);          // Pop the logical and.
          AstNode* right      = inclusiveOrExpr(p);
          if (!right) { parseError(p, "Expected expression after `&&`."); }
-         left                = makeAstNode(p->arena, Ast_LOGICAL_AND, left, right);
+         left                = makeBinaryExpr(p->arena, Ast_LOGICAL_AND, left, right);
       }
    }
    return left;
@@ -404,7 +405,7 @@ logicalOrExpr(Parser* p) {
          AstNode* right      = logicalAndExpr(p);
          if (!right) { parseError(p, "Expected expression after `||`"); }
          int      node_type  = Ast_LOGICAL_OR;
-         left                = makeAstNode(p->arena, node_type, left, right);
+         left                = makeBinaryExpr(p->arena, node_type, left, right);
       }
    }
    return left;
@@ -815,11 +816,13 @@ AstNode*
 parseDeclaration(Parser* p) {
    AstNode* result = NULL;
    AstNode* specifiers = parseDeclarationSpecifiers(p);
-   // TODO: Declaration lists
+
    if (specifiers) {
       AstNode* declarator = parseDeclarator(p);
 
       AstNode* initializer = NULL;
+
+      result = makeAstNode(p->arena, Ast_DECLARATION, 0,0);
 
       if (declarator) {
          if (nextPunctuator(p, '=')) {
@@ -827,13 +830,13 @@ parseDeclaration(Parser* p) {
          }
          noneIfNull(p->arena, &initializer);
          declarator->next = initializer;
+
+         result->as_declaration.declarator = &declarator->as_declarator;
       }
 
       expectPunctuator(p, ';');
 
-      result = makeAstNode(p->arena, Ast_DECLARATION, 0,0);
       result->as_declaration.decl_spec = &specifiers->as_decl_specifier;
-      result->as_declaration.declarator = &declarator->as_declarator;
       result->as_declaration.rhs = initializer;
    }
    return result;
@@ -863,27 +866,30 @@ AstNode* parseStatement(Parser* p);  // Resolve a circular dependency
                                      // and parseStatement
 AstNode*
 parseCompoundStatement(Parser* p) {
-   AstNode* first_stmt = NULL;
    Token* tok = marktrack(p);
    AstNode* compound_stmt = NULL;
 
+   struct AstNodeCompoundStmt comp = Zero;
+
+
    if (nextPunctuator(p, '{')) {
-      AstNode** cur = &first_stmt;
-      do {
-         if (*cur) {
-            cur = &(*cur)->next;
+      for (struct AstNodeCompoundStmt* comp_iter = &comp;
+           comp_iter;
+           comp_iter = comp_iter->next) {
+         comp_iter->stmt = parseOrBacktrack(parseDeclaration, p);
+         if (!comp_iter->stmt) {
+            comp_iter->stmt = parseOrBacktrack(parseStatement, p);
          }
-         *cur = parseOrBacktrack(parseDeclaration, p);
-         if (!*cur) {
-            *cur = parseOrBacktrack(parseStatement, p);
-         }
-         if (!*cur) {
+         if (!comp_iter->stmt) {
             if (nextPunctuator(p, '}')) {
                compound_stmt = makeAstNode(p->arena, Ast_COMPOUND_STMT, NULL, NULL);
-               compound_stmt->child = first_stmt;
+               compound_stmt->as_compound_stmt = comp;
             }
          }
-      } while (*cur);
+         else {
+            comp_iter->next = AllocType(p->arena, struct AstNodeCompoundStmt);
+         }
+      }
    } else {
       backtrack(p, tok);
    }

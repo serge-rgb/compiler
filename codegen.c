@@ -342,13 +342,24 @@ emitIdentifier(Codegen*c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    }
 }
 
+char*
+getLabelForPrimaryExpr(Codegen* g, AstNode* id) {
+   char* result = NULL;
+   if (id->type == Ast_ID) {
+      result = id->as_id.tok->cast.string;
+   }
+   else {
+      NotImplemented("Function label for non-id primary expressions");
+   }
+   return result;
+}
 
 void
 emitStructMemberAccess(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Machine* m = c->m;
 
-   char* struct_str = node->child->tok->cast.string;
-   char* field_str = node->child->next->tok->cast.string;
+   char* struct_str = getLabelForPrimaryExpr(c, node->as_member_access.primary_expr);
+   char* field_str = node->as_member_access.field;
    RegVar* symbol_entry = findSymbol(c, struct_str);
    if (!symbol_entry) {
       codegenError("%s undeclared.", struct_str);
@@ -433,23 +444,11 @@ emitStructMemberAccess(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget ta
 
 void emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target); // Forward decl.
 
-char*
-getFunctionLabel(Codegen* g, AstNode* id) {
-   char* result = NULL;
-   if (id->type == Ast_ID) {
-      result = id->as_id.tok->cast.string;
-   }
-   else {
-      NotImplemented("Function label for non-id primary expressions");
-   }
-   return result;
-}
-
 void
 emitFunctionCall(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Machine* m = c->m;
 
-   char* label = getFunctionLabel(c, node->as_funccall.expr);
+   char* label = getLabelForPrimaryExpr(c, node->as_funccall.expr);
 
    RegVar* sym = findSymbol(c, label);
    if (!sym) {
@@ -535,8 +534,6 @@ void
 emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
    Machine* m = c->m;
    if (nodeIsExpression(node)) {
-      AstNode* child0 = node->child;
-
       switch (node->type) {
          case Ast_FUNCCALL: {
             emitFunctionCall(c, node, reg_var, target);
@@ -732,8 +729,9 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          case Ast_SUB:
          case Ast_MUL:
          case Ast_DIV: {
-            AstNode* child1 = child0->next;
-            emitArithBinaryExpr(c, node->type, reg_var, child0, child1, target);
+            AstNode* left = node->as_binary_expr.left;
+            AstNode* right = node->as_binary_expr.right;
+            emitArithBinaryExpr(c, node->type, reg_var, left, right, target);
          } break;
 
          case Ast_LESS:
@@ -742,8 +740,8 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          case Ast_GEQ:
          case Ast_NOT_EQUALS:
          case Ast_EQUALS: {
-            AstNode* left = node->child;
-            AstNode* right = node->child->next;
+            AstNode* left = node->as_binary_expr.left;
+            AstNode* right = node->as_binary_expr.right;
             RegVar left_type = {0};
             RegVar right_type = {0};
             codegenEmit(c, right, &right_type, Target_STACK);
@@ -789,8 +787,8 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          // Logical AND/OR
          case Ast_LOGICAL_OR:
          case Ast_LOGICAL_AND: {
-            AstNode* left = node->child;
-            AstNode* right = node->child->next;
+            AstNode* left = node->as_binary_expr.left;
+            AstNode* right = node->as_binary_expr.right;
             RegVar left_type = {0};
             RegVar right_type = {0};
 
@@ -892,8 +890,8 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
       case Ast_GEQ:
       case Ast_NOT_EQUALS:
       case Ast_EQUALS: {
-         AstNode* left = cond->child;
-         AstNode* right = cond->child->next;
+         AstNode* left = cond->as_binary_expr.left;
+         AstNode* right = cond->as_binary_expr.right;
          RegVar left_type = {0};
          RegVar right_type = {0};
          codegenEmit(c, right, &right_type, Target_STACK);
@@ -926,7 +924,8 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
    u64 bits = 0;
 
-   Ctype* type = resolveTypeAndDeclarator(c->arena, &specifier->ctype, declarator->pointer_stars);
+   Ctype* type = &specifier->ctype;
+   if (declarator) { type = resolveTypeAndDeclarator(c->arena, &specifier->ctype, declarator->pointer_stars); }
 
    // Figure out the size of the declaration from the type specifier.
    if (specifier->ctype.type != Type_AGGREGATE) {
@@ -952,18 +951,19 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             .location = { .type = Location_STACK, .offset = 0 /*struct tag does not have a place*/ },
          };
          u64 offset = 0;
-         for (AstNode* decl = decls;
-              decl;
-              decl = decl->next) {
-            AstNode* spec = decl->child;
-            AstNode* declarator = spec->next;
-            char* member_id = declarator->as_declarator.id;
+         for (struct AstNodeDeclarationList* decl_list = &decls->as_decl_list;
+              decl_list;
+              decl_list = decl_list->next) {
+            struct AstNodeDeclaration* decl = decl_list->declaration;
+            struct AstNodeDeclSpec* spec = decl->decl_spec;
+            struct AstNodeDeclarator* declarator = decl->declarator;
+            char* member_id = declarator->id;
 
             Assert(offset % 8 == 0);
-            struct TagMember member = { member_id, spec->as_decl_specifier.ctype, offset/8 };
+            struct TagMember member = { member_id, spec->ctype, offset/8 };
             bufPush(tag->s_members, member);
 
-            Ctype* ctype = resolveTypeAndDeclarator(c->arena, &spec->as_decl_specifier.ctype, declarator->as_declarator.pointer_stars);
+            Ctype* ctype = resolveTypeAndDeclarator(c->arena, &spec->ctype, declarator->pointer_stars);
 
             offset += typeBits(ctype);
             offset = AlignPow2(offset, 8);
@@ -1003,7 +1003,7 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
 
 
       if (rhs && isLiteral(rhs)) {               // Literal right-hand-side
-         RegVar* imm = c->m->immediateFromToken(c->m, rhs->tok);
+         RegVar* imm = c->m->immediateFromToken(c->m, rhs->as_number.tok);
 
          c->m->mov(c->m, entry, imm);
       }
@@ -1137,13 +1137,13 @@ emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target) {
    if (compound->type != Ast_COMPOUND_STMT) {
       codegenError("Expected a compound statement.");
    }
-   AstNode* stmt = compound->child;
+   struct AstNodeCompoundStmt* comp = &compound->as_compound_stmt;
 
    // Emit function call prelude. Push stack
-   while (stmt) {
-      b32 is_last = stmt->next == NULL;
-      emitStatement(c, stmt, is_last ? target : Target_NONE);
-      stmt = stmt->next;
+   while (comp->stmt) {
+      b32 is_last = comp->next == NULL;
+      emitStatement(c, comp->stmt, is_last ? target : Target_NONE);
+      comp = comp->next;
    }
 
    popScope(c);
