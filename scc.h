@@ -385,10 +385,16 @@ struct AstNode {
           struct AstNodeArgument* arg_expr_list;
       } as_funccall;
 
+      // Ast_DECLARATOR_LIST
+      struct AstNodeDeclaratorList {
+         struct AstNodeDeclarator* declarator;
+         struct AstNodeDeclaratorList* next;
+      } as_declarator_list;
+
       // Ast_DECLARATION
       struct AstNodeDeclaration {
          struct AstNodeDeclSpec* decl_spec;
-         struct AstNodeDeclarator* declarator;
+         struct AstNodeDeclaratorList* declarators;
          struct AstNode* rhs;
       } as_declaration;
 
@@ -396,7 +402,7 @@ struct AstNode {
       struct AstNodeDeclarationList {
          struct AstNodeDeclaration* declaration;
          struct AstNodeDeclarationList* next;
-      } as_decl_list;
+      } as_declaration_list;
 
       // Ast_STRUCT_MEMBER_ACCESS
       struct {
@@ -405,18 +411,6 @@ struct AstNode {
       } as_member_access;
 
       // Binary expressions
-      // Ast_ADD
-      // Ast_SUB
-      // Ast_MUL
-      // Ast_DIV
-      // Ast_LOGICAL_AND
-      // Ast_EQUALS
-      // Ast_NOT_EQUALS
-      // Ast_LESS
-      // Ast_LEQ
-      // Ast_GREATER
-      // Ast_GEQ
-      // Ast_LOGICAL_OR
       struct {
          struct AstNode* left;
          struct AstNode* right;
@@ -428,18 +422,24 @@ struct AstNode {
          struct AstNodeCompoundStmt* next;
       } as_compound_stmt;
 
+      struct {
+         struct AstNodeDeclaration* declaration;
+         struct AstNode* before_iteration;
+         struct AstNode* after_iteration;
+         struct AstNode* body;
+      } as_iteration;
+
+      // Ast_TRANSLATION_UNIT
+      struct AstNodeTU {
+         struct AstNode* node;
+         struct AstNodeTU* next;
+      } as_tu;
       // When the node corresponds to a token.
       // TODO: Get rid of all variables not inside a struct.
    };
    Token*   tok;
-   struct AstNode* child;
-   struct AstNode* next;
 
    u64 line_number;
-
-#if Debug
-   u32 debug_tag;
-#endif
 } typedef AstNode;
 
 

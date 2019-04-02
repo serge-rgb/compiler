@@ -306,10 +306,7 @@ additiveExpr(Parser* p) {
          AstNode* right     = multiplicativeExpr(p);
          if (right) {
             int   node_type = optok->cast.character == '+' ? Ast_ADD : Ast_SUB;
-            AstNode* child = left;
-            left            = makeBinaryExpr(p->arena, node_type, left, right);
-            left->child = child;
-            left->child->next = right;
+            left = makeBinaryExpr(p->arena, node_type, left, right);
          } else {
             parseError(p, "Expected expression after '+'");
          }
@@ -525,43 +522,80 @@ parseExpression(Parser* p) {
 void parseTypeSpecifier(Parser* p, Token* t, Ctype* out);
 AstNode* parseDeclarator(Parser* p);
 
+int
+parseTypeQualifier(Token* t) {
+   int quals = 0;
+
+   int v = t->value;
+
+   quals =  (v == Keyword_const) ? Qual_CONST : 0
+          | (v == Keyword_restrict) ? Qual_RESTRICT : 0
+          | (v == Keyword_volatile) ? Qual_VOLATILE : 0;
+
+   return quals;
+}
+
+
+AstNode*
+parseSpecifierQualifierList(Parser* p) {
+   AstNode* result = NULL;
+   Ctype ctype = { .type = Type_NONE };
+   i32 line_number = p->token->line_number;
+
+   int qualifiers = 0;
+   int qual;
+
+   while (p->token->type == TType_KEYWORD) {
+      Token* t = nextToken(p);
+      if ((parseTypeSpecifier(p, t, &ctype), ctype.type)) {
+      }
+      else if ((qual = parseTypeQualifier(t))) {
+         qualifiers |= qual;
+      }
+      else {
+         backtrack(p, t);
+         break;
+      }
+   }
+
+   if (ctype.type != Type_NONE) {
+      result = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, line_number);
+      result->as_decl_specifier.ctype = ctype;
+   }
+
+   return result;
+}
+
+
 AstNode*
 parseStructDeclarationList(Parser* p) {
    AstNode* decls = makeAstNode(p->arena, Ast_DECLARATION_LIST, 0,0);
-   struct AstNodeDeclarationList* list = &decls->as_decl_list;
+   struct AstNodeDeclarationList* list = &decls->as_declaration_list;
    struct AstNodeDeclarationList** list_iter = &list;
    // Parse struct declarations
    while (true) {
-      // Parse a list of type specifiers
-      AstNode* specs = NULL;
-      AstNode** iter = &specs;
-      while (true) {
-         Ctype ctype = Zero;
-         parseTypeSpecifier(p, p->token, &ctype);
-         if (ctype.type == Type_NONE) {
-            break;
-         }
-         nextToken(p);
-         AstNode* spec = makeAstNodeWithLineNumber(p->arena, Ast_DECLARATION_SPECIFIER, NULL, NULL, p->token->line_number);
-         spec->as_decl_specifier.ctype = ctype;
-         (*iter) = spec;
-         iter = &spec->next;
-      }
+      AstNode* specs = parseSpecifierQualifierList(p);
       if (!specs) {
-         goto end;
+         break;
       }
       // Parse struct declarator list
-      AstNode* decl = NULL;
-      AstNode** decl_iter = &decl;
+      AstNode* declarators_node = makeAstNode(p->arena, Ast_DECLARATOR_LIST, 0,0);
+      struct AstNodeDeclaratorList* declarators = &declarators_node->as_declarator_list;
+
+      struct AstNodeDeclaratorList** decl_iter = &declarators;
       while (true) {
-         *decl_iter = parseDeclarator(p);
-         // TODO: Bit field colon in struct declarator.
          if (!*decl_iter) {
+            (*decl_iter) = AllocType(p->arena, struct AstNodeDeclaratorList);
+         }
+         AstNode* d = parseDeclarator(p);
+         if (!d) {
             break;
          }
+         (*decl_iter)->declarator = &d->as_declarator;
+
          decl_iter = &(*decl_iter)->next;
       }
-      if (!decl) {
+      if (!declarators->declarator) {
          parseError(p, "Expected declarator in struct declaration.");
       }
 
@@ -571,11 +605,10 @@ parseStructDeclarationList(Parser* p) {
 
       (*list_iter)->declaration = AllocType(p->arena, struct AstNodeDeclaration);
       (*list_iter)->declaration->decl_spec = &specs->as_decl_specifier;
-      (*list_iter)->declaration->declarator = &decl->as_declarator;
+      (*list_iter)->declaration->declarators = declarators;
 
       list_iter = &(*list_iter)->next;
    }
-end:
 
    return decls;
 }
@@ -621,7 +654,7 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
             }
          }
          if (decl_list) {
-            for (struct AstNodeDeclarationList* decls = &decl_list->as_decl_list;
+            for (struct AstNodeDeclarationList* decls = &decl_list->as_declaration_list;
                  decls;
                  decls = decls->next) {
                struct AstNodeDeclaration* decl = decls->declaration;
@@ -657,19 +690,6 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
    }
 }
 
-
-int
-parseTypeQualifier(Token* t) {
-   int quals = 0;
-
-   int v = t->value;
-
-   quals =  (v == Keyword_const) ? Qual_CONST : 0
-          | (v == Keyword_restrict) ? Qual_RESTRICT : 0
-          | (v == Keyword_volatile) ? Qual_VOLATILE : 0;
-
-   return quals;
-}
 
 AstNode*
 parseDeclarationSpecifiers(Parser* p) {
@@ -828,10 +848,11 @@ parseDeclaration(Parser* p) {
          if (nextPunctuator(p, '=')) {
             initializer = parseInitializer(p);
          }
-         noneIfNull(p->arena, &initializer);
-         declarator->next = initializer;
 
-         result->as_declaration.declarator = &declarator->as_declarator;
+         // TODO: Parse declarator list...
+         AstNode* declarators = makeAstNode(p->arena, Ast_DECLARATOR_LIST, 0,0);
+         declarators->as_declarator_list.declarator = &declarator->as_declarator;
+         result->as_declaration.declarators = &declarators->as_declarator_list;
       }
 
       expectPunctuator(p, ';');
@@ -957,16 +978,13 @@ parseStatement(Parser* p) {
             }
             AstNode* declarations = makeAstNode(p->arena, Ast_NONE, 0,0);
             AstNode* control_before = expr;
-            AstNode* after = makeAstNode(p->arena, Ast_NONE, 0,0);
             AstNode* body = statement;
 
-            declarations->next = control_before;
-            control_before->next = after;
-            after->next = body;
-            body->next = NULL;
-
-            stmt = makeAstNode(p->arena, Ast_ITERATION, declarations, NULL);
-            stmt->child = declarations;
+            stmt = makeAstNode(p->arena, Ast_ITERATION, NULL, NULL);
+            stmt->as_iteration.declaration = &declarations->as_declaration;
+            stmt->as_iteration.before_iteration = control_before;
+            stmt->as_iteration.after_iteration = NULL;
+            stmt->as_iteration.body = body;
          }
       }
    }
@@ -994,15 +1012,12 @@ parseStatement(Parser* p) {
             parseError(p, "Expected body after for(..)");
          }
 
-         noneIfNull(p->arena, &declaration);
-         noneIfNull(p->arena, &control);
-         noneIfNull(p->arena, &after);
-
-         declaration->next = control;
-         control->next = after;
-         after->next = body;
          stmt = makeAstNode(p->arena, Ast_ITERATION, declaration, NULL);
-         stmt->child = declaration;
+
+         stmt->as_iteration.declaration = &declaration->as_declaration;
+         stmt->as_iteration.before_iteration = control;
+         stmt->as_iteration.after_iteration = after;
+         stmt->as_iteration.body = body;
       }
    }
    return stmt;
@@ -1079,8 +1094,9 @@ parseFunctionDefinition(Parser* p) {
 AstNode*
 parseTranslationUnit(Parser* p) {
    // Return a list of declarations and function definitions.
-   //
-   AstNode* result = NULL;
+
+   AstNode* result = makeAstNode(p->arena, Ast_TRANSLATION_UNIT, 0,0);
+
    AstNode** cur = &result;
    while (true) {
       if (   (*cur = parseFunctionDefinition(p))
