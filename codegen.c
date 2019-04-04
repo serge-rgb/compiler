@@ -914,11 +914,14 @@ emitConditionalJump(Codegen* c, AstNode* cond, char* then, char* els) {
 void emitCompoundStatement(Codegen* c, AstNode* compound, EmitTarget target);
 
 void
-emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
-   struct AstNodeDeclSpec* specifier = node->as_declaration.decl_spec;
-   struct AstNodeDeclarator* declarator = node->as_declaration.declarator;
-   AstNode* rhs = node->as_declaration.rhs;
+emitDeclaration(Codegen* c, struct AstNodeDeclaration* node, EmitTarget target) {
+   struct AstNodeDeclSpec* specifier = node->decl_spec;
+   struct AstNodeDeclaratorList* declarators = node->declarators;
+   AstNode* rhs = node->rhs;
    Machine* m = c->m;
+
+   // TODO: multiple declarators...
+   struct AstNodeDeclarator* declarator = declarators ? declarators->declarator : NULL;
 
    // TODO: Emit warning for empty declarations.
 
@@ -951,12 +954,12 @@ emitDeclaration(Codegen* c, AstNode* node, EmitTarget target) {
             .location = { .type = Location_STACK, .offset = 0 /*struct tag does not have a place*/ },
          };
          u64 offset = 0;
-         for (struct AstNodeDeclarationList* decl_list = &decls->as_decl_list;
+         for (struct AstNodeDeclarationList* decl_list = &decls->as_declaration_list;
               decl_list;
               decl_list = decl_list->next) {
             struct AstNodeDeclaration* decl = decl_list->declaration;
             struct AstNodeDeclSpec* spec = decl->decl_spec;
-            struct AstNodeDeclarator* declarator = decl->declarator;
+            struct AstNodeDeclarator* declarator = decl->declarators->declarator;  // TODO: Multiple declarators in aggregate decl list?
             char* member_id = declarator->id;
 
             Assert(offset % 8 == 0);
@@ -1049,7 +1052,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
       } break;
       case Ast_DECLARATION: {
-         emitDeclaration(c, stmt, target);
+         emitDeclaration(c, &stmt->as_declaration, target);
       } break;
       case Ast_IF: {
          AstNode* cond = stmt->as_if.condition;
@@ -1084,10 +1087,10 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
                         // TODO: put all label counts in one place.
          int loop_id = c->scope->if_count++;
          pushScope(c);
-         AstNode* decl = stmt->child;
-         AstNode* control = decl->next;
-         AstNode* after = control->next;
-         AstNode* body = after->next;
+         struct AstNodeDeclaration* decl = stmt->as_iteration.declaration;
+         AstNode* control = stmt->as_iteration.before_iteration;
+         AstNode* after = stmt->as_iteration.after_iteration;
+         AstNode* body = stmt->as_iteration.body;
          char loop_label[1024] = {0}; {
             snprintf(loop_label, sizeof(loop_label), ".loop%d", loop_id);
          }
@@ -1098,7 +1101,7 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
             snprintf(end_label, sizeof(end_label), ".end%d", loop_id);
          }
          b32 after_is_control = (control->type == Ast_NONE);
-         if (decl->type != Ast_NONE) { emitStatement(c, decl, Target_ACCUM); }
+         if (decl) { emitDeclaration(c, decl, Target_ACCUM); }
 
          m->label(m, loop_label);
          if (!after_is_control) {
@@ -1108,10 +1111,10 @@ emitStatement(Codegen* c, AstNode* stmt, EmitTarget target) {
          }
 
          m->label(m, body_label);
-         if (body->type != Ast_NONE) {
+         if (body) {
             emitStatement(c, body, Target_ACCUM);
          }
-         if (after->type != Ast_NONE) {
+         if (after) {
             emitStatement(c, after, Target_ACCUM);
          }
          m->jmp(m, loop_label);
@@ -1270,20 +1273,21 @@ codegenEmit(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
 }
 
 void
-codegenTranslationUnit(Codegen* c, AstNode* node) {
+codegenTranslationUnit(Codegen* c, AstNode* root) {
    pushScope(c);
-   while (node) {
-      if (node->type == Ast_FUNCDEF) {
-         codegenEmit(c, node, NULL, Target_NONE);
+   struct AstNodeTU* tu = &root->as_tu;
+   while (tu->node) {
+      if (tu->node->type == Ast_FUNCDEF) {
+         codegenEmit(c, tu->node, NULL, Target_NONE);
       }
-      else if (node->type == Ast_DECLARATION) {
-         codegenEmit(c, node, NULL, Target_NONE);
+      else if (tu->node->type == Ast_DECLARATION) {
+         codegenEmit(c, tu->node, NULL, Target_NONE);
       }
       else {
          NotImplemented ("Top level declarations.");
       }
 
-      node = node->next;
+      tu = tu->next;
    }
    popScope(c);
    c->m->finish(c->m);

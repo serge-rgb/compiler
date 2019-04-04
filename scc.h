@@ -422,6 +422,7 @@ struct AstNode {
          struct AstNodeCompoundStmt* next;
       } as_compound_stmt;
 
+      // Ast_ITERATION
       struct {
          struct AstNodeDeclaration* declaration;
          struct AstNode* before_iteration;

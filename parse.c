@@ -976,12 +976,11 @@ parseStatement(Parser* p) {
             if (!statement) {
                parseError(p, "expected statement after while");
             }
-            AstNode* declarations = makeAstNode(p->arena, Ast_NONE, 0,0);
             AstNode* control_before = expr;
             AstNode* body = statement;
 
             stmt = makeAstNode(p->arena, Ast_ITERATION, NULL, NULL);
-            stmt->as_iteration.declaration = &declarations->as_declaration;
+            stmt->as_iteration.declaration = NULL;
             stmt->as_iteration.before_iteration = control_before;
             stmt->as_iteration.after_iteration = NULL;
             stmt->as_iteration.body = body;
@@ -1014,10 +1013,10 @@ parseStatement(Parser* p) {
 
          stmt = makeAstNode(p->arena, Ast_ITERATION, declaration, NULL);
 
-         stmt->as_iteration.declaration = &declaration->as_declaration;
+         stmt->as_iteration.declaration = (declaration) ? &declaration->as_declaration : NULL;
          stmt->as_iteration.before_iteration = control;
          stmt->as_iteration.after_iteration = after;
-         stmt->as_iteration.body = body;
+         stmt->as_iteration.body = body->type != Ast_NONE ? body : NULL;
       }
    }
    return stmt;
@@ -1097,11 +1096,15 @@ parseTranslationUnit(Parser* p) {
 
    AstNode* result = makeAstNode(p->arena, Ast_TRANSLATION_UNIT, 0,0);
 
-   AstNode** cur = &result;
+   struct AstNodeTU* tu_node = &result->as_tu;
+
+   AstNode* cur = NULL;
    while (true) {
-      if (   (*cur = parseFunctionDefinition(p))
-          || (*cur = parseDeclaration(p))) {     // TODO: Top level declarations.
-         cur = &((*cur)->next);
+      if (   (cur = parseFunctionDefinition(p))
+          || (cur = parseDeclaration(p))) {     // TODO: Top level declarations.
+
+         tu_node->node = cur;
+         tu_node = tu_node->next = AllocType(p->arena, struct AstNodeTU);
       } else {
          break;
       }
