@@ -578,6 +578,9 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
          case Ast_ID: {
             emitIdentifier(c, node, reg_var, target);
          } break;
+         case Ast_STRING_LITERAL: {
+            NotImplemented("Emit string literal");
+         } break;
          case Ast_STRUCT_MEMBER_ACCESS: {
             emitStructMemberAccess(c, node, reg_var, target);
          } break;

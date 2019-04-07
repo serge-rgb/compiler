@@ -146,12 +146,16 @@ primaryExpr(Parser* p) {
       t->as_id.tok  = tok;
    }
    else if (tok->type == TType_STRING_LITERAL) {
-      NotImplemented("String literal");
+      t = newNode(p->arena);
+      t->type = Ast_STRING_LITERAL;
+      t->as_string_literal.tok = tok;
+      StaticBuffer sb = (StaticBuffer){ .type = SBType_STRING, .tok = tok };
+      bufPush(p->s_static_buffers, sb);
    } else if (tok->type == TType_KEYWORD ||
               tok->type == TType_PUNCTUATOR) {
       // Don't do anything
    } else {
-      NotImplemented("Token primary expression");
+      InvalidCodePath;  // We are covering all token types.
    }
    if (t) {
       t->line_number = tok->line_number;
@@ -677,13 +681,6 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
       case Keyword_union: {
          NotImplemented("unions");
       } break;
-      case Keyword__Bool: {
-      } //break;
-      case Keyword__Complex: {
-      } //break;
-      case Keyword__Imaginary: {
-         NotImplemented("Type Specifier.");
-      } //break;
       default: {
          // Not a type specifier.
       } break;

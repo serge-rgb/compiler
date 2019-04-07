@@ -336,6 +336,10 @@ struct AstNode {
          Token* tok;
       } as_id;
 
+      struct {
+         Token* tok;
+      } as_string_literal;
+
       // Ast_IF
       struct {
          struct AstNode* condition;
@@ -435,10 +439,7 @@ struct AstNode {
          struct AstNode* node;
          struct AstNodeTU* next;
       } as_tu;
-      // When the node corresponds to a token.
-      // TODO: Get rid of all variables not inside a struct.
    };
-   Token*   tok;
 
    u64 line_number;
 } typedef AstNode;
@@ -456,12 +457,30 @@ struct AggregateSizes;
 #define HashmapValue u64
 #include "hashmap.inl"
 
+struct StaticBuffer {
+   enum {
+      SBType_STRING,
+      SBType_ARRAY,
+   } type;
+
+   union {
+      // String
+      Token* tok;
+      // Array?
+      struct {
+         u32 size;  // TODO: Does the spec specify a minimum static array size?
+         Ctype ctype;
+      };
+   };
+} typedef StaticBuffer;
+
 struct Parser {
    Token* token;  // The next token to parse.
    Arena* arena;
    AstNode* tree;
    char* file_name;
    AggregateSizes sizes;
+   StaticBuffer* s_static_buffers;
 
    enum {
      ParserFlag_FANSI = (1 << 0),

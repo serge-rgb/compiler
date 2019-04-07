@@ -451,8 +451,6 @@ getToken(Arena* a, FileStream* fs) {
       char* str = getString(token_buffer.current);
       t.cast.string = str;
    }
-   // TODO: Operators
-   // TODO: Constants
    // The rest are keywords and identifiers.
    else {
       Buffer token_buffer = {0};

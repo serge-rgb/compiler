@@ -33,7 +33,9 @@ X(unsigned)
 X(void)
 X(volatile)
 X(while)
+
+// "New" C keywords. Not implementing the commented-out ones.
 X(_Alignof)
-X(_Bool)
-X(_Complex)
-X(_Imaginary)
+// X(_Bool)
+// X(_Complex)
+// X(_Imaginary)

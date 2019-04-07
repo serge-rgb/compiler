@@ -87,7 +87,8 @@ nodeIsExpression(AstNode* node) {
        node->type == Ast_NUMBER || node->type == Ast_ID ||
        node->type == Ast_POSTFIX_INC || node->type == Ast_POSTFIX_DEC ||
        node->type == Ast_STRUCT_MEMBER_ACCESS || node->type == Ast_ADDRESS ||
-       node->type == Ast_LOGICAL_AND || node->type == Ast_LOGICAL_OR) {
+       node->type == Ast_LOGICAL_AND || node->type == Ast_LOGICAL_OR ||
+       node->type == Ast_STRING_LITERAL) {
       isExpr = true;
    }
    return isExpr;
