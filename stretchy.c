@@ -18,7 +18,10 @@ bufMaybeResize(void** ptr, sz count, sz element_size) {
    else if (bufHdr(*ptr)->capacity - bufHdr(*ptr)->used < count) {
       *ptr = realloc(bufHdr(*ptr), sizeof(BufHdr) + (bufHdr(*ptr)->capacity *= 2)*element_size);
       *ptr = (void*)((u8*)(*ptr) + sizeof(BufHdr));
-      // TODO(Zero-out new area)
+
+      sz used = bufHdr(*ptr)->used;
+      sz cap = bufHdr(*ptr)->capacity;
+      memset((u8*)(*ptr) + used, 0, (cap - used) * element_size);
    }
 }
 

@@ -642,6 +642,7 @@ struct Codegen {
    u64         last_line_number;
 
    AstNode*    current_function;
+   StaticBuffer* s_static_buffers;
 
    // Disable/Enable instruction output.
    #define MaxInstrOutputStack 8
@@ -659,6 +660,8 @@ struct Codegen {
 // =====================================
 struct Machine {
    u8 flags; // MachineConfigFlags
+
+   Location (*reserveStaticString)(void* machine, char* string);
 
    void (*stackPop)(void* machine, RegVar* et);
 

@@ -255,6 +255,12 @@ instructionReg(MachineX64* m, char* asm_line, int bits, ...) {
 //RegVar* findTag(Scope* c, char* name);
 //RegVar* findSymbol(Codegen* c, char* name);
 
+Location
+x64ReserveStaticString(MachineX64* m, char* string) {
+   NotImplemented("Reserve memory x64");
+   return (Location)Zero;
+}
+
 void
 x64StackPop(MachineX64* m, RegVar* et) {
    Assert(et->location.type == Location_REGISTER);
@@ -1442,6 +1448,7 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
       // Function pointers
       m->immediateFromToken = x64ImmediateFromToken;
 
+      m->reserveStaticString = x64ReserveStaticString;
       m->stackPop = x64StackPop;
       m->stackPush = x64StackPush;
       m->stackPushReg = x64StackPushReg;

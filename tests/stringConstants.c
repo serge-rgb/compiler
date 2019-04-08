@@ -1,5 +1,6 @@
 int main() {
-   char* constant = "Hello World!";
+   char* c1 = "Hello World!";
+   char* c2 = "I have a \" inside the string.";
 
    return 1;
 }

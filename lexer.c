@@ -435,21 +435,30 @@ getToken(Arena* a, FileStream* fs) {
       }
    }
    else if (fileStreamPeek(fs) == '\"') {
-      // We are inside a string. Parse until we get the end of the string.
-      // TODO: Escape characters.
+      // String literals
       t.type = TType_STRING_LITERAL;
-      Buffer token_buffer = {0};
+      char* s_token_buffer = NULL;
+
       fseek(fs->fd, 1, SEEK_CUR);
-      char* tmp = "String literals not working atm ;)";
-      token_buffer.current = tmp;
-      while (fileStreamRead(fs) != '\"') {
+
+      char next_char = fileStreamRead(fs);
+      while (next_char != '\"') {
+
+         if (next_char == '\\') {
+            next_char = fileStreamRead(fs);  // If the stream is empty, we just crash.
+         }
+
+         bufPush(s_token_buffer, next_char);
+
          if (!fileStreamHasContent(fs)) {
             lexerError("Expected \" while parsing string literal.");
          }
+
+         next_char = fileStreamRead(fs);
       }
-      token_buffer.end = tmp + strlen(tmp);
-      char* str = getString(token_buffer.current);
-      t.cast.string = str;
+      bufPush(s_token_buffer, '\0');
+
+      t.cast.string = s_token_buffer;
    }
    // The rest are keywords and identifiers.
    else {

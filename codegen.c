@@ -1278,6 +1278,26 @@ codegenEmit(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
 void
 codegenTranslationUnit(Codegen* c, AstNode* root) {
    pushScope(c);
+
+   Machine* m = c->m;
+
+   // Reserve static buffers.
+   for (sz i = 0; i < bufCount(c->s_static_buffers); ++i) {
+      StaticBuffer* sb = &c->s_static_buffers[i];
+      switch (sb->type) {
+         case SBType_STRING: {
+            m->reserveStaticString(m, sb->tok->cast.string);
+         } break;
+         case SBType_ARRAY: {
+            NotImplemented("Static array");
+         } break;
+         default: { InvalidCodePath; }
+      }
+   }
+
+
+   // Emit code
+
    struct AstNodeTU* tu = &root->as_tu;
    while (tu->node) {
       if (tu->node->type == Ast_FUNCDEF) {

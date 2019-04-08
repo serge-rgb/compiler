@@ -29,6 +29,8 @@ compileTranslationUnit(char* file_name, char* outfile) {
          parseError(&p, "Could not parse file.");
       }
       else {
+         codegen.s_static_buffers = p.s_static_buffers;
+
          codegenInit(&codegen, outfile, PlatformDefaultTarget);
          codegenTranslationUnit(&codegen, tree);
       }
