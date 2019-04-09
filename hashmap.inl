@@ -116,6 +116,13 @@ b32 compareStringKey (char* a, char* b);
 #define HashmapName Generic(Hashmap)
 #endif
 
+// #if !defined(HashmapIterName)
+#define HashmapIterName(postfix) HashmapIterNameEx(HashmapName, postfix)
+#define HashmapIterNameEx(hmName, postfix) GenericExEx(hmName, postfix)
+#define HashmapIterNameExEx(hmName, postfix) hmName ## postfix
+//#undef HashmapIterNameEx
+// #endif
+
 #if !defined(HashmapError)
 #define HashmapError(msg) Assert(!(msg))
 #endif
@@ -138,6 +145,10 @@ typedef struct {
    Generic(HashmapKeyVal)  *keyvals;
    u32                     n_keyvals;
 } HashmapName;
+
+typedef struct {
+   int foo;
+} HashmapIterName(KeyIter);
 
 void
 Generic(__maybeInit) (HashmapName* hm) {
@@ -197,6 +208,11 @@ Generic(Get) (HashmapName* hm, HashmapKey   key) {
    return result;
 }
 
+void
+Generic(KeyIterBegin) (HashmapName*hm, HashmapIterName(KeyIter)* iter) {
+
+}
+
 #ifdef KeyCompareFunc
   #undef KeyCompareFunc
 #endif
@@ -210,3 +226,6 @@ Generic(Get) (HashmapName* hm, HashmapKey   key) {
 #undef HashmapInitSize
 #undef HashmapValue
 #undef HashFunction
+#undef HashmapIterName
+#undef HashmapIterNameEx
+#undef HashmapIterNameExEx

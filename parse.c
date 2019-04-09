@@ -4,6 +4,9 @@ typedef AstNode* ParseFunction(Parser*);
 void
 initParser(Parser* p) {
    p->flags = ParserFlag_FANSI;
+
+   p->hm_sizes = AllocType(p->arena, HMAggregateSizes);
+   p->hm_static_arrays = AllocType(p->arena, HMStaticArrays);
 }
 
 void
@@ -149,8 +152,8 @@ primaryExpr(Parser* p) {
       t = newNode(p->arena);
       t->type = Ast_STRING_LITERAL;
       t->as_string_literal.tok = tok;
-      StaticBuffer sb = (StaticBuffer){ .type = SBType_STRING, .tok = tok };
-      bufPush(p->s_static_buffers, sb);
+      char* label = "TODO Fill this with label";
+      staticArrInsert(p->hm_static_arrays, tok->cast.string, label);
    } else if (tok->type == TType_KEYWORD ||
               tok->type == TType_PUNCTUATOR) {
       // Don't do anything
@@ -652,7 +655,7 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
                expectPunctuator(p, '}');
             }
             else {
-               u64* bits = aggrGet(&p->sizes, id->cast.string);
+               u64* bits = aggrGet(p->hm_sizes, id->cast.string);
                Assert (bits);
                out->aggr.bits = *bits;
             }
@@ -666,8 +669,8 @@ parseTypeSpecifier(Parser* p, Token* t, Ctype* out) {
                out->aggr.bits += typeBits(&spec->ctype);
                out->aggr.bits = AlignPow2(out->aggr.bits, 8);
             }
-            if ( !aggrGet(&p->sizes, id->cast.string) ) {
-               aggrInsert(&p->sizes, id->cast.string, out->aggr.bits);
+            if ( !aggrGet(p->hm_sizes, id->cast.string) ) {
+               aggrInsert(p->hm_sizes, id->cast.string, out->aggr.bits);
             }
             out->aggr.decls = decl_list;
          }

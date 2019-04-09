@@ -1279,21 +1279,26 @@ void
 codegenTranslationUnit(Codegen* c, AstNode* root) {
    pushScope(c);
 
-   Machine* m = c->m;
+   // Machine* m = c->m;
+   {
+      HMStaticArraysKeyIter iter;
+      staticArrKeyIterBegin(c->hm_static_arrays, &iter);
+   }
+
 
    // Reserve static buffers.
-   for (sz i = 0; i < bufCount(c->s_static_buffers); ++i) {
-      StaticBuffer* sb = &c->s_static_buffers[i];
-      switch (sb->type) {
-         case SBType_STRING: {
-            m->reserveStaticString(m, sb->tok->cast.string);
-         } break;
-         case SBType_ARRAY: {
-            NotImplemented("Static array");
-         } break;
-         default: { InvalidCodePath; }
-      }
-   }
+   //for (sz i = 0; i < bufCount(c->s_static_buffers); ++i) {
+      // StaticBuffer* sb = &c->s_static_buffers[i];
+      // switch (sb->type) {
+      //    case SBType_STRING: {
+      //       m->reserveStaticString(m, sb->tok->cast.string);
+      //    } break;
+      //    case SBType_ARRAY: {
+      //       NotImplemented("Static array");
+      //    } break;
+      //    default: { InvalidCodePath; }
+      // }
+   // }
 
 
    // Emit code

@@ -21,7 +21,7 @@ bufMaybeResize(void** ptr, sz count, sz element_size) {
 
       sz used = bufHdr(*ptr)->used;
       sz cap = bufHdr(*ptr)->capacity;
-      memset((u8*)(*ptr) + used, 0, (cap - used) * element_size);
+      memset((u8*)(*ptr) + used*element_size, 0, (cap - used) * element_size);
    }
 }
 

@@ -4,6 +4,7 @@
 // ====================================
 
 // s_*  - stretchy buffer
+// hm_* - hash map
 
 // ==============================
 // ======== Error codes =========
@@ -450,11 +451,18 @@ struct AstNode {
 // ========================
 
 
-struct AggregateSizes;
-#define HashmapName AggregateSizes
+struct HMAggregateSizes;
+#define HashmapName HMAggregateSizes
 #define HashmapPrefix aggr
 #define HashmapKey char*
 #define HashmapValue u64
+#include "hashmap.inl"
+
+struct HMStaticArrays;
+#define HashmapName HMStaticArrays
+#define HashmapPrefix staticArr
+#define HashmapKey char*
+#define HashmapValue char*
 #include "hashmap.inl"
 
 struct StaticBuffer {
@@ -479,8 +487,8 @@ struct Parser {
    Arena* arena;
    AstNode* tree;
    char* file_name;
-   AggregateSizes sizes;
-   StaticBuffer* s_static_buffers;
+   HMAggregateSizes* hm_sizes;
+   HMStaticArrays* hm_static_arrays;
 
    enum {
      ParserFlag_FANSI = (1 << 0),
@@ -642,7 +650,7 @@ struct Codegen {
    u64         last_line_number;
 
    AstNode*    current_function;
-   StaticBuffer* s_static_buffers;
+   HMStaticArrays* hm_static_arrays;
 
    // Disable/Enable instruction output.
    #define MaxInstrOutputStack 8
