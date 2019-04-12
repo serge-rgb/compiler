@@ -152,8 +152,12 @@ primaryExpr(Parser* p) {
       t = newNode(p->arena);
       t->type = Ast_STRING_LITERAL;
       t->as_string_literal.tok = tok;
-      char* label = "TODO Fill this with label";
-      staticArrInsert(p->hm_static_arrays, tok->cast.string, label);
+       if (!staticArrGet(p->hm_static_arrays, tok->cast.string)) {
+         static u32 id = 0;
+         char label[64] = {0} ;
+         snprintf(label, ArrayCount(label), "id%d", id++);
+         staticArrInsert(p->hm_static_arrays, tok->cast.string, getString(label));
+      }
    } else if (tok->type == TType_KEYWORD ||
               tok->type == TType_PUNCTUATOR) {
       // Don't do anything

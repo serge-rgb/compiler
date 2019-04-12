@@ -579,7 +579,11 @@ emitExpression(Codegen* c, AstNode* node, RegVar* reg_var, EmitTarget target) {
             emitIdentifier(c, node, reg_var, target);
          } break;
          case Ast_STRING_LITERAL: {
-            NotImplemented("Emit string literal");
+            char* str = node->as_string_literal.tok->cast.string;
+            char** label = staticArrGet(c->hm_static_arrays, str);
+            Assert(label);
+            // m->declareStringLiteral(m, *label, str);
+
          } break;
          case Ast_STRUCT_MEMBER_ACCESS: {
             emitStructMemberAccess(c, node, reg_var, target);

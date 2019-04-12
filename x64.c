@@ -256,8 +256,8 @@ instructionReg(MachineX64* m, char* asm_line, int bits, ...) {
 //RegVar* findSymbol(Codegen* c, char* name);
 
 Location
-x64ReserveStaticString(MachineX64* m, char* string) {
-   NotImplemented("Reserve memory x64");
+x64DeclareStringLiteral(MachineX64* m, char* label, char* string) {
+   instructionPrintf(m, "%s: db \"%s\"", label, string);
    return (Location)Zero;
 }
 
@@ -1445,10 +1445,11 @@ makeMachineX64(Arena* a, MachineConfigFlags mflags) {
    {
       m->flags = mflags;
 
+      m->declareStringLiteral = x64DeclareStringLiteral;
+
       // Function pointers
       m->immediateFromToken = x64ImmediateFromToken;
 
-      m->reserveStaticString = x64ReserveStaticString;
       m->stackPop = x64StackPop;
       m->stackPush = x64StackPush;
       m->stackPushReg = x64StackPushReg;

@@ -14,15 +14,15 @@ compileTranslationUnit(char* file_name, char* outfile) {
       Token* tokens = tokenize(&a, &file_stream);
 
       Parser p = {0};
+      Arena tu_arena = {0};
+      p.arena = &tu_arena;
       initParser(&p);
-      Arena tmp_parser_arena = {0};
-      p.arena = &tmp_parser_arena;
       p.token = tokens;
       p.file_name = file_name;
 
       Codegen codegen = {0};
       codegen.file_name = file_name;
-      codegen.arena = &tmp_parser_arena;
+      codegen.arena = &tu_arena;
 
       AstNode* tree = parseTranslationUnit(&p);
       if (!tree) {
@@ -34,7 +34,7 @@ compileTranslationUnit(char* file_name, char* outfile) {
          codegenInit(&codegen, outfile, PlatformDefaultTarget);
          codegenTranslationUnit(&codegen, tree);
       }
-      deallocate(&tmp_parser_arena);
+      deallocate(&tu_arena);
       fileStreamClose(&file_stream);
    }
 

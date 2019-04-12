@@ -669,7 +669,7 @@ struct Codegen {
 struct Machine {
    u8 flags; // MachineConfigFlags
 
-   Location (*reserveStaticString)(void* machine, char* string);
+   Location (*declareStringLiteral)(void* machine, char* label, char* string);
 
    void (*stackPop)(void* machine, RegVar* et);
 
