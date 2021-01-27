@@ -19,27 +19,28 @@ Deviations from the C spec.
 - `struct` has an implicit typedef
 - Zero initialization by default
 
+
 New features
 ------------
-- Declarations inside if
-- `else` after `while`
+- Wide types and SIMD operators
 - Reflection strings for `enum`
 - `decltype`
 - C++ style auto
-- Wide types and SIMD operators
 - File-system based module/build system
 - Namespaces
 - Function overloading
 - Memory checking a-la address sanitizer
+- `else` after `while`
 
 Targets
 -------
-- x64 on Windows, Linux and macOS.
-- Interpreter
+- x64 on Windows and macOS
+- ARM on macOS
+- LLVM IR
+- SPIR-V
 
 Dependencies
 ------------
-- NASM. The hope is to remove this dependency on at least one platform
 - On Windows: MSVC (tested with Visual Studio 2017)
 - On Mac/Linux: Clang
 

@@ -26,7 +26,6 @@ hashStrPtr (char** str) {
    return hashStr(*str, len);
 }
 
-
 b32
 compareStringKey (char* a, char* b) {
    b32 result = false;
